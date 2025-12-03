@@ -1,0 +1,10 @@
+# Request
+geometry_msgs/Pose goal
+string planner_id
+---
+# Result
+std_msgs/Empty result
+builtin_interfaces/Duration planning_time
+---
+# Feedback
+
