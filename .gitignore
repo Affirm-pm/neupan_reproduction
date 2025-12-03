@@ -1,0 +1,9 @@
+# Clion
+.idea/*
+!.idea/copyright/
+cmake-build-debug/
+
+# ROS2
+build/
+install/
+log/
