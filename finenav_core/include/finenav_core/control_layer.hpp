@@ -14,8 +14,8 @@
 
 #include "concepts.hpp"
 
-#include "finenav_interfaces/msg/plan_result.hpp"
-#include "finenav_interfaces/action/compute_plan.hpp"
+#include "finenav_msgs/msg/plan_result.hpp"
+#include "finenav_msgs/action/compute_plan.hpp"
 
 namespace finenav {
 
@@ -87,7 +87,7 @@ class ControlLayer : public rclcpp::Node {
         // --- 4. 控制流 ---
         // TODO: 看看 Nav2 如何封装 ActionServer 逻辑，拿来主义
         if (!config_.task_action.empty()) {
-            action_server_ = rclcpp_action::create_server<finenav_interfaces::action::ComputePlan>(
+            action_server_ = rclcpp_action::create_server<finenav_msgs::action::ComputePlan>(
                 this,
                 config_.task_action,
                 std::bind(&ControlLayer::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
@@ -97,14 +97,14 @@ class ControlLayer : public rclcpp::Node {
 
         // --- 5. 规划数据流 ---
         if (!config_.input_topic.empty()) {
-            plan_ref_sub_ = this->template create_subscription<finenav_interfaces::msg::PlanResult>(
+            plan_ref_sub_ = this->template create_subscription<finenav_msgs::msg::PlanResult>(
                 config_.input_topic, 10,
-                [this](const finenav_interfaces::msg::PlanResult::SharedPtr msg) {
+                [this](const finenav_msgs::msg::PlanResult::SharedPtr msg) {
                     RCLCPP_INFO(this->get_logger(), "Received plan reference");
                 });
         }
         if (!config_.output_topic.empty()) {
-            plan_result_pub_ = this->create_publisher<finenav_interfaces::msg::PlanResult>(config_.output_topic, 10);
+            plan_result_pub_ = this->create_publisher<finenav_msgs::msg::PlanResult>(config_.output_topic, 10);
         }
 
     }
@@ -121,11 +121,11 @@ class ControlLayer : public rclcpp::Node {
 
 
   private:
-    using GoalHandleComputePlan = rclcpp_action::ServerGoalHandle<finenav_interfaces::action::ComputePlan>;
+    using GoalHandleComputePlan = rclcpp_action::ServerGoalHandle<finenav_msgs::action::ComputePlan>;
 
     rclcpp_action::GoalResponse handle_goal(
         const rclcpp_action::GoalUUID & uuid,
-        std::shared_ptr<const finenav_interfaces::action::ComputePlan::Goal> goal) {
+        std::shared_ptr<const finenav_msgs::action::ComputePlan::Goal> goal) {
         RCLCPP_INFO(this->get_logger(), "Received goal request");
         (void)uuid;
         (void)goal;
@@ -145,7 +145,7 @@ class ControlLayer : public rclcpp::Node {
     void execute(const std::shared_ptr<GoalHandleComputePlan> goal_handle) {
         RCLCPP_INFO(this->get_logger(), "Executing goal");
         const auto goal = goal_handle->get_goal();
-        auto result = std::make_shared<finenav_interfaces::action::ComputePlan::Result>();
+        auto result = std::make_shared<finenav_msgs::action::ComputePlan::Result>();
 
         // 从 goal 消息中获取终点位姿
         Pose goal_pose;
@@ -185,12 +185,12 @@ class ControlLayer : public rclcpp::Node {
 
     rclcpp::TimerBase::SharedPtr timer_;
 
-    rclcpp_action::Server<finenav_interfaces::action::ComputePlan>::SharedPtr action_server_;
+    rclcpp_action::Server<finenav_msgs::action::ComputePlan>::SharedPtr action_server_;
 
 
 
-    rclcpp::Subscription<finenav_interfaces::msg::PlanResult>::SharedPtr plan_ref_sub_; // 这里是固定的 Trajectory 消息类型
-    rclcpp::Publisher<finenav_interfaces::msg::PlanResult>::SharedPtr plan_result_pub_;
+    rclcpp::Subscription<finenav_msgs::msg::PlanResult>::SharedPtr plan_ref_sub_; // 这里是固定的 Trajectory 消息类型
+    rclcpp::Publisher<finenav_msgs::msg::PlanResult>::SharedPtr plan_result_pub_;
 
 
 

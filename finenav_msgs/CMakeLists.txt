@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(finenav_interfaces)
+project(finenav_msgs)
 
 find_package(ament_cmake_auto REQUIRED)
 find_package(geometry_msgs REQUIRED)

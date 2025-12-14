@@ -9,8 +9,8 @@
 #include <functional>
 
 #include "math_types.hpp"
-#include "finenav_interfaces/msg/map_chunk.hpp"
-#include "finenav_interfaces/msg/plan_result.hpp"
+#include "finenav_msgs/msg/map_chunk.hpp"
+#include "finenav_msgs/msg/plan_result.hpp"
 
 namespace finenav {
 

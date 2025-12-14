@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "fn_core/simple_test_planner.hpp"
+#include "simple_local_layer.hpp"
 #include <rclcpp/rclcpp.hpp>
 
 int main(int argc, char ** argv) {

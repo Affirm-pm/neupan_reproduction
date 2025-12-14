@@ -2,10 +2,9 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-/// 暂时为了能够进行编译测试的简单实现，后续会迁移到独立的 package
 #pragma once
 
-#include "local_planner_base.hpp"
+#include "finenav_control_layers/local_layer.hpp"
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 namespace finenav {
@@ -86,11 +85,11 @@ struct LocalLayerConfig {
 
 
 // 测试子类
-class SimpleLocalLayer : public LocalPlannerBase<LocalLayerConfig> {
+class SimpleLocalLayer : public LocalLayer<LocalLayerConfig> {
 public:
 
     explicit SimpleLocalLayer(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
-        : LocalPlannerBase<LocalLayerConfig>(options) {
+        : LocalLayer<LocalLayerConfig>(options) {
         this->map_instance_.debug_print();
 
     }

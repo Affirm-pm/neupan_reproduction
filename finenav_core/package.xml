@@ -18,7 +18,7 @@
     <depend>tf2_ros</depend>
     <depend>tf2_eigen</depend>
 
-    <depend>finenav_interfaces</depend>
+    <depend>finenav_msgs</depend>
     <depend>sensor_msgs</depend>
 
     <export>
