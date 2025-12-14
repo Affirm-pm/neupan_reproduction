@@ -48,6 +48,10 @@ public:
         // 简单示例，不做实际操作
     }
 
+    void debug_print() const {
+        RCLCPP_INFO(rclcpp::get_logger("SimpleTestMap"), "SimpleTestMap debug_print called");
+    }
+
 };
 
 // 简单的测试规划器类
@@ -74,7 +78,7 @@ public:
     }
 };
 
-struct SimpleLocalPlanner {
+struct LocalLayerConfig {
     using Map = SimpleTestMap;
     using Planners = PlannerSet<SimpleTestPlanner>;
     using Filters = FilterSet<>;
@@ -82,21 +86,15 @@ struct SimpleLocalPlanner {
 
 
 // 测试子类
-class SimpleTestLocalPlanner : public LocalPlannerBase<SimpleLocalPlanner> {
+class SimpleLocalLayer : public LocalPlannerBase<LocalLayerConfig> {
 public:
-    using MapType = SimpleTestMap;
-    using PlannerType = SimpleTestPlanner;
 
-    explicit SimpleTestLocalPlanner(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
-        : LocalPlannerBase<SimpleLocalPlanner>(options) {
+    explicit SimpleLocalLayer(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
+        : LocalPlannerBase<LocalLayerConfig>(options) {
+        this->map_instance_.debug_print();
+
     }
 
-    void update_map_with_pointcloud(const sensor_msgs::msg::PointCloud2::SharedPtr msg) {
-        // map_.update(msg);
-    }
-
-    MapType map_;
-    PlannerType planner_;
 };
 
 }
