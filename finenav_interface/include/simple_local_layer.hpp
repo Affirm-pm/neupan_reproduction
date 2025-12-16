@@ -91,6 +91,12 @@ struct LocalLayerConfig {
 };
 
 
+bool custom_map_integrate(const Position& position, const LocalLayerConfig::Map::DataType& data) {
+    // e.g. 贝叶斯更新
+    // 是否提供一个允许自定义融合策略的接口，不由 FineNav 核心规定，而由每个具体的 map 库自治
+    return true;
+}
+
 // 测试子类
 class SimpleLocalLayer : public LocalLayer<LocalLayerConfig> {
 public:

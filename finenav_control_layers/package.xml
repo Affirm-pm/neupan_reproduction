@@ -12,6 +12,8 @@
     <depend>finenav_core</depend>
     <depend>finenav_msgs</depend>
     <depend>sensor_msgs</depend>
+    <depend>pcl_ros</depend>
+    <depend>pcl_conversions</depend>
 
     <export>
         <build_type>ament_cmake</build_type>

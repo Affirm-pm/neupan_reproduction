@@ -10,6 +10,10 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp> // TODO: 需要好好处理尖括号和双引号
 
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl_conversions/pcl_conversions.h>
+
 namespace finenav {
 
 template <LayerTraits Traits>
@@ -33,9 +37,21 @@ public:
         // 传感器数据源
         pointcloud_sub_ = this->template create_subscription<sensor_msgs::msg::PointCloud2>(
             "pointcloud", 10,  [this](const sensor_msgs::msg::PointCloud2 & msg) {
-                RCLCPP_INFO(this->get_logger(), "Subscribing to points");
+
                 /****** 在这里处理地图更新，“喂养”基类持有的地图实例 ******/
-                // ... this->map_instance.updata)_;
+                RCLCPP_INFO(this->get_logger(), "Subscribing to points");
+                pcl::PointCloud<pcl::PointXYZ> pc;
+                pcl::fromROSMsg(msg, pc);
+                for (const auto& p : pc) {
+                    Position pos{p.x, p.y,p.z};
+                    if (!this->map_instance_.isInside(pos) ) {  // TODO: 多个读写线程，注意上锁
+                        static int cnt = 0;
+                        cnt += 1;
+                        std::cout << "[LocalLayer] Point " << cnt << " is outside the map window: "
+                                  << " (" << p.x << ", " << p.y << ", " << p.z << ")" << std::endl;
+                    }
+                }
+
             });
 
         // 地图交互端口
