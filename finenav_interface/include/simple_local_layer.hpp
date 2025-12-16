@@ -84,8 +84,8 @@ public:
 };
 
 struct LocalLayerConfig {
-    using Map = SimpleTestMap;
-    // using Map = finenav_2d::GridMap<float>;
+    // using Map = SimpleTestMap;
+    using Map = finenav_2d::GridMap<float>;
     using Planners = PlannerSet<SimpleTestPlanner>;
     using Filters = FilterSet<>;
 };

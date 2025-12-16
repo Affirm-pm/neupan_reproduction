@@ -7,10 +7,13 @@
 #include <vector>
 #include <span>
 
+#include "finenav_map_grid_map/grid_map_params.hpp"
+#include "finenav_util/algo_configurator.hpp"
+
 #include "grid_map_math.hpp"
 #include "grid_map_iterator.hpp"
 
-namespace finenav_2d {
+namespace finenav_2d { // TODO: 等到 GridMap 整体稳定后，再考虑将命名空间搬到 finenav
 
 /**
  * @brief 支持滚动更新的三维栅格地图类
@@ -23,13 +26,17 @@ template <typename T>
 class GridMap {
 public:
 	using DataType = T;
+    using ConfigType = grid_map::Params;
 
     // 1. 延迟初始化问题：构造之后不着急初始化，要处理 ROS 参数读取，再进行初始化配置
     // 2. 怎么读 ROS 参数，这是个问题: 弄个 ROSWrapper, 需要传递 node 进去，而后在合适时候调用 configure(node)，通过 generate_parameter_library
     // 读取预定义在 .yaml 中的参数，然后 GridMap 在内部处理这些 param 进行配置
 
-	/// DEBUG
-	GridMap() {};
+	GridMap() = default;
+
+    void configure(const ConfigType& params) {
+        // TODO: 之后整，主要把 GridMap( Length, double, Poosition ) 的构造函数搬过来
+    }
 
     /**
      * @brief 构造函数
@@ -245,3 +252,5 @@ private:
 } // namespace finenav_2d
 
 #include "grid_map_impl.hpp"
+
+FINENAV_REGISTER_TEMPLATE_ALGO_CONFIG(finenav_2d::GridMap, grid_map)

@@ -13,6 +13,11 @@ find_package(eigen3_cmake_module REQUIRED)
 
 ament_auto_find_build_dependencies()
 
+generate_parameter_library(
+        grid_map_params
+        param/grid_map.yaml
+)
+
 add_library(${PROJECT_NAME} INTERFACE)
 
 target_include_directories(${PROJECT_NAME} INTERFACE
@@ -20,7 +25,10 @@ target_include_directories(${PROJECT_NAME} INTERFACE
         $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(${PROJECT_NAME} INTERFACE Eigen3::Eigen)
+target_link_libraries(${PROJECT_NAME} INTERFACE
+        Eigen3::Eigen
+        grid_map_params
+)
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)
