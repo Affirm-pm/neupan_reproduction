@@ -17,10 +17,11 @@ namespace finenav {
 class SimpleTestMap {
 public:
     using DataType = int;
+    using ConfigType = test_map::Params;
 
     SimpleTestMap() = default;
 
-    void configure(const test_map::Params &params) {
+    void configure(const ConfigType &params) {
         // 假设有 resolution 和 name 参数
         if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
 

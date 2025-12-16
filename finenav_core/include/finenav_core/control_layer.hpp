@@ -46,6 +46,7 @@ struct ControlLayerConfig {
 };
 
 template <LayerTraits Traits>
+requires MapConcept<typename Traits::Map>   // TODO: 逐个检查 PlannersT 中的每个规划器是否满足 PlannerConcept
 class ControlLayer : public rclcpp::Node {
   public:
     using MapT      = Traits::Map;
@@ -55,10 +56,7 @@ class ControlLayer : public rclcpp::Node {
 
     explicit ControlLayer(const std::string& name, const rclcpp::NodeOptions& options, const ControlLayerConfig config)
         : Node(name, options), config_(config) {
-        /// --- 1. 静态安检 (Concept Check) ---
-        // Concept 本质上就是一个接受类型作为参数，并返回布尔值（true/false）的模板函数/变量。
-        // static_assert(MapConcept<MapT>, "MapT does not satisfy MapConcept");
-        // TODO: 逐个检查 PlannersT 中的每个规划器是否满足 PlannerConcept, 必须用递归模板展开的方式来实现对可变参数模板的检查
+
 
 
         // --- 2. 初始化 ROS 基础设施 ---
