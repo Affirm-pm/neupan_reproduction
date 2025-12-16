@@ -14,6 +14,7 @@
     <build_export_depend>eigen3_cmake_module</build_export_depend>
 
     <depend>generate_parameter_library</depend>
+    <depend>finenav_core</depend>
     <depend>finenav_util</depend>
 
     <test_depend>ament_cmake_gtest</test_depend>

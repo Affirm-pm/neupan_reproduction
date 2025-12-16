@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include "grid_map_math.hpp"
 
-namespace finenav_2d {
+namespace finenav {
 
 template <typename T>
 class GridMap; // 前向声明
@@ -120,4 +120,4 @@ protected:
     bool is_end_;
 };
 
-} // namespace finenav_2d
+}

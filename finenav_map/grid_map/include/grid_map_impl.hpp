@@ -10,7 +10,15 @@
 #include <cmath>
 
 
-namespace finenav_2d {
+namespace finenav {
+
+template <typename T>
+GridMap<T>::GridMap()
+    : length_(Length::Zero()), start_index_(Index::Zero()), size_(Size::Zero()),
+      resolution_(1.0), origin_(Position::Zero()), inv_resolution_(1.0), half_size_(Size::Zero()) {
+    data_.clear();
+}
+
 template <typename T>
 GridMap<T>::GridMap(const Length& length, const double& resolution, const Position& origin)
     : length_(length), resolution_(resolution), origin_(origin) {
@@ -34,7 +42,7 @@ T& GridMap<T>::atPosition(const Position& position) {
 }
 
 template <typename T>
-T GridMap<T>::atPosition(const Position& position) const {
+const T& GridMap<T>::atPosition(const Position& position) const {
     return at(getIndex(position));
 }
 
@@ -47,7 +55,7 @@ T& GridMap<T>::at(const Index& index) {
 }
 
 template <typename T>
-T GridMap<T>::at(const Index& index) const {
+const T& GridMap<T>::at(const Index& index) const {
     if (checkIfIndexValid(index, size_, half_size_)) {
         return data_[getBufferIndex(index, size_, half_size_, start_index_)];
     }
@@ -298,5 +306,5 @@ bool GridMap<T>::isInside(const Index& index) const {
     return checkIfIndexValid(index, size_, half_size_);
 }
 
-} // namespace finenav_2d
+}
 

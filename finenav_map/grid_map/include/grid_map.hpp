@@ -13,7 +13,7 @@
 #include "grid_map_math.hpp"
 #include "grid_map_iterator.hpp"
 
-namespace finenav_2d { // TODO: 等到 GridMap 整体稳定后，再考虑将命名空间搬到 finenav
+namespace finenav { // TODO: 架构大改造，嵌套命名空间
 
 /**
  * @brief 支持滚动更新的三维栅格地图类
@@ -32,11 +32,7 @@ public:
     // 2. 怎么读 ROS 参数，这是个问题: 弄个 ROSWrapper, 需要传递 node 进去，而后在合适时候调用 configure(node)，通过 generate_parameter_library
     // 读取预定义在 .yaml 中的参数，然后 GridMap 在内部处理这些 param 进行配置
 
-	GridMap() = default;
-
-    void configure(const ConfigType& params) {
-        // TODO: 之后整，主要把 GridMap( Length, double, Poosition ) 的构造函数搬过来
-    }
+	GridMap();
 
     /**
      * @brief 构造函数
@@ -46,6 +42,12 @@ public:
      * @note 所有地图数据均为零初始化
      */
     GridMap(const Length& length, const double& resolution, const Position& origin = Position::Zero());
+
+
+    bool configure(const ConfigType& params) {
+        // TODO: 之后整，主要把 GridMap( Length, double, Poosition ) 的构造函数搬过来
+        return true;
+    }
 
     /**
      * @brief 默认的构造函数
@@ -73,7 +75,28 @@ public:
      * @param position 世界坐标系下的位置
      * @return 对应位置的栅格数据
      */
-    T atPosition(const Position& position) const;
+    const T& atPosition(const Position& position) const;
+
+    // TMP
+    const DataType& access(const Position& position) const {
+        return atPosition(position);
+    }
+
+    bool integrate(const Position& position, const DataType& data) {
+        T& cell = atPosition(position);
+        cell = data; // 简单覆盖更新
+        return true;
+    }
+
+    Region3D getWindowBounds() const {
+        Position min_pos = getPosition(getMinIndex());
+        Position max_pos = getPosition(-getMinIndex());
+        return Region3D{min_pos, max_pos};
+    }
+
+    Position getWindowCenter() const {
+        return origin_;
+    }
 
     /**
      * @brief 访问某个index的栅格数据
@@ -87,7 +110,7 @@ public:
      * @param index 栅格地图的索引
      * @return 对应的栅格数据
      */
-    T at(const Index& index) const;
+    const T& at(const Index& index) const; // TODO：返回值类型改为 const T&
 
 
     /**
@@ -249,8 +272,8 @@ private:
 
 };
 
-} // namespace finenav_2d
+}
 
 #include "grid_map_impl.hpp"
 
-FINENAV_REGISTER_TEMPLATE_ALGO_CONFIG(finenav_2d::GridMap, grid_map)
+FINENAV_REGISTER_TEMPLATE_ALGO_CONFIG(finenav::GridMap, grid_map)

@@ -16,6 +16,14 @@ using Orientation = Eigen::Quaterniond;
 using Region3D = Eigen::AlignedBox3d;
 using Pose = Eigen::Isometry3d;
 
+
+// TMP
+using Vector   = Eigen::Vector3d;
+using Position = Eigen::Vector3d;
+using Index = Eigen::Vector3i;
+using Size = Eigen::Vector3i;
+using Length = Eigen::Vector3d;
+
 // TODO: Eigen 自带了 intersection(求交), contains(包含), extend(合并) 等几何算法
 
 }

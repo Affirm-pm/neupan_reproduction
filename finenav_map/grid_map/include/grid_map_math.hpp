@@ -4,14 +4,9 @@
 
 #pragma once
 
-#include <Eigen/Core>
+#include "finenav_core/math_types.hpp"
 
-namespace finenav_2d {
-using Index = Eigen::Vector3i;
-using Size = Eigen::Vector3i;
-using Position = Eigen::Vector3d;
-using Length = Eigen::Vector3d;
-using Vector = Eigen::Vector3d;
+namespace finenav {
 
 /**
  * @brief 将索引向量的每个元素取模，确保索引在指定的范围内
@@ -235,4 +230,4 @@ inline void getDifferenceSet(const Index& index_shift, const Size& size, const S
     }
 }
 
-} // namespace finenav_2d
+}
