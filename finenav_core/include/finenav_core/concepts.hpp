@@ -6,7 +6,7 @@
 
 #include <vector>
 #include <concepts>
-#include <functional>
+#include <utility>
 
 #include "math_types.hpp"
 #include "finenav_msgs/msg/map_chunk.hpp"
@@ -24,49 +24,25 @@ namespace finenav {
  * 3. 数据融合: 区别于一般的容器，地图的更新操作通常涉及数据融合，提供自定义融合策略的接口
  *
  */
-// TODO: 这里错误地让 OffloadCallback 依赖于 DataType 存在，导致当 map 没有定义 DataType 时报错信息可读性差
 template <typename T>
-using OffloadCallback = std::function<void(const Region3D&, const std::vector<typename T::DataType>&)>;
-
-template <typename T>
-concept MapConcept = std::default_initializable<T> &&
-    requires(T map, const Position3D& pos, OffloadCallback<T> cb, const typename T::ConfigType& config) { // TODO: 这里是否需要定义 const_map
-        // 地图必须对外暴露它能提供的元素类型
-        typename T::DataType;
+concept MapConcept =
+    std::default_initializable<T> &&
+    std::movable<T> &&
+    requires(T map, const Position3D& pos, const typename T::ConfigType& config, const typename T::DataType& data) {
+        // --- 基本配置 ---
         typename T::ConfigType;
+        typename T::DataType;
+        { map.configure(config) } -> std::same_as<bool>; // 配置地图参数
 
-        {map.configure(config) } -> std::same_as<void>;
+        // --- 读写操作 ---
+        { std::as_const(map).access(pos) } -> std::convertible_to<typename T::DataType>;
+        { map.integrate(pos, data)} -> std::same_as<bool>; // 数据更新
 
-        // 数据访问
-        { map.access(pos) } -> std::convertible_to<typename T::DataType>;
-
-        // 数据更新
-        { map.integrate(pos, typename T::DataType{}) } -> std::same_as<void>;
-
-        // 检查某个坐标是否在当前视窗/有效范围内 (Safety Guarantee)
-        { map.is_inside(pos) } -> std::same_as<bool>;
-
-        // 获取当前视窗范围
-        { map.get_bounds() } -> std::convertible_to<Region3D>;
-
-        // 获取当前视窗中心
-        { map.get_window_center() } -> std::convertible_to<Position3D>;
-
-        // 视窗移动
-        // TODO: 回调函数接口设计有点不太好，想想别的办法
-        { map.shift_window(pos, cb) } -> std::same_as<void>;
-
-        // 批量数据更新暂时是个伪需求，除非有地图必须知道帧内数据关系才能更新，但这会让地图不像一个“好说话”的容器了
-        // { map.integrate_batch(std::vector<Position3D>{}, std::vector<typename T::DataType>{}) } -> std::same_as<void>;
-
-
-        // TODO: 来自传感器数据的更新 pcl::Pointcloud，由基类处理
-        // 这意味着所有 map 类都需要依赖 pcl，或者说需要知道点云是什么（也合理，就这样吧）
-
-
-        // TODO：来自其他地图的更新 fn_interfaces::msg::MapChunk，由基类处理
-        // 相当于用 MapChunk 定义好了一个统一的地图交互接口；大部分情况下，默认提供的更新方法可能并非用户想要的，需要允许用户更改
-
+        // --- 视窗操作 ---
+        { std::as_const(map).isInside(pos) } -> std::same_as<bool>; // 检查是否在当前视窗内
+        { std::as_const(map).getWindowBounds() } -> std::convertible_to<Region3D>; // 获取当前视窗范围
+        { std::as_const(map).getWindowCenter() } -> std::convertible_to<Position3D>; // 获取当前视窗中心
+        // map.shift_window(pos, cb); // TODO：移动视窗，等初步测试完之后再进行调整，一步一步测试不用着急
 };
 
 

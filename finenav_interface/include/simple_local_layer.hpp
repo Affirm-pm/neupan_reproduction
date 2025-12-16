@@ -47,11 +47,11 @@ public:
     Position3D get_window_center() const {
         return Position3D{5,5,5}; // 示例中心
     }
-    void shift_window(const Position3D& new_center, OffloadCallback<SimpleTestMap> cb) {
-        (void)new_center;
-        (void)cb;
-        // 简单示例，不做实际操作
-    }
+    // void shift_window(const Position3D& new_center, OffloadCallback<SimpleTestMap> cb) {
+    //     (void)new_center;
+    //     (void)cb;
+    //     // 简单示例，不做实际操作
+    // }
 
     void debug_print() const {
         RCLCPP_INFO(rclcpp::get_logger("SimpleTestMap"), "SimpleTestMap debug_print called");
@@ -85,7 +85,7 @@ public:
 
 struct LocalLayerConfig {
     // using Map = SimpleTestMap;
-    using Map = finenav_2d::GridMap<float>;
+    using Map = finenav::GridMap<float>;
     using Planners = PlannerSet<SimpleTestPlanner>;
     using Filters = FilterSet<>;
 };
