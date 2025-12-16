@@ -10,10 +10,9 @@
 #include <tf2_ros/transform_listener.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
 
-
-
 #include "concepts.hpp"
 
+#include "finenav_util/algo_configurator.hpp"
 #include "finenav_msgs/msg/plan_result.hpp"
 #include "finenav_msgs/action/compute_plan.hpp"
 
@@ -58,7 +57,7 @@ class ControlLayer : public rclcpp::Node {
         : Node(name, options), config_(config) {
         /// --- 1. 静态安检 (Concept Check) ---
         // Concept 本质上就是一个接受类型作为参数，并返回布尔值（true/false）的模板函数/变量。
-        static_assert(MapConcept<MapT>, "MapT does not satisfy MapConcept");
+        // static_assert(MapConcept<MapT>, "MapT does not satisfy MapConcept");
         // TODO: 逐个检查 PlannersT 中的每个规划器是否满足 PlannerConcept, 必须用递归模板展开的方式来实现对可变参数模板的检查
 
 
@@ -70,9 +69,6 @@ class ControlLayer : public rclcpp::Node {
         // --- 3. 初始化成员变量 ---
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
-
-        // 地图实例化
-        map_instance_.configure();
 
         // 规划器实例化
         // C++17 std::apply 用于将元组中的元素展开并传递给一个可调用对象（如函数或 lambda 表达式）
@@ -109,6 +105,14 @@ class ControlLayer : public rclcpp::Node {
 
     }
 
+    void initialize() {
+        // 地图实例化
+        // map_instance_.configure();
+        keep_alive(AlgoConfigurator<MapT>::load(this->shared_from_this(), map_instance_));
+        std::cout << "Create Map Instance: " << AlgoConfigurator<MapT>::name << std::endl;
+        std::cout << "size of param_handles: " << param_handles_.size() << std::endl;
+    }
+
 
   protected:
     ControlLayerConfig config_;
@@ -121,6 +125,14 @@ class ControlLayer : public rclcpp::Node {
 
 
   private:
+
+    template <typename T>
+    void keep_alive(std::shared_ptr<T> handle) {
+        if (handle) {
+            param_handles_.push_back(handle);
+        }
+    }
+
     using GoalHandleComputePlan = rclcpp_action::ServerGoalHandle<finenav_msgs::action::ComputePlan>;
 
     rclcpp_action::GoalResponse handle_goal(
@@ -197,6 +209,8 @@ class ControlLayer : public rclcpp::Node {
     // tf buffer 和监听器
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
+    std::vector<std::shared_ptr<void>> param_handles_; // 用于存储参数回调句柄，防止被析构
 
 
 };

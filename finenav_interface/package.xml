@@ -10,6 +10,10 @@
     <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
     <depend>finenav_control_layers</depend>
+    <depend>finenav_map_grid_map</depend>
+    <depend>finenav_util</depend>
+
+    <depend>generate_parameter_library</depend>
 
     <export>
         <build_type>ament_cmake</build_type>

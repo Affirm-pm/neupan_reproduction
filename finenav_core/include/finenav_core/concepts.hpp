@@ -24,6 +24,7 @@ namespace finenav {
  * 3. 数据融合: 区别于一般的容器，地图的更新操作通常涉及数据融合，提供自定义融合策略的接口
  *
  */
+// TODO: 这里错误地让 OffloadCallback 依赖于 DataType 存在，导致当 map 没有定义 DataType 时报错信息可读性差
 template <typename T>
 using OffloadCallback = std::function<void(const Region3D&, const std::vector<typename T::DataType>&)>;
 

@@ -5,9 +5,13 @@
 #pragma once
 
 #include "finenav_control_layers/local_layer.hpp"
-#include <sensor_msgs/msg/point_cloud2.hpp>
+#include "grid_map.hpp"
+
+#include "finenav_interface/test_map_params.hpp"
+#include "finenav_util/algo_configurator.hpp"
 
 namespace finenav {
+
 
 // 简单的测试地图类
 class SimpleTestMap {
@@ -16,9 +20,10 @@ public:
 
     SimpleTestMap() = default;
 
+    void configure(const test_map::Params &params) {
+        // 假设有 resolution 和 name 参数
+        if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
 
-    void configure() {
-        // 简单示例，不做实际配置
     }
 
     DataType access(const Position3D& pos) const {
@@ -79,6 +84,7 @@ public:
 
 struct LocalLayerConfig {
     using Map = SimpleTestMap;
+    // using Map = finenav_2d::GridMap<float>;
     using Planners = PlannerSet<SimpleTestPlanner>;
     using Filters = FilterSet<>;
 };
@@ -90,10 +96,11 @@ public:
 
     explicit SimpleLocalLayer(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
         : LocalLayer<LocalLayerConfig>(options) {
-        this->map_instance_.debug_print();
-
+        // this->map_instance_.debug_print();
     }
 
 };
 
 }
+
+FINENAV_REGISTER_ALGO_CONFIG(finenav::SimpleTestMap, test_map)

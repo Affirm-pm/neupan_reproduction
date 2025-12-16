@@ -13,7 +13,13 @@ include_directories(include)
 
 ament_auto_find_build_dependencies()
 
+generate_parameter_library(
+        test_map_params
+        src/test_map.yaml
+)
+
 ament_auto_add_executable(simple_planner_node src/local_layer_node.cpp)
+target_link_libraries(simple_planner_node test_map_params)
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)
