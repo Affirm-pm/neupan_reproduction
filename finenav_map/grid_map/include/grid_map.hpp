@@ -46,6 +46,7 @@ public:
 
     bool configure(const ConfigType& params) {
         // TODO: 之后整，主要把 GridMap( Length, double, Poosition ) 的构造函数搬过来
+        std::cout << "[GridMap] configure with params" << std::endl;
         return true;
     }
 
@@ -84,7 +85,7 @@ public:
 
     bool integrate(const Position& position, const DataType& data) {
         T& cell = atPosition(position);
-        cell = data; // 简单覆盖更新
+        cell = data; // 简单覆盖更新 | 实际上，这里应该对应具体的更新逻辑，比如 raycast
         return true;
     }
 

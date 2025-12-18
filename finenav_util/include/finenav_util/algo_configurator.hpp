@@ -17,12 +17,14 @@ struct AlgoConfigurator {
 
     // 返回一个智能指针，将生命周期转移给调用者
     static std::shared_ptr<void> load(rclcpp::Node::SharedPtr, AlgoT&) {
+        // TODO: 这种情况应该警告，表示用户没有注册算法
         return nullptr; // 返回空指针，keep_alive 会自动忽略
     }
 };
 }
 
 // TODO： 考虑 PARAM_NS 是否改名为 algo_name 或者 algo_id 之类的东西，只要能够对用户屏蔽参数概念
+// TODO: 后续还需要考虑动态参数问题
 // 另外，可能会有重名问题？
 #define FINENAV_REGISTER_ALGO_CONFIG(ALGO_TYPE, PARAM_NS) \
 namespace finenav { \

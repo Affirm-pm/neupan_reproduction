@@ -47,11 +47,11 @@ struct ControlLayerConfig {
 
 template <LayerTraits Traits>
 requires MapConcept<typename Traits::Map>   // TODO: 逐个检查 PlannersT 中的每个规划器是否满足 PlannerConcept
-class ControlLayer : public rclcpp::Node {
+class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 或者 ControlLayerBase
   public:
     using MapT      = Traits::Map;
     using PlannersT = Traits::Planners;
-    using FiltersT  = Traits::Filters; // TODO: 需要能支持空的
+    using FiltersT  = Traits::Filters; // TODO: 先不做
 
 
     explicit ControlLayer(const std::string& name, const rclcpp::NodeOptions& options, const ControlLayerConfig config)
@@ -96,10 +96,12 @@ class ControlLayer : public rclcpp::Node {
                 [this](const finenav_msgs::msg::PlanResult::SharedPtr msg) {
                     RCLCPP_INFO(this->get_logger(), "Received plan reference");
                 });
+            // TODO: 接收时，assert trajectroy_msg, empty or non-consistent
         }
         if (!config_.output_topic.empty()) {
             plan_result_pub_ = this->create_publisher<finenav_msgs::msg::PlanResult>(config_.output_topic, 10);
         }
+            // TODO: 发布时， assert trajectroy_msg, empty or non-consistent
 
     }
 

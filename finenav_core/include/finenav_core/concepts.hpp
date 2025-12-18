@@ -42,7 +42,7 @@ concept MapConcept =
         { std::as_const(map).isInside(pos) } -> std::same_as<bool>; // 检查是否在当前视窗内
         { std::as_const(map).getWindowBounds() } -> std::convertible_to<Region3D>; // 获取当前视窗范围
         { std::as_const(map).getWindowCenter() } -> std::convertible_to<Position3D>; // 获取当前视窗中心
-        // map.shift_window(pos, cb); // TODO：移动视窗，等初步测试完之后再进行调整，一步一步测试不用着急
+        // map.shift_window(pos, cb); // TODO：之后再整，不要用回调了，直接用把 MapChunk 拿出来
 };
 
 
