@@ -8,7 +8,7 @@ find_package(rosidl_default_generators REQUIRED)
 ament_auto_find_build_dependencies()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-        msg/PlanResult.msg
+        msg/Trajectory.msg
         msg/MapCell.msg
         msg/MapChunk.msg
         action/ComputePlan.action

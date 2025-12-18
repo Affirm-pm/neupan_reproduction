@@ -62,11 +62,6 @@ public:
 // 简单的测试规划器类
 class SimpleTestPlanner {
 public:
-    // 定义静态常量 name
-    // constexpr 表示编译期常量，更高效
-    static constexpr auto name = "SimpleTest";
-
-
     SimpleTestPlanner() = default;
 
     void configure(rclcpp::Node* node, const std::string& namespace_) {

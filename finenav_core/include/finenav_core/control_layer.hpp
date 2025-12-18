@@ -13,7 +13,7 @@
 #include "concepts.hpp"
 
 #include "finenav_util/algo_configurator.hpp"
-#include "finenav_msgs/msg/plan_result.hpp"
+#include "finenav_msgs/msg/trajectory.hpp"
 #include "finenav_msgs/action/compute_plan.hpp"
 
 namespace finenav {
@@ -72,10 +72,10 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         // C++17 std::apply 用于将元组中的元素展开并传递给一个可调用对象（如函数或 lambda 表达式）
         // std::apply(Function, Tuple);
         // 等价于 Function(TupleElement1, TupleElement2, ..., TupleElementN);
-        std::apply([this](auto&... planners) {
-            // 对每一个 planner p，调用 p.configure(...)
-            (planners.configure(this, "planners." + std::string(planners.name)), ...); // 逗号折叠，这里的逗号表达式确保了顺序执行
-        }, planners_instance_);
+        // std::apply([this](auto&... planners) {
+        //     // 对每一个 planner p，调用 p.configure(...)
+        //     (planners.configure(this, "planners." + std::string(planners.name)), ...); // 逗号折叠，这里的逗号表达式确保了顺序执行
+        // }, planners_instance_);
 
 
         // --- 4. 控制流 ---
@@ -91,15 +91,15 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
 
         // --- 5. 规划数据流 ---
         if (!config_.input_topic.empty()) {
-            plan_ref_sub_ = this->template create_subscription<finenav_msgs::msg::PlanResult>(
+            plan_ref_sub_ = this->template create_subscription<finenav_msgs::msg::Trajectory>(
                 config_.input_topic, 10,
-                [this](const finenav_msgs::msg::PlanResult::SharedPtr msg) {
+                [this](const finenav_msgs::msg::Trajectory::SharedPtr msg) {
                     RCLCPP_INFO(this->get_logger(), "Received plan reference");
                 });
             // TODO: 接收时，assert trajectroy_msg, empty or non-consistent
         }
         if (!config_.output_topic.empty()) {
-            plan_result_pub_ = this->create_publisher<finenav_msgs::msg::PlanResult>(config_.output_topic, 10);
+            plan_result_pub_ = this->create_publisher<finenav_msgs::msg::Trajectory>(config_.output_topic, 10);
         }
             // TODO: 发布时， assert trajectroy_msg, empty or non-consistent
 
@@ -201,8 +201,8 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
 
 
 
-    rclcpp::Subscription<finenav_msgs::msg::PlanResult>::SharedPtr plan_ref_sub_; // 这里是固定的 Trajectory 消息类型
-    rclcpp::Publisher<finenav_msgs::msg::PlanResult>::SharedPtr plan_result_pub_;
+    rclcpp::Subscription<finenav_msgs::msg::Trajectory>::SharedPtr plan_ref_sub_; // 这里是固定的 Trajectory 消息类型
+    rclcpp::Publisher<finenav_msgs::msg::Trajectory>::SharedPtr plan_result_pub_;
 
 
 

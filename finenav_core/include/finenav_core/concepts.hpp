@@ -10,7 +10,7 @@
 
 #include "math_types.hpp"
 #include "finenav_msgs/msg/map_chunk.hpp"
-#include "finenav_msgs/msg/plan_result.hpp"
+#include "finenav_msgs/msg/trajectory.hpp"
 
 namespace finenav {
 
@@ -91,9 +91,6 @@ struct Trajectory { // TODO: 固定接口为 fn_interface::msg::Trajectory
     std::vector<Twist> twists;
     std::vector<Accel> accels;
 
-    // 辅助函数：检查数据一致性
-    size_t size() const { return poses.size(); } // TODO: 有待商榷
-    bool empty() const { return poses.empty(); }
 };
 
 
