@@ -104,7 +104,31 @@ public:
     explicit SimpleLocalLayer(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
         : LocalLayer<LocalLayerConfig>(options) {
         // this->map_instance_.debug_print();
+
+        // 传感器数据源
+        pointcloud_sub_ = this->template create_subscription<sensor_msgs::msg::PointCloud2>(
+            "pointcloud", 10,  [this](const sensor_msgs::msg::PointCloud2 & msg) {
+                this->insertSensorScan(msg);
+            });
+
+        // 地图交互端口
+        // TODO: offload_pub_ 和 load_sub_ 都需要一个对应的 service 向服务器请求，只有服务器回复 yes，才用 topic 进行数据传输
+
+        load_sub_ = this->template create_subscription<finenav_msgs::msg::MapChunk>(
+            "map_load", 10,
+            [this](const finenav_msgs::msg::MapChunk::SharedPtr msg) {
+                this->updateFromOtherMap(*msg);
+            });
+
+        // TODO: 该怎么知道应该如何用手上的map装填MapChunk呢？
+        offload_pub_ = this->template create_publisher<finenav_msgs::msg::MapChunk>("map_offload", 10);
     }
+
+private:
+    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
+    // 地图交互
+    rclcpp::Publisher<finenav_msgs::msg::MapChunk>::SharedPtr offload_pub_;
+    rclcpp::Subscription<finenav_msgs::msg::MapChunk>::SharedPtr load_sub_;
 
 };
 
