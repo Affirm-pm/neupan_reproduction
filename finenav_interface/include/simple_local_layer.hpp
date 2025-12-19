@@ -8,7 +8,10 @@
 #include "grid_map.hpp"
 
 #include "finenav_interface/test_map_params.hpp"
+#include "finenav_interface/test_planner_params.hpp"
+
 #include "finenav_util/algo_configurator.hpp"
+#include "finenav_util/planner_traits.hpp"
 
 namespace finenav {
 
@@ -63,28 +66,55 @@ public:
 class SimpleTestPlanner {
 public:
     SimpleTestPlanner() = default;
+    using ConfigType = test_planner::Params;
 
-    void configure(rclcpp::Node* node, const std::string& namespace_) {
-
-        // 简单示例，不做实际配置
+    void configure(const ConfigType &params) {
+        if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
     }
 
-    std::vector<Pose> plan(const Pose& start, const Pose& goal, const SimpleTestMap& map) {
-        (void)start;
-        (void)goal;
-        (void)map;
-        // 返回空路径
-        return std::vector<Pose>();
+    template <typename MapView>
+    bool plan(const MapView& map, const PlanningContext& ctx, finenav_msgs::msg::Trajectory& output_traj) {
+        auto start_pose = ctx.start_pose;
+        auto goal_pose = ctx.goal_pose;
+        auto trajectory = finenav_msgs::msg::Trajectory(); // 这里会有一个 helper function 帮忙解包
+
+        // 执行规划算法，e.g. 生成一条直线路径
+
+        // 装填输出轨迹
+        return true;
     }
+};
+
+/* ------------------------------------------------------------------------------------------------ */
+
+class SimpleGridMapView {
+public:
+    explicit SimpleGridMapView( finenav::GridMap<float>& map) : map_(map) {}
+
+    double getCost(const Position3D& pos) const {
+        /* 简单的成本逻辑 */
+    }
+private:
+    finenav::GridMap<float>& map_;
+};
+
+class ComplexGridMapView {
+public:
+    explicit ComplexGridMapView( finenav::GridMap<float>& map) : map_(map) {}
+
+    double getCost(const Position3D& pos) const {
+        /* 复杂的成本逻辑 */
+    }
+private:
+    finenav::GridMap<float>& map_;
 };
 
 struct LocalLayerConfig {
     // using Map = SimpleTestMap;
     using Map = finenav::GridMap<float>;
-    using Planners = PlannerSet<SimpleTestPlanner>;
-    using Filters = FilterSet<>;
+    using Planners = PlannerSet<SimpleTestPlanner>; // TODO: 如果注册同名怎么办
+    using MapViews = std::variant<SimpleGridMapView, ComplexGridMapView>;
 };
-
 
 bool custom_map_integrate(const Position& position, const LocalLayerConfig::Map::DataType& data) {
     // e.g. 贝叶斯更新
@@ -119,6 +149,11 @@ public:
         offload_pub_ = this->template create_publisher<finenav_msgs::msg::MapChunk>("map_offload", 10);
     }
 
+    MapViewsT get_planning_map_view() {
+        // if (this->active_planner_id == ... )
+        return SimpleGridMapView(this->map_instance_);
+    }
+
 private:
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
     // 地图交互
@@ -130,3 +165,8 @@ private:
 }
 
 FINENAV_REGISTER_ALGO_CONFIG(finenav::SimpleTestMap, test_map)
+
+FINENAV_REGISTER_ALGO_CONFIG(finenav::SimpleTestPlanner, test_planner)
+FINENAV_REGISTER_PLANNER_TRAITS(finenav::SimpleTestPlanner,
+    finenav::TraitMask::NONE,
+    finenav::TraitMask::POSE)

@@ -28,11 +28,6 @@ struct PlannerSet {
     using Tuple = std::tuple<Ts...>;
 };
 
-template <typename... Ts>
-struct FilterSet {
-    using Tuple = std::tuple<Ts...>;
-};
-
 enum class ControlMode {
     OneShot = 0,
     ServoLoop = 1
@@ -51,8 +46,7 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
   public:
     using MapT      = Traits::Map;
     using PlannersT = Traits::Planners;
-    using FiltersT  = Traits::Filters; // TODO: 先不做
-
+    using MapViewsT = Traits::MapViews;
 
     explicit ControlLayer(const std::string& name, const rclcpp::NodeOptions& options, const ControlLayerConfig config)
         : Node(name, options), config_(config) {
@@ -67,16 +61,6 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         // --- 3. 初始化成员变量 ---
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
-
-        // 规划器实例化
-        // C++17 std::apply 用于将元组中的元素展开并传递给一个可调用对象（如函数或 lambda 表达式）
-        // std::apply(Function, Tuple);
-        // 等价于 Function(TupleElement1, TupleElement2, ..., TupleElementN);
-        // std::apply([this](auto&... planners) {
-        //     // 对每一个 planner p，调用 p.configure(...)
-        //     (planners.configure(this, "planners." + std::string(planners.name)), ...); // 逗号折叠，这里的逗号表达式确保了顺序执行
-        // }, planners_instance_);
-
 
         // --- 4. 控制流 ---
         // TODO: 看看 Nav2 如何封装 ActionServer 逻辑，拿来主义
@@ -106,11 +90,20 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
     }
 
     void initialize() {
-        // 地图实例化
-        // map_instance_.configure();
+
         keep_alive(AlgoConfigurator<MapT>::load(this->shared_from_this(), map_instance_));
         std::cout << "Create Map Instance: " << AlgoConfigurator<MapT>::name << std::endl;
         std::cout << "size of param_handles: " << param_handles_.size() << std::endl;
+
+        // 配置加载 tuple 中的每个规划器
+        std::apply([this](auto&... planners) {
+            ([this](auto& p) {
+                using T = std::decay_t<decltype(p)>;
+                RCLCPP_INFO_STREAM(this->get_logger(), "Loading planner: " << AlgoConfigurator<T>::name);
+                keep_alive(AlgoConfigurator<T>::load(this->shared_from_this(), p));
+            }(planners), ...);
+        }, planners_instance_);
+
     }
 
 
@@ -119,10 +112,11 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
 
     MapT map_instance_;
     PlannersT::Tuple planners_instance_;
-    FiltersT::Tuple filters_instance_;
 
     std::string active_planner_id_; // 运行时请求的 ID (来自 Action Goal)
 
+    // TODO: onPrePlan(), OnPlanResult() 等函数接口，可能要考虑下语义区分的问题，防止和 LocalLayer 中定义的混淆
+    virtual MapViewsT get_planning_map_view() = 0; // TODO: 要不要改成回调
 
   private:
 
@@ -158,6 +152,9 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         RCLCPP_INFO(this->get_logger(), "Executing goal");
         const auto goal = goal_handle->get_goal();
         auto result = std::make_shared<finenav_msgs::action::ComputePlan::Result>();
+        active_planner_id_ = goal->planner_id; // 记录当前请求的规划器 ID
+
+        // 在 planners_instance_ 中找匹配 active_planner_id_ 的 planner
 
         // 从 goal 消息中获取终点位姿
         Pose goal_pose;
@@ -179,14 +176,42 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
                 "map", "base_link", tf2::TimePointZero); // TODO: TF 时间戳相关细节，可参考 nav2_planner
             Pose start_pose = tf2::transformToEigen(t);
 
-            // 调用 planner, 用 constexpr 编译流分支来区分规划器是否需要 ref
-            // 如果规划失败，报错，退出
+            PlanningContext ctx; // 填充规划上下文
 
-            // 进行 filter 处理
+            // 找到这个规划器
+            finenav_msgs::msg::Trajectory output_traj;
+            bool plan_success = false;
+            bool planner_found_and_run = false;
+
+            auto try_run_planner = [&](auto& planner) -> bool {
+                using PlannerT = std::decay_t<decltype(planner)>;
+                if (AlgoConfigurator<PlannerT>::name == active_planner_id_) {
+
+                    // TODO: 给地图上锁
+                    plan_success = planner.plan(this->get_planning_map_view(), ctx, output_traj);
+                    return true; // 返回 true 以触发短路，停止后续遍历
+                }
+                return false;
+            };
+            std::apply([&](auto&... planners) {
+                planner_found_and_run = (try_run_planner(planners) || ...);
+            }, planners_instance_);
+
+            if (!planner_found_and_run) {
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Planner with ID " << active_planner_id_ << " not found");
+                goal_handle->abort(result);
+                return;
+            }
+            if (!plan_success) {
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Planner " << active_planner_id_ << " failed to compute a plan");
+                goal_handle->abort(result);
+                return;
+            }
 
             // 发布规划结果
+            plan_result_pub_->publish(output_traj);
 
-            // 检查是否抵达终点，如果抵达，退出循环
+            // 检查是否抵达终点，如果抵达，退出循环 (通过获取系统整体状态)
         }
 
         // 设置成功结果

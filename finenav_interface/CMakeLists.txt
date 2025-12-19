@@ -17,9 +17,13 @@ generate_parameter_library(
         test_map_params
         src/test_map.yaml
 )
+generate_parameter_library(
+        test_planner_params
+        src/test_planner.yaml
+)
 
 ament_auto_add_executable(simple_planner_node src/local_layer_node.cpp)
-target_link_libraries(simple_planner_node test_map_params)
+target_link_libraries(simple_planner_node test_map_params test_planner_params)
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)

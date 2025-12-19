@@ -6,11 +6,13 @@
 
 #include <vector>
 #include <concepts>
+#include <optional>
 #include <utility>
 
 #include "math_types.hpp"
 #include "finenav_msgs/msg/map_chunk.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
+#include "finenav_util/planner_traits.hpp"
 
 namespace finenav {
 
@@ -46,78 +48,15 @@ concept MapConcept =
 };
 
 
-
-// 规划器的统一输出接口：最后由基类输出到自定义消息 fn_interface::msg::plan_result
-// 规划器的统一输入接口：PlanningContext (全状态快照)
-using TraitMask = uint32_t;
-
-// ========================================================
-// 原子特性定义 (Atomic Definitions)
-// ========================================================
-enum : TraitMask {
-    // 空 (用于无输入需求，或不承诺任何额外输出)
-    NONE         = 0,
-    POSE         = 1 << 0,  // 位置 + 姿态 (Position + Orientation)
-    VELOCITY     = 1 << 1,  // 线速度 + 角速度 (Linear + Angular)
-    ACCELERATION = 1 << 2,  // 线加速度 + 角加速度
-};
-
-// ========================================================
-// 常用组合 (Common Combinations)
-// ========================================================
-// 纯几何路径
-static constexpr TraitMask PATH = POSE;
-// 完整运动轨迹
-static constexpr TraitMask TRAJECTORY = POSE | VELOCITY;
-// 全状态轨迹 (包含动力学)
-static constexpr TraitMask FULL_STATE = POSE | VELOCITY | ACCELERATION;
-
-
 /**
  * @brief PlanningContext (规划上下文)
  * @details 包含算法在“这一帧”规划所需的所有不可变数据。
  */
-using Twist = int; // 占位符
-using Accel = int; // 占位符
-
-struct Trajectory { // TODO: 固定接口为 fn_interface::msg::Trajectory
-    // 元数据
-    bool success = false;
-    uint32_t valid_fields = 0; // 对应 msg 的掩码
-
-    // SoA 数据容器
-    std::vector<double> times; // 从规划开始的相对时间 (t0 = 0.0)
-    std::vector<Pose> poses;
-    std::vector<Twist> twists;
-    std::vector<Accel> accels;
-
-};
-
-
 struct PlanningContext {
-    Pose start;
-    Pose goal;
-    std::optional<Trajectory> reference_path;  // 可选的参考路径
+    geometry_msgs::msg::Pose start_pose;
+    geometry_msgs::msg::Pose goal_pose;
+    std::optional<finenav_msgs::msg::Trajectory> reference_path;  // 可选的参考路径
 };
-
-
-// ========================================================
-// 主模板 (Primary Template)
-// ========================================================
-// 默认情况下不定义任何东西。
-// 如果用户使用了未注册的 Planner，编译器会报错 "incomplete type PlannerTraits<...>"
-template <typename T>
-struct PlannerTraits;
-
-// 【关键点】偏特化 (Partial Specialization)
-// 语法意思：只要是 AStarPlanner<MapView> 这种形式的类，无论 MapView 是什么，都用这个 Traits
-// template <typename MapView>
-// struct PlannerTraits<AStarPlanner<MapView>> {
-//     // 这里定义的特性与 MapView 具体是什么无关
-//     static constexpr auto REQUIRED_INPUTS    = fn_traits::NONE;
-//     static constexpr auto GUARANTEED_OUTPUTS = fn_traits::PATH;
-// };
-
 
 /**
  * @brief PlannerConcept TODO：是否考虑改名为 Motion Generator
@@ -129,27 +68,13 @@ struct PlannerTraits;
  */
 template <typename T,  typename MapView>
 concept PlannerConcept = std::default_initializable<T> &&
-    requires(T planner, MapView& map, const PlanningContext& ctx, const typename T::ConfigType& config) {
+    requires(T planner, const MapView& map, const typename T::ConfigType& config, const PlanningContext& ctx, finenav_msgs::msg::Trajectory& output_traj) {
         typename T::ConfigType;
 
-        // 规划器必须声明它是哪种类型的，以区分是否需要参考路径
-        { PlannerTraits<T>::REQUIRED_INPUTS } -> std::convertible_to<TraitMask>;
-
-        { PlannerTraits<T>::GUARANTEED_OUTPUTS } -> std::convertible_to<TraitMask>;
-
-        // 初始化接口
         { planner.configure(config) } -> std::same_as<void>;
 
-        // 输入地图视图和上下文，返回标准轨迹结构
-        { planner.plan(map, ctx) } -> std::same_as<Trajectory>;
-
+        { planner.plan(map, ctx, output_traj) } -> std::same_as<bool>;
 };
-
-//  * 规划器的一般形式是(以Astar为例) Astar<MapView> ，其中 MapView 是对 Map 的一种视图包装，由用户功能代码实现；Astar 内部描述了应该如何调用 MapView 的接口
-// * 规划器的接口只有一个 plan(), 输入起点位姿和终点位姿，输出 SOA 的规划结果，Local Planner 基类负责将结果打包为 Action 中的相关规范发布
-
-// 再做一个宏定义注册，把 typetraits 绑到 PlannerTraits 管理类的模板特化去
-
 
 /**
  * @brief LayerConcept
@@ -159,7 +84,7 @@ template <typename T>
 concept LayerTraits = requires {
     typename T::Map;      // 必须包含 MapType
     typename T::Planners;   // 必须包含 PlannerSet
-    typename T::Filters;    // 必须包含 FilterSet
+    typename T::MapViews;    // 必须包含 MapViews
 }; // TODO: 可能还要补充 PlannerSet 和 FilterSet 的类型检查，之后再说
 
 
