@@ -35,5 +35,5 @@ template <> \
 struct PlannerTraits<PLANNER_TYPE> { \
     static constexpr TraitMask REQUIRED_INPUTS    = INPUT_MASK; \
     static constexpr TraitMask GUARANTEED_OUTPUTS = OUTPUT_MASK; \
-};\
+}; \
 }
