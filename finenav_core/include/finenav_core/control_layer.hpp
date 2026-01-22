@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <pcl_conversions/pcl_conversions.h>
+
+
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <tf2_ros/buffer.h>
@@ -15,6 +18,7 @@
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
 #include "finenav_msgs/action/compute_plan.hpp"
+#include "finenav_util/trajectory_io/conversions.hpp"
 
 namespace finenav {
 
@@ -124,11 +128,9 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
     /// THREAD 0: 更新规划参考轨迹，等于主线程？
     void PlanRefCallback(const finenav_msgs::msg::Trajectory& msg) {
         RCLCPP_INFO(this->get_logger(), "Received plan reference");
-        // TODO: 接收时，assert trajectroy_msg is consistent
+        // TODO: 接收时，检测 trajectroy_msg is consistent
         // TODO: 这里需要做互斥
         plan_ref_msg_ = msg;
-
-
     }
 
     /// THREAD 1: 执行规划
@@ -159,12 +161,10 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         auto result = std::make_shared<finenav_msgs::action::ComputePlan::Result>();
         active_planner_id_ = goal->planner_id; // 记录当前请求的规划器 ID
 
-        // 在 planners_instance_ 中找匹配 active_planner_id_ 的 planner
+        auto goal_pose = goal->goal;
 
-        // 从 goal 消息中获取终点位姿
-        Pose goal_pose;
-        auto goal_msg = goal->goal;
-        tf2::fromMsg(goal_msg, goal_pose);
+        // Pose goal_pose_eigen;
+        // tf2::fromMsg(goal_msg, goal_pose_eigen);
 
         // 创建一个周期调用的定时器，定时器频率为控制周期
         {
@@ -179,23 +179,35 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
             // 从 TF 获取当前机器人位姿作为起点, map 系下 base_link 的位置，对应 base_link->map 的变换
             geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
                 "map", "base_link", tf2::TimePointZero); // TODO: TF 时间戳相关细节，可参考 nav2_planner
-            Pose start_pose = tf2::transformToEigen(t);
 
+            geometry_msgs::msg::Pose start_pose;
+            start_pose.position.x = t.transform.translation.x;
+            start_pose.position.y = t.transform.translation.y;
+            start_pose.position.z = t.transform.translation.z;
+            start_pose.orientation = t.transform.rotation;
 
+            // Pose start_pose_eigen = tf2::transformToEigen(t);
 
-            // 找到这个规划器
-            finenav_msgs::msg::Trajectory output_traj;
+            // 在 planners_instance_ 中找匹配 active_planner_id_ 的 planner
             bool planner_found_and_run = false;
+            bool plan_success = false;
+            finenav_msgs::msg::Trajectory output_traj_msg; // TODO: 后续可能要用unique_ptr封装，否则无法进行进程内 IPC
 
             auto try_run_planner = [&](auto& planner) -> bool {
                 using PlannerT = std::decay_t<decltype(planner)>;
-
-                PlanningContext<PlannerT> ctx; // 填充规划上下文
                 if (AlgoConfigurator<PlannerT>::name == active_planner_id_) {
 
+                    PlanningContext<PlannerT> ctx; // 填充规划上下文
+                    ctx.start_pose = start_pose;
+                    ctx.goal_pose = goal_pose;
+                    fromROSMsg(std::move(plan_ref_msg_), ctx.ref_traj); // TODO: 这里需要做互斥
+
                     // TODO: 给地图上锁
-                    // ctx.reference_path = plan_ref_msg_;
                     auto plan_result = planner.plan(ctx, this->get_planning_map_view());
+                    if (plan_result.has_value()) {
+                        plan_success = true;
+                        toROSMsg(std::move(plan_result.value()), output_traj_msg);
+                    }
                     return true; // 返回 true 以触发短路，停止后续遍历
                 }
                 return false;
@@ -209,17 +221,18 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
                 goal_handle->abort(result);
                 return;
             }
-            // if (!plan_success) {
-            //     RCLCPP_ERROR_STREAM(this->get_logger(), "Planner " << active_planner_id_ << " failed to compute a plan");
-            //     goal_handle->abort(result);
-            //     return;
-            // }
+            if (!plan_success) {
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Planner " << active_planner_id_ << " failed to compute a plan");
+                goal_handle->abort(result);
+                return;
+            }
 
             // 发布规划结果
-            plan_result_pub_->publish(output_traj);
-            // TODO: 发布时， assert trajectroy_msg is consistent
+            // TODO: 发布时， 检测 trajectroy_msg is consistent
+            plan_result_pub_->publish(output_traj_msg);
 
-            // 检查是否抵达终点，如果抵达，退出循环 (通过获取系统整体状态)
+
+            // 检查是否抵达终点，如果抵达，退出循环 (通过获取系统整体状态，这样的话得再开一个线程)
         }
 
         // 设置成功结果
