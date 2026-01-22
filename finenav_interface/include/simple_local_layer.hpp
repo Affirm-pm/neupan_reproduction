@@ -129,7 +129,7 @@ struct LocalLayerConfig {
     // using Map = SimpleTestMap;
     using Map = finenav::GridMap<float>;
     using Planners = PlannerSet<SimpleTestPlanner>; // TODO: 如果注册同名怎么办
-    using MapViews = std::variant<SimpleGridMapView, ComplexGridMapView>;
+    using MapViews = std::variant<SimpleGridMapView, ComplexGridMapView>; // TODO: 把 variant 封装起来
 };
 
 bool custom_map_integrate(const Position& position, const LocalLayerConfig::Map::DataType& data) {
