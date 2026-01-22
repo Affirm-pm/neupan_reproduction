@@ -13,6 +13,7 @@
 #include "finenav_msgs/msg/map_chunk.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
 #include "finenav_util/planner_traits.hpp"
+#include "finenav_util/trajectory_io/data_packet.hpp"
 
 namespace finenav {
 
@@ -52,10 +53,11 @@ concept MapConcept =
  * @brief PlanningContext (规划上下文)
  * @details 包含算法在“这一帧”规划所需的所有不可变数据。
  */
+template <typename PlannerT>
 struct PlanningContext {
     geometry_msgs::msg::Pose start_pose;
     geometry_msgs::msg::Pose goal_pose;
-    std::optional<finenav_msgs::msg::Trajectory> reference_path;  // 可选的参考路径
+    InputDataT<PlannerT> ref_traj; // TODO: 验证空轨迹的逻辑
 };
 
 /**
@@ -68,12 +70,18 @@ struct PlanningContext {
  */
 template <typename T,  typename MapView>
 concept PlannerConcept = std::default_initializable<T> &&
-    requires(T planner, const MapView& map, const typename T::ConfigType& config, const PlanningContext& ctx, finenav_msgs::msg::Trajectory& output_traj) {
+    requires {
         typename T::ConfigType;
+        typename InputDataT<T>;
+        typename OutputDataT<T>;
+    } &&
+    requires(T planner, const typename T::ConfigType& config, const PlanningContext<T>& ctx, const MapView map_view) {
 
+        // --- 基本配置 ---
         { planner.configure(config) } -> std::same_as<void>;
 
-        { planner.plan(map, ctx, output_traj) } -> std::same_as<bool>;
+        // --- 规划接口 ---
+        { planner.plan(ctx, map_view) } -> std::same_as<std::optional<OutputDataT<T>>>;
 };
 
 /**

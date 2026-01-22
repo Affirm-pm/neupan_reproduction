@@ -76,17 +76,11 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         // --- 5. 规划数据流 ---
         if (!config_.input_topic.empty()) {
             plan_ref_sub_ = this->template create_subscription<finenav_msgs::msg::Trajectory>(
-                config_.input_topic, 10,
-                [this](const finenav_msgs::msg::Trajectory::SharedPtr msg) {
-                    RCLCPP_INFO(this->get_logger(), "Received plan reference");
-                });
-            // TODO: 接收时，assert trajectroy_msg, empty or non-consistent
+                config_.input_topic, 10, std::bind(&ControlLayer::PlanRefCallback, this, std::placeholders::_1));
         }
         if (!config_.output_topic.empty()) {
             plan_result_pub_ = this->create_publisher<finenav_msgs::msg::Trajectory>(config_.output_topic, 10);
         }
-            // TODO: 发布时， assert trajectroy_msg, empty or non-consistent
-
     }
 
     void initialize() {
@@ -127,6 +121,17 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         }
     }
 
+    /// THREAD 0: 更新规划参考轨迹，等于主线程？
+    void PlanRefCallback(const finenav_msgs::msg::Trajectory& msg) {
+        RCLCPP_INFO(this->get_logger(), "Received plan reference");
+        // TODO: 接收时，assert trajectroy_msg is consistent
+        // TODO: 这里需要做互斥
+        plan_ref_msg_ = msg;
+
+
+    }
+
+    /// THREAD 1: 执行规划
     using GoalHandleComputePlan = rclcpp_action::ServerGoalHandle<finenav_msgs::action::ComputePlan>;
 
     rclcpp_action::GoalResponse handle_goal(
@@ -176,19 +181,21 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
                 "map", "base_link", tf2::TimePointZero); // TODO: TF 时间戳相关细节，可参考 nav2_planner
             Pose start_pose = tf2::transformToEigen(t);
 
-            PlanningContext ctx; // 填充规划上下文
+
 
             // 找到这个规划器
             finenav_msgs::msg::Trajectory output_traj;
-            bool plan_success = false;
             bool planner_found_and_run = false;
 
             auto try_run_planner = [&](auto& planner) -> bool {
                 using PlannerT = std::decay_t<decltype(planner)>;
+
+                PlanningContext<PlannerT> ctx; // 填充规划上下文
                 if (AlgoConfigurator<PlannerT>::name == active_planner_id_) {
 
                     // TODO: 给地图上锁
-                    plan_success = planner.plan(this->get_planning_map_view(), ctx, output_traj);
+                    // ctx.reference_path = plan_ref_msg_;
+                    auto plan_result = planner.plan(ctx, this->get_planning_map_view());
                     return true; // 返回 true 以触发短路，停止后续遍历
                 }
                 return false;
@@ -202,14 +209,15 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
                 goal_handle->abort(result);
                 return;
             }
-            if (!plan_success) {
-                RCLCPP_ERROR_STREAM(this->get_logger(), "Planner " << active_planner_id_ << " failed to compute a plan");
-                goal_handle->abort(result);
-                return;
-            }
+            // if (!plan_success) {
+            //     RCLCPP_ERROR_STREAM(this->get_logger(), "Planner " << active_planner_id_ << " failed to compute a plan");
+            //     goal_handle->abort(result);
+            //     return;
+            // }
 
             // 发布规划结果
             plan_result_pub_->publish(output_traj);
+            // TODO: 发布时， assert trajectroy_msg is consistent
 
             // 检查是否抵达终点，如果抵达，退出循环 (通过获取系统整体状态)
         }
@@ -228,6 +236,8 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
 
     rclcpp::Subscription<finenav_msgs::msg::Trajectory>::SharedPtr plan_ref_sub_; // 这里是固定的 Trajectory 消息类型
     rclcpp::Publisher<finenav_msgs::msg::Trajectory>::SharedPtr plan_result_pub_;
+
+    finenav_msgs::msg::Trajectory plan_ref_msg_; // 最近一次收到的规划参考
 
 
 

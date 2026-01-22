@@ -66,22 +66,38 @@ public:
 class SimpleTestPlanner {
 public:
     SimpleTestPlanner() = default;
+
     using ConfigType = test_planner::Params;
+    static constexpr IOProfile InputProfile = {
+        .pose = true,
+        .vel  = false,
+        .accel= false,
+        .time = false
+    };
+    static constexpr IOProfile OutputProfile = {
+        .pose = true,
+        .vel  = false,
+        .accel= false,
+        .time = false
+    };
+
+    using Context = PlanningContext<SimpleTestPlanner>;
+    using Result  = std::optional<OutputDataT<SimpleTestPlanner>>;
 
     void configure(const ConfigType &params) {
         if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
     }
 
     template <typename MapView>
-    bool plan(const MapView& map, const PlanningContext& ctx, finenav_msgs::msg::Trajectory& output_traj) {
+    Result plan(const Context& ctx, MapView map_view) {
         auto start_pose = ctx.start_pose;
         auto goal_pose = ctx.goal_pose;
-        auto trajectory = finenav_msgs::msg::Trajectory(); // 这里会有一个 helper function 帮忙解包
+        auto ref_traj = ctx.ref_traj;
 
         // 执行规划算法，e.g. 生成一条直线路径
 
         // 装填输出轨迹
-        return true;
+        return std::nullopt;
     }
 };
 
@@ -165,8 +181,4 @@ private:
 }
 
 FINENAV_REGISTER_ALGO_CONFIG(finenav::SimpleTestMap, test_map)
-
 FINENAV_REGISTER_ALGO_CONFIG(finenav::SimpleTestPlanner, test_planner)
-FINENAV_REGISTER_PLANNER_TRAITS(finenav::SimpleTestPlanner,
-    finenav::TraitMask::NONE,
-    finenav::TraitMask::POSE)
