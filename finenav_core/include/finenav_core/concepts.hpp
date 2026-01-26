@@ -12,7 +12,6 @@
 #include "math_types.hpp"
 #include "finenav_msgs/msg/map_chunk.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
-#include "finenav_util/planner_traits.hpp"
 #include "finenav_util/trajectory_io/data_packet.hpp"
 
 namespace finenav {

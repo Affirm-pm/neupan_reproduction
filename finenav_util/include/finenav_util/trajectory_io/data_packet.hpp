@@ -10,7 +10,6 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/accel.hpp>
 #include <builtin_interfaces/msg/duration.hpp>
-#include "finenav_util/planner_traits.hpp"
 
 namespace finenav {
 

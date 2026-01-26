@@ -11,7 +11,6 @@
 #include "finenav_interface/test_planner_params.hpp"
 
 #include "finenav_util/algo_configurator.hpp"
-#include "finenav_util/planner_traits.hpp"
 
 namespace finenav {
 
