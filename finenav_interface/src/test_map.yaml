@@ -1,4 +1,4 @@
-grid_map:
+test_map:
   background:
     r:
       type: int
