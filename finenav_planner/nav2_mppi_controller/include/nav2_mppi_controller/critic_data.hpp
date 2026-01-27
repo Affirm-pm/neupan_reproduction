@@ -45,7 +45,6 @@ struct CriticData
   float & model_dt;
 
   bool fail_flag;
-  nav2_core::GoalChecker * goal_checker;
   std::shared_ptr<MotionModel> motion_model;
   std::optional<std::vector<bool>> path_pts_valid;
   std::optional<size_t> furthest_reached_path_point;

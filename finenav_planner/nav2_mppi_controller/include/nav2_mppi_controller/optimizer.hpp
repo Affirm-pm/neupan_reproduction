@@ -89,8 +89,7 @@ public:
    */
   geometry_msgs::msg::TwistStamped evalControl(
     const geometry_msgs::msg::PoseStamped & robot_pose,
-    const geometry_msgs::msg::Twist & robot_speed, const nav_msgs::msg::Path & plan,
-    nav2_core::GoalChecker * goal_checker);
+    const geometry_msgs::msg::Twist & robot_speed, const nav_msgs::msg::Path & plan);
 
   /**
    * @brief Get the trajectories generated in a cycle for visualization
@@ -132,7 +131,7 @@ protected:
   void prepare(
     const geometry_msgs::msg::PoseStamped & robot_pose,
     const geometry_msgs::msg::Twist & robot_speed,
-    const nav_msgs::msg::Path & plan, nav2_core::GoalChecker * goal_checker);
+    const nav_msgs::msg::Path & plan);
 
   /**
    * @brief Obtain the main controller's parameters
@@ -253,7 +252,7 @@ protected:
   xt::xtensor<float, 1> costs_;
 
   CriticData critics_data_ =
-  {state_, generated_trajectories_, path_, costs_, settings_.model_dt, false, nullptr, nullptr,
+  {state_, generated_trajectories_, path_, costs_, settings_.model_dt, false, nullptr,
     std::nullopt, std::nullopt};  /// Caution, keep references
 
   rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};

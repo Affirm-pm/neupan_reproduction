@@ -28,9 +28,12 @@
 #include "nav2_core/goal_checker.hpp"
 #include "rclcpp/rclcpp.hpp"
 
+
+#include "finenav_interface/test_map_params.hpp"
+#include "finenav_interface/test_planner_params.hpp"
+
+#include "finenav_util/trajectory_io/data_packet.hpp"
 #include "finenav_util/algo_configurator.hpp"
-#include "finenav_util/planner_traits.hpp"
-#include "finenav_core/concepts.hpp"
 #include "nav2_mppi_controller/finenav_mppi_controller_params.hpp"
 
 namespace nav2_mppi_controller
@@ -42,79 +45,36 @@ using namespace mppi;  // NOLINT
  * @class mppi::MPPIController
  * @brief Main plugin controller for MPPI Controller
  */
-class MPPIController : public nav2_core::Controller
+class MPPIController
 {
 public:
   /**
     * @brief Constructor for mppi::MPPIController
     */
-  MPPIController() = default;
+    MPPIController() = default;
 
-  /**
-    * @brief Configure controller on bringup
-    * @param parent WeakPtr to node
-    * @param name Name of plugin
-    * @param tf TF buffer to use
-    * @param costmap_ros Costmap2DROS object of environment
-    */
-  void configure(
-    const rclcpp_lifecycle::LifecycleNode::WeakPtr & parent,
-    std::string name, const std::shared_ptr<tf2_ros::Buffer> tf,
-    const std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros) override;
+    static constexpr finenav::IOProfile InputProfile = {
+        .pose = true,
+        .vel  = false,
+        .accel= false,
+        .time = false
+    };
+    static constexpr finenav::IOProfile OutputProfile = {
+        .pose = true,
+        .vel  = false,
+        .accel= false,
+        .time = false
+    };
 
-  /**
-    * @brief Cleanup resources
-    */
-  void cleanup() override;
-
-  /**
-    * @brief Activate controller
-    */
-  void activate() override;
-
-  /**
-    * @brief Deactivate controller
-    */
-  void deactivate() override;
-
-  /**
-    * @brief Reset the controller state between tasks
-    */
-  void reset();
-
-  /**
-    * @brief Main method to compute velocities using the optimizer
-    * @param robot_pose Robot pose
-    * @param robot_speed Robot speed
-    * @param goal_checker Pointer to the goal checker for awareness if completed task
-    */
-  geometry_msgs::msg::TwistStamped computeVelocityCommands(
-    const geometry_msgs::msg::PoseStamped & robot_pose,
-    const geometry_msgs::msg::Twist & robot_speed,
-    nav2_core::GoalChecker * goal_checker) override;
-
-  /**
-    * @brief Set new reference path to track
-    * @param path Path to track
-    */
-  void setPlan(const nav_msgs::msg::Path & path) override;
-
-  /**
-    * @brief Set new speed limit from callback
-    * @param speed_limit Speed limit to use
-    * @param percentage Bool if the speed limit is absolute or relative
-    */
-  void setSpeedLimit(const double & speed_limit, const bool & percentage) override;
-
-
+    using Context = finenav::PlanningContext<MPPIController>;
+    using Result  = std::optional<finenav::OutputDataT<MPPIController>>;
     using ConfigType = finenav_mppi_controller::Params;
-
     void configure(const ConfigType &params) {
         if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
     }
 
     template <typename MapView>
-    bool plan(const MapView& map, const finenav::PlanningContext& ctx, finenav_msgs::msg::Trajectory& output_traj) {
+    bool plan(const MapView& map, const finenav::PlanningContext<MPPIController>& ctx, finenav_msgs::msg::Trajectory& output_traj) {
 
         auto start_pose = ctx.start_pose;
         auto goal_pose = ctx.goal_pose;
@@ -124,20 +84,55 @@ public:
         std::cout << "[nav2_mppi_controller] Planning from ("
                   << start_pose.position.x << ", " << start_pose.position.y << ") to ("
                   << goal_pose.position.x << ", " << goal_pose.position.y << ")" << std::endl;
+        geometry_msgs::msg::PoseStamped start_pose_stamped;
+        start_pose_stamped.pose = start_pose;
+        start_pose_stamped.header.stamp = rclcpp::Clock().now();
+        start_pose_stamped.header.frame_id = "map"; // 根据实际需求设置 frame_id
 
+
+        computeVelocityCommands(
+            start_pose_stamped,
+            geometry_msgs::msg::Twist()
+            );
         // 装填输出轨迹
         return true;
     }
 
-protected:
+
   /**
+    * @brief Set new reference path to track
+    * @param path Path to track
+    */
+  void setPlan(const nav_msgs::msg::Path & path);
+
+  /**
+    * @brief Set new speed limit from callback
+    * @param speed_limit Speed limit to use
+    * @param percentage Bool if the speed limit is absolute or relative
+    */
+  void setSpeedLimit(const double & speed_limit, const bool & percentage);
+
+
+
+protected:
+    /**
     * @brief Visualize trajectories
     * @param transformed_plan Transformed input plan
     */
-  void visualize(
-    nav_msgs::msg::Path transformed_plan,
-    const builtin_interfaces::msg::Time & cmd_stamp,
-    double z_height);
+    void visualize(
+        nav_msgs::msg::Path transformed_plan,
+        const builtin_interfaces::msg::Time & cmd_stamp,
+        double z_height);
+
+    /**
+    * @brief Main method to compute velocities using the optimizer
+    * @param robot_pose Robot pose
+    * @param robot_speed Robot speed
+    * @param goal_checker Pointer to the goal checker for awareness if completed task
+    */
+    geometry_msgs::msg::TwistStamped computeVelocityCommands(
+        const geometry_msgs::msg::PoseStamped & robot_pose,
+        const geometry_msgs::msg::Twist & robot_speed);
 
   std::string name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;

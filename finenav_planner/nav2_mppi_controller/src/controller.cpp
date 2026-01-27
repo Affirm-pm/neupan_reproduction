@@ -23,65 +23,9 @@
 namespace nav2_mppi_controller
 {
 
-void MPPIController::configure(
-  const rclcpp_lifecycle::LifecycleNode::WeakPtr & parent,
-  std::string name, const std::shared_ptr<tf2_ros::Buffer> tf,
-  const std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
-{
-  parent_ = parent;
-  costmap_ros_ = costmap_ros;
-  tf_buffer_ = tf;
-  name_ = name;
-  parameters_handler_ = std::make_unique<ParametersHandler>(parent);
-
-  auto node = parent_.lock();
-  clock_ = node->get_clock();
-  last_time_called_ = clock_->now();
-  // Get high-level controller parameters
-  auto getParam = parameters_handler_->getParamGetter(name_);
-  getParam(visualize_, "visualize", false);
-  getParam(reset_period_, "reset_period", 1.0);
-
-  // Configure composed objects
-  optimizer_.initialize(parent_, name_, costmap_ros_, parameters_handler_.get());
-  path_handler_.initialize(parent_, name_, costmap_ros_, tf_buffer_, parameters_handler_.get());
-  trajectory_visualizer_.on_configure(
-    parent_, name_,
-    costmap_ros_->getGlobalFrameID(), parameters_handler_.get());
-
-  RCLCPP_INFO(logger_, "Configured MPPI Controller: %s", name_.c_str());
-}
-
-void MPPIController::cleanup()
-{
-  optimizer_.shutdown();
-  trajectory_visualizer_.on_cleanup();
-  parameters_handler_.reset();
-  RCLCPP_INFO(logger_, "Cleaned up MPPI Controller: %s", name_.c_str());
-}
-
-void MPPIController::activate()
-{
-  trajectory_visualizer_.on_activate();
-  parameters_handler_->start();
-  RCLCPP_INFO(logger_, "Activated MPPI Controller: %s", name_.c_str());
-}
-
-void MPPIController::deactivate()
-{
-  trajectory_visualizer_.on_deactivate();
-  RCLCPP_INFO(logger_, "Deactivated MPPI Controller: %s", name_.c_str());
-}
-
-void MPPIController::reset()
-{
-  optimizer_.reset();
-}
-
 geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
   const geometry_msgs::msg::PoseStamped & robot_pose,
-  const geometry_msgs::msg::Twist & robot_speed,
-  nav2_core::GoalChecker * goal_checker)
+  const geometry_msgs::msg::Twist & robot_speed)
 {
 #ifdef BENCHMARK_TESTING
   auto start = std::chrono::system_clock::now();
@@ -99,7 +43,7 @@ geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
   std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> costmap_lock(*(costmap->getMutex()));
 
   geometry_msgs::msg::TwistStamped cmd =
-    optimizer_.evalControl(robot_pose, robot_speed, transformed_plan, goal_checker);
+    optimizer_.evalControl(robot_pose, robot_speed, transformed_plan);
 
 #ifdef BENCHMARK_TESTING
   auto end = std::chrono::system_clock::now();
