@@ -70,9 +70,7 @@ public:
    * @param dynamic_parameter_handler Parameter handler object
    */
   void initialize(
-    rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name,
-    std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros,
-    ParametersHandler * dynamic_parameters_handler);
+    rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name);
 
   /**
    * @brief Shutdown for optimizer at process end
@@ -87,15 +85,16 @@ public:
    * @param goal_checker Object to check if goal is completed
    * @return TwistStamped of the MPPI control
    */
+  template <typename MapView>
   geometry_msgs::msg::TwistStamped evalControl(
     const geometry_msgs::msg::PoseStamped & robot_pose,
-    const geometry_msgs::msg::Twist & robot_speed, const nav_msgs::msg::Path & plan);
+    const geometry_msgs::msg::Twist & robot_speed, const nav_msgs::msg::Path & plan,const MapView& map_view);
 
   /**
    * @brief Get the trajectories generated in a cycle for visualization
    * @return Set of trajectories evaluated in cycle
    */
-  models::Trajectories & getGeneratedTrajectories();
+  models::Trajeritics_ctories & getGeneratedTrajectories();
 
   /**
    * @brief Get the optimal trajectory for a cycle for visualization
@@ -119,7 +118,8 @@ protected:
   /**
    * @brief Main function to generate, score, and return trajectories
    */
-  void optimize();
+  template <typename MapView>
+  void optimize(const MapView& map_view);
 
   /**
    * @brief Prepare state information on new request for trajectory rollouts

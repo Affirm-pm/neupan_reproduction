@@ -33,23 +33,18 @@ using namespace xt::placeholders;  // NOLINT
 using xt::evaluation_strategy::immediate;
 
 void Optimizer::initialize(
-  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name,
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros,
-  ParametersHandler * param_handler)
+  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name)
 {
   parent_ = parent;
   name_ = name;
-  costmap_ros_ = costmap_ros;
-  costmap_ = costmap_ros_->getCostmap();
-  parameters_handler_ = param_handler;
 
   auto node = parent_.lock();
   logger_ = node->get_logger();
 
   getParams();
 
-  critic_manager_.on_configure(parent_, name_, costmap_ros_, parameters_handler_);
-  noise_generator_.initialize(settings_, isHolonomic(), name_, parameters_handler_);
+  critic_manager_.on_configure(parent_, name_);
+  noise_generator_.initialize(settings_, isHolonomic(), name_);
 
   reset();
 }
@@ -130,33 +125,35 @@ void Optimizer::reset()
   noise_generator_.reset(settings_, isHolonomic());
   RCLCPP_INFO(logger_, "Optimizer reset");
 }
-
+template <typename MapView>
 geometry_msgs::msg::TwistStamped Optimizer::evalControl(
-  const geometry_msgs::msg::PoseStamped & robot_pose,
-  const geometry_msgs::msg::Twist & robot_speed,
-  const nav_msgs::msg::Path & plan)
+    const geometry_msgs::msg::PoseStamped & robot_pose,
+    const geometry_msgs::msg::Twist & robot_speed,
+    const nav_msgs::msg::Path & plan,
+    const MapView& map_view)
 {
-  prepare(robot_pose, robot_speed, plan);
+    prepare(robot_pose, robot_speed, plan);
 
-  do {
-    optimize();
-  } while (fallback(critics_data_.fail_flag));
+    do {
+      optimize(map_view);
+    } while (fallback(critics_data_.fail_flag));
 
-  utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
-  auto control = getControlFromSequenceAsTwist(plan.header.stamp);
+    utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
+    auto control = getControlFromSequenceAsTwist(plan.header.stamp);
 
-  if (settings_.shift_control_sequence) {
-    shiftControlSequence();
-  }
+    if (settings_.shift_control_sequence) {
+      shiftControlSequence();
+    }
 
-  return control;
+    return control;
 }
 
-void Optimizer::optimize()
+template <typename MapView>
+void Optimizer::optimize(const MapView& map_view)
 {
   for (size_t i = 0; i < settings_.iteration_count; ++i) {
     generateNoisedTrajectories();
-    critic_manager_.evalTrajectoriesScores(critics_data_);
+    critic_manager_.evalTrajectoriesScores(critics_data_,map_view);
     updateControlSequence();
   }
 }
@@ -181,9 +178,9 @@ bool Optimizer::fallback(bool fail)
 }
 
 void Optimizer::prepare(
-  const geometry_msgs::msg::PoseStamped & robot_pose,
-  const geometry_msgs::msg::Twist & robot_speed,
-  const nav_msgs::msg::Path & plan)
+    const geometry_msgs::msg::PoseStamped & robot_pose,
+    const geometry_msgs::msg::Twist & robot_speed,
+    const nav_msgs::msg::Path & plan)
 {
   state_.pose = robot_pose;
   state_.speed = robot_speed;
@@ -387,19 +384,19 @@ void Optimizer::updateControlSequence()
 }
 
 geometry_msgs::msg::TwistStamped Optimizer::getControlFromSequenceAsTwist(
-  const builtin_interfaces::msg::Time & stamp)
+    const builtin_interfaces::msg::Time & stamp)
 {
-  unsigned int offset = settings_.shift_control_sequence ? 1 : 0;
+    unsigned int offset = settings_.shift_control_sequence ? 1 : 0;
 
-  auto vx = control_sequence_.vx(offset);
-  auto wz = control_sequence_.wz(offset);
+    auto vx = control_sequence_.vx(offset);
+    auto wz = control_sequence_.wz(offset);
 
-  if (isHolonomic()) {
-    auto vy = control_sequence_.vy(offset);
-    return utils::toTwistStamped(vx, vy, wz, stamp, costmap_ros_->getBaseFrameID());
-  }
+    if (isHolonomic()) {
+        auto vy = control_sequence_.vy(offset);
+        return utils::toTwistStamped(vx, vy, wz, stamp, map_view_>getBaseFrameID());
+    }
 
-  return utils::toTwistStamped(vx, wz, stamp, costmap_ros_->getBaseFrameID());
+    return utils::toTwistStamped(vx, wz, stamp, map_view_->getBaseFrameID());
 }
 
 void Optimizer::setMotionModel(const std::string & model)

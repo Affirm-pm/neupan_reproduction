@@ -32,6 +32,7 @@
 #include "finenav_interface/test_map_params.hpp"
 #include "finenav_interface/test_planner_params.hpp"
 
+#include "finenav_core/concepts.hpp"
 #include "finenav_util/trajectory_io/data_packet.hpp"
 #include "finenav_util/algo_configurator.hpp"
 #include "nav2_mppi_controller/finenav_mppi_controller_params.hpp"
@@ -74,7 +75,7 @@ public:
     }
 
     template <typename MapView>
-    bool plan(const MapView& map, const finenav::PlanningContext<MPPIController>& ctx, finenav_msgs::msg::Trajectory& output_traj) {
+    bool plan(const MapView& map_view, const finenav::PlanningContext<MPPIController>& ctx, finenav_msgs::msg::Trajectory& output_traj) {
 
         auto start_pose = ctx.start_pose;
         auto goal_pose = ctx.goal_pose;
@@ -92,9 +93,55 @@ public:
 
         computeVelocityCommands(
             start_pose_stamped,
-            geometry_msgs::msg::Twist()
+            geometry_msgs::msg::Twist(),
+            map_view
             );
         // 装填输出轨迹
+
+    // 获取最优轨迹
+    auto optimized_trajectory = optimizer_.getOptimizedTrajectory();
+
+    // 清空旧数据
+    output_traj.poses.clear();
+    output_traj.twists.clear();
+    output_traj.accels.clear();
+    output_traj.time_from_start.clear();
+
+    // 填充 header
+    output_traj.header.stamp = rclcpp::Clock().now();
+    output_traj.header.frame_id = "map";
+
+    // 填充轨迹点
+    for (size_t i = 0; i < optimized_trajectory.shape(0); ++i) {
+        geometry_msgs::msg::Pose pose;
+        pose.position.x = optimized_trajectory(i, 0);
+        pose.position.y = optimized_trajectory(i, 1);
+        if (optimized_trajectory.shape(1) > 2) {
+            pose.position.z = optimized_trajectory(i, 2);
+        }
+        output_traj.poses.push_back(pose);
+
+        // 如果有速度、加速度或时间数据，填充对应字段
+        if (optimized_trajectory.shape(1) > 3) {
+            geometry_msgs::msg::Twist twist;
+            twist.linear.x = optimized_trajectory(i, 3);
+            twist.linear.y = optimized_trajectory(i, 4);
+            output_traj.twists.push_back(twist);
+        }
+        if (optimized_trajectory.shape(1) > 5) {
+            geometry_msgs::msg::Accel accel;
+            accel.linear.x = optimized_trajectory(i, 5);
+            accel.linear.y = optimized_trajectory(i, 6);
+            output_traj.accels.push_back(accel);
+        }
+        if (optimized_trajectory.shape(1) > 7) {
+            builtin_interfaces::msg::Duration time;
+            time.sec = static_cast<int32_t>(optimized_trajectory(i, 7));
+            time.nanosec = static_cast<uint32_t>((optimized_trajectory(i, 7) - time.sec) * 1e9);
+            output_traj.time_from_start.push_back(time);
+        }
+    }
+
         return true;
     }
 
@@ -130,15 +177,16 @@ protected:
     * @param robot_speed Robot speed
     * @param goal_checker Pointer to the goal checker for awareness if completed task
     */
+    template <typename MapView>
     geometry_msgs::msg::TwistStamped computeVelocityCommands(
-        const geometry_msgs::msg::PoseStamped & robot_pose,
-        const geometry_msgs::msg::Twist & robot_speed);
+       const geometry_msgs::msg::PoseStamped & robot_pose,
+       const geometry_msgs::msg::Twist & robot_speed,
+       const MapView& map_view);
 
   std::string name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
   rclcpp::Clock::SharedPtr clock_;
   rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
 
   std::unique_ptr<ParametersHandler> parameters_handler_;
@@ -157,8 +205,6 @@ protected:
 
 
 FINENAV_REGISTER_ALGO_CONFIG(nav2_mppi_controller::MPPIController, finenav_mppi_controller)
-FINENAV_REGISTER_PLANNER_TRAITS(nav2_mppi_controller::MPPIController,
-    finenav::TraitMask::NONE,
-    finenav::TraitMask::POSE)
+
 
 #endif  // NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_
