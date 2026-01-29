@@ -23,6 +23,9 @@ target_link_libraries(test_node
         test_library
 )
 
+ament_auto_add_library(navigator_library SHARED
+        src/plugins/action/compute_plan.cpp
+)
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)

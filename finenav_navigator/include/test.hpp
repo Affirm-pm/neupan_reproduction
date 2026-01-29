@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <rclcpp/rclcpp.hpp>
+#include "navigator.hpp"
 
 namespace finenav {
 
