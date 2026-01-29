@@ -25,17 +25,17 @@ using xt::evaluation_strategy::immediate;
 
 void PathAlignCritic::initialize()
 {
-  auto getParam = parameters_handler_->getParamGetter(name_);
-  getParam(power_, "cost_power", 1);
-  getParam(weight_, "cost_weight", 10.0);
-
-  getParam(max_path_occupancy_ratio_, "max_path_occupancy_ratio", 0.07);
-  getParam(offset_from_furthest_, "offset_from_furthest", 20);
-  getParam(trajectory_point_step_, "trajectory_point_step", 4);
-  getParam(
-    threshold_to_consider_,
-    "threshold_to_consider", 0.5);
-  getParam(use_path_orientations_, "use_path_orientations", false);
+//  auto getParam = parameters_handler_->getParamGetter(name_);
+//  getParam(power_, "cost_power", 1);
+//  getParam(weight_, "cost_weight", 10.0);
+//
+//  getParam(max_path_occupancy_ratio_, "max_path_occupancy_ratio", 0.07);
+//  getParam(offset_from_furthest_, "offset_from_furthest", 20);
+//  getParam(trajectory_point_step_, "trajectory_point_step", 4);
+//  getParam(
+//    threshold_to_consider_,
+//    "threshold_to_consider", 0.5);
+//  getParam(use_path_orientations_, "use_path_orientations", false);     //TODO：参数加载
 
   RCLCPP_INFO(
     logger_,

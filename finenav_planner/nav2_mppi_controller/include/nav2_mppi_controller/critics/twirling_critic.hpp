@@ -25,6 +25,7 @@ namespace mppi::critics
  * @class mppi::critics::ConstraintCritic
  * @brief Critic objective function for penalizing wiggling/twirling
  */
+template <typename MapView>
 class TwirlingCritic : public CriticFunction
 {
 public:
@@ -39,7 +40,7 @@ public:
    *
    * @param costs [out] add goal angle cost values to this tensor
    */
-  void score(CriticData & data) override;
+  void score(CriticData & data, const MapView& map_view) override;
 
 protected:
   unsigned int power_{0};

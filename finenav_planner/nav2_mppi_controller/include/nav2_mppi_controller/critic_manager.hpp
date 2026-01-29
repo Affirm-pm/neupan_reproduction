@@ -60,14 +60,14 @@ public:
     * @param dynamic_parameter_handler Parameter handler object
     */
   void on_configure(
-    rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name,
-    std::shared_ptr<nav2_costmap_2d::Costmap2DROS>, ParametersHandler *);
+    rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name);
 
   /**
     * @brief Score trajectories by the set of loaded critic functions
     * @param CriticData Struct of necessary information to pass to the critic functions
     */
-  void evalTrajectoriesScores(CriticData & data) const;
+  template <typename MapView>
+  void evalTrajectoriesScores(CriticData & data ,const MapView& map_view) const;
 
 protected:
   /**
@@ -87,10 +87,8 @@ protected:
 
 protected:
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
   std::string name_;
 
-  ParametersHandler * parameters_handler_;
   std::vector<std::string> critic_names_;
   std::unique_ptr<pluginlib::ClassLoader<critics::CriticFunction>> loader_;
   std::vector<std::unique_ptr<critics::CriticFunction>> critics_;

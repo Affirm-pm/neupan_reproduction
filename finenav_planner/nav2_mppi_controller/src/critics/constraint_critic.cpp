@@ -19,19 +19,19 @@ namespace mppi::critics
 
 void ConstraintCritic::initialize()
 {
-  auto getParam = parameters_handler_->getParamGetter(name_);
-  auto getParentParam = parameters_handler_->getParamGetter(parent_name_);
-
-  getParam(power_, "cost_power", 1);
-  getParam(weight_, "cost_weight", 4.0);
+//  auto getParam = parameters_handler_->getParamGetter(name_);
+//  auto getParentParam = parameters_handler_->getParamGetter(parent_name_);
+//
+//  getParam(power_, "cost_power", 1);
+//  getParam(weight_, "cost_weight", 4.0);
   RCLCPP_INFO(
     logger_, "ConstraintCritic instantiated with %d power and %f weight.",
     power_, weight_);
 
   float vx_max, vy_max, vx_min;
-  getParentParam(vx_max, "vx_max", 0.5);
-  getParentParam(vy_max, "vy_max", 0.0);
-  getParentParam(vx_min, "vx_min", -0.35);
+//  getParentParam(vx_max, "vx_max", 0.5);
+//  getParentParam(vy_max, "vy_max", 0.0);
+//  getParentParam(vx_min, "vx_min", -0.35);     //TODO：参数加载
 
   const float min_sgn = vx_min > 0.0 ? 1.0 : -1.0;
   max_vel_ = sqrtf(vx_max * vx_max + vy_max * vy_max);

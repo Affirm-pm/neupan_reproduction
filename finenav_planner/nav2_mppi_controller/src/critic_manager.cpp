@@ -18,11 +18,9 @@ namespace mppi
 {
 
 void CriticManager::on_configure(
-  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name,
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros, ParametersHandler * param_handler)
+  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name)
 {
   parent_ = parent;
-  costmap_ros_ = costmap_ros;
   name_ = name;
   auto node = parent_.lock();
   logger_ = node->get_logger();
@@ -53,8 +51,7 @@ void CriticManager::loadCritics()
       loader_->createUnmanagedInstance(fullname));
     critics_.push_back(std::move(instance));
     critics_.back()->on_configure(
-      parent_, name_, name_ + "." + name, costmap_ros_,
-      parameters_handler_);
+      parent_, name_, name_ + "." + name);
     RCLCPP_INFO(logger_, "Critic loaded : %s", fullname.c_str());
   }
 }
@@ -64,14 +61,15 @@ std::string CriticManager::getFullName(const std::string & name)
   return "mppi::critics::" + name;
 }
 
+template <typename MapView>
 void CriticManager::evalTrajectoriesScores(
-  CriticData & data) const
+  CriticData & data, const MapView& map_view) const
 {
   for (size_t q = 0; q < critics_.size(); q++) {
     if (data.fail_flag) {
       break;
     }
-    critics_[q]->score(data);
+    critics_[q]->score(data,mapview);
   }
 }
 

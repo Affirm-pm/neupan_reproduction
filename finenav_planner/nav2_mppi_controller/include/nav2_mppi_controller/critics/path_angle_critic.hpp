@@ -27,6 +27,7 @@ namespace mppi::critics
  * @brief Critic objective function for aligning to path in cases of extreme misalignment
  * or turning
  */
+template <typename MapView>
 class PathAngleCritic : public CriticFunction
 {
 public:
@@ -41,7 +42,7 @@ public:
    *
    * @param costs [out] add goal angle cost values to this tensor
    */
-  void score(CriticData & data) override;
+  void score(CriticData & data, const MapView& map_view) override;
 
 protected:
   float max_angle_to_furthest_{0};

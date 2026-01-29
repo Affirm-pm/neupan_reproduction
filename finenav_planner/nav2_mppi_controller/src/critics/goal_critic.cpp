@@ -22,11 +22,11 @@ using xt::evaluation_strategy::immediate;
 
 void GoalCritic::initialize()
 {
-  auto getParam = parameters_handler_->getParamGetter(name_);
-
-  getParam(power_, "cost_power", 1);
-  getParam(weight_, "cost_weight", 5.0);
-  getParam(threshold_to_consider_, "threshold_to_consider", 1.4);
+//  auto getParam = parameters_handler_->getParamGetter(name_);
+//
+//  getParam(power_, "cost_power", 1);
+//  getParam(weight_, "cost_weight", 5.0);
+//  getParam(threshold_to_consider_, "threshold_to_consider", 1.4);  //TODO：参数加载
 
   RCLCPP_INFO(
     logger_, "GoalCritic instantiated with %d power and %f weight.",

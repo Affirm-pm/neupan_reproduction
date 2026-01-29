@@ -30,6 +30,7 @@ namespace mppi::critics
  * This is an important critic to tune and consider in tandem with Obstacle.
  * This is the initial 'Legacy' implementation before replacement Oct 2023.
  */
+template <typename MapView>
 class PathAlignLegacyCritic : public CriticFunction
 {
 public:
@@ -43,7 +44,7 @@ public:
    *
    * @param costs [out] add reference cost values to this tensor
    */
-  void score(CriticData & data) override;
+  void score(CriticData & data, const MapView& map_view) override;
 
 protected:
   size_t offset_from_furthest_{0};

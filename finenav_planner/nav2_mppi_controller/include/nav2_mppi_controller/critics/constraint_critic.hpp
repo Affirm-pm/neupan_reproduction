@@ -26,6 +26,7 @@ namespace mppi::critics
  * @class mppi::critics::ConstraintCritic
  * @brief Critic objective function for enforcing feasible constraints
  */
+template <typename MapView>
 class ConstraintCritic : public CriticFunction
 {
 public:
@@ -39,7 +40,7 @@ public:
    *
    * @param costs [out] add reference cost values to this tensor
    */
-  void score(CriticData & data) override;
+  void score(CriticData & data, const MapView& map_view) override;
 
   float getMaxVelConstraint() {return max_vel_;}
   float getMinVelConstraint() {return min_vel_;}

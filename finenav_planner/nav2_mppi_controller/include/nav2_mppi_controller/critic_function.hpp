@@ -41,6 +41,7 @@ struct CollisionCost
  * @class mppi::critics::CriticFunction
  * @brief Abstract critic objective function to score trajectories
  */
+template <typename MapView>
 class CriticFunction
 {
 public:
@@ -65,20 +66,12 @@ public:
   void on_configure(
     rclcpp_lifecycle::LifecycleNode::WeakPtr parent,
     const std::string & parent_name,
-    const std::string & name,
-    std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros,
-    ParametersHandler * param_handler)
+    const std::string & name)
   {
     parent_ = parent;
     logger_ = parent_.lock()->get_logger();
     name_ = name;
     parent_name_ = parent_name;
-    costmap_ros_ = costmap_ros;
-    costmap_ = costmap_ros_->getCostmap();
-    parameters_handler_ = param_handler;
-
-    auto getParam = parameters_handler_->getParamGetter(name_);
-    getParam(enabled_, "enabled", true);
 
     initialize();
   }
@@ -87,7 +80,7 @@ public:
     * @brief Main function to score trajectory
     * @param data Critic data to use in scoring
     */
-  virtual void score(CriticData & data) = 0;
+  virtual void score(CriticData & data, const MapView& map_view) = 0;
 
   /**
     * @brief Initialize critic
@@ -106,10 +99,8 @@ protected:
   bool enabled_;
   std::string name_, parent_name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
-  nav2_costmap_2d::Costmap2D * costmap_{nullptr};
 
-  ParametersHandler * parameters_handler_;
+
   rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
 };
 

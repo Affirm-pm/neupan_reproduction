@@ -28,6 +28,7 @@ namespace mppi::critics
  * @class mppi::critics::VelocityDeadbandCritic
  * @brief Critic objective function for enforcing feasible constraints
  */
+template <typename MapView>
 class VelocityDeadbandCritic : public CriticFunction
 {
 public:
@@ -41,7 +42,7 @@ public:
    *
    * @param costs [out] add reference cost values to this tensor
    */
-  void score(CriticData & data) override;
+  void score(CriticData & data, const MapView& map_view) override;
 
 protected:
   unsigned int power_{0};

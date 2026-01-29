@@ -19,14 +19,14 @@ namespace mppi::critics
 
 void VelocityDeadbandCritic::initialize()
 {
-  auto getParam = parameters_handler_->getParamGetter(name_);
-
-  getParam(power_, "cost_power", 1);
-  getParam(weight_, "cost_weight", 35.0);
+//  auto getParam = parameters_handler_->getParamGetter(name_);
+//
+//  getParam(power_, "cost_power", 1);
+//  getParam(weight_, "cost_weight", 35.0);    //TODO：参数加载
 
   // Recast double to float
   std::vector<double> deadband_velocities{0.0, 0.0, 0.0};
-  getParam(deadband_velocities, "deadband_velocities", std::vector<double>{0.0, 0.0, 0.0});
+//  getParam(deadband_velocities, "deadband_velocities", std::vector<double>{0.0, 0.0, 0.0});
   std::transform(
     deadband_velocities.begin(), deadband_velocities.end(), deadband_velocities_.begin(),
     [](double d) {return static_cast<float>(d);});

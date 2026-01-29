@@ -22,28 +22,28 @@ namespace mppi::critics
 
 void PathAngleCritic::initialize()
 {
-  auto getParentParam = parameters_handler_->getParamGetter(parent_name_);
+//  auto getParentParam = parameters_handler_->getParamGetter(parent_name_);
   float vx_min;
-  getParentParam(vx_min, "vx_min", -0.35);
+//  getParentParam(vx_min, "vx_min", -0.35);        //TODO：参数加载
   if (fabs(vx_min) < 1e-6) {  // zero
     reversing_allowed_ = false;
   } else if (vx_min < 0.0) {   // reversing possible
     reversing_allowed_ = true;
   }
 
-  auto getParam = parameters_handler_->getParamGetter(name_);
-  getParam(offset_from_furthest_, "offset_from_furthest", 4);
-  getParam(power_, "cost_power", 1);
-  getParam(weight_, "cost_weight", 2.0);
-  getParam(
-    threshold_to_consider_,
-    "threshold_to_consider", 0.5);
-  getParam(
-    max_angle_to_furthest_,
-    "max_angle_to_furthest", 1.2);
-  getParam(
-    forward_preference_,
-    "forward_preference", true);
+//  auto getParam = parameters_handler_->getParamGetter(name_);
+//  getParam(offset_from_furthest_, "offset_from_furthest", 4);
+//  getParam(power_, "cost_power", 1);
+//  getParam(weight_, "cost_weight", 2.0);
+//  getParam(
+//    threshold_to_consider_,
+//    "threshold_to_consider", 0.5);
+//  getParam(
+//    max_angle_to_furthest_,
+//    "max_angle_to_furthest", 1.2);
+//  getParam(
+//    forward_preference_,
+//    "forward_preference", true);
 
   if (!reversing_allowed_) {
     forward_preference_ = true;

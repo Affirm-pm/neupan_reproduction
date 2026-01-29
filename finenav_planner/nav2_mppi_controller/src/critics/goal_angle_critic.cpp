@@ -19,12 +19,12 @@ namespace mppi::critics
 
 void GoalAngleCritic::initialize()
 {
-  auto getParam = parameters_handler_->getParamGetter(name_);
-
-  getParam(power_, "cost_power", 1);
-  getParam(weight_, "cost_weight", 3.0);
-
-  getParam(threshold_to_consider_, "threshold_to_consider", 0.5);
+//  auto getParam = parameters_handler_->getParamGetter(name_);
+//
+//  getParam(power_, "cost_power", 1);
+//  getParam(weight_, "cost_weight", 3.0);
+//
+//  getParam(threshold_to_consider_, "threshold_to_consider", 0.5);    //TODO：参数加载
 
   RCLCPP_INFO(
     logger_,

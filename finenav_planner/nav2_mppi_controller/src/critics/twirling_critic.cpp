@@ -19,10 +19,9 @@ namespace mppi::critics
 
 void TwirlingCritic::initialize()
 {
-  auto getParam = parameters_handler_->getParamGetter(name_);
 
-  getParam(power_, "cost_power", 1);
-  getParam(weight_, "cost_weight", 10.0);
+//  getParam(power_, "cost_power", 1);
+//  getParam(weight_, "cost_weight", 10.0);   //TODO：参数加载
 
   RCLCPP_INFO(
     logger_, "TwirlingCritic instantiated with %d power and %f weight.", power_, weight_);

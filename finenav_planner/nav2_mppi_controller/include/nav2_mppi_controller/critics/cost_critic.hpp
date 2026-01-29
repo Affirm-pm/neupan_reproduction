@@ -18,7 +18,6 @@
 #include <memory>
 #include <string>
 
-#include "nav2_costmap_2d/footprint_collision_checker.hpp"
 #include "nav2_costmap_2d/inflation_layer.hpp"
 
 #include "nav2_mppi_controller/critic_function.hpp"
@@ -32,6 +31,7 @@ namespace mppi::critics
  * @class mppi::critics::CostCritic
  * @brief Critic objective function for avoiding obstacles using costmap's inflated cost
  */
+template <typename MapView>
 class CostCritic : public CriticFunction
 {
 public:
@@ -45,7 +45,7 @@ public:
    *
    * @param costs [out] add obstacle cost values to this tensor
    */
-  void score(CriticData & data) override;
+  void score(CriticData & data, const MapView& map_view) override;
 
 protected:
   /**
@@ -56,7 +56,12 @@ protected:
     * @param theta theta of pose
     * @return bool if in collision
     */
-  bool inCollision(float cost, float x, float y, float theta);
+    template <typename MapView>
+    bool inCollision(float cost, float x, float y, float theta, const MapView& map_view)
+    {
+        return map_view.isCollision(cost, x, y, theta, consider_footprint_);
+    }
+
 
   /**
     * @brief cost at a robot pose
@@ -64,7 +69,11 @@ protected:
     * @param y Y of pose
     * @return Collision information at pose
     */
-  float costAtPose(float x, float y);
+    template <typename MapView>
+    float costAtPose(float x, float y, const MapView& map_view)
+    {
+        return map_view.getCost(x, y, 0);
+    }
 
   /**
     * @brief Find the min cost of the inflation decay function for which the robot MAY be
@@ -76,8 +85,6 @@ protected:
   float findCircumscribedCost(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap);
 
 protected:
-  nav2_costmap_2d::FootprintCollisionChecker<nav2_costmap_2d::Costmap2D *>
-  collision_checker_{nullptr};
   float possibly_inscribed_cost_;
 
   bool consider_footprint_{true};

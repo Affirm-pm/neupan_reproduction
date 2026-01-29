@@ -16,7 +16,6 @@
 #define NAV2_MPPI_CONTROLLER__CRITICS__OBSTACLES_CRITIC_HPP_
 
 #include <memory>
-#include "nav2_costmap_2d/footprint_collision_checker.hpp"
 #include "nav2_costmap_2d/inflation_layer.hpp"
 
 #include "nav2_mppi_controller/critic_function.hpp"
@@ -33,6 +32,7 @@ namespace mppi::critics
  * between path-tracking and dynamic obstacle avoidance capabilities as desirable for a
  * particular application
  */
+template <typename MapView>
 class ObstaclesCritic : public CriticFunction
 {
 public:
@@ -46,7 +46,7 @@ public:
    *
    * @param costs [out] add obstacle cost values to this tensor
    */
-  void score(CriticData & data) override;
+    void score(CriticData & data,const MapView& map_view) override;
 
 protected:
   /**
@@ -54,7 +54,23 @@ protected:
     * @param cost Costmap cost
     * @return bool if in collision
     */
-  inline bool inCollision(float cost) const;
+    bool inCollision(float cost, const MapView& map_view) const
+    {
+        bool is_tracking_unknown =
+          map_view->isTrackingUnknown();
+
+        switch (static_cast<unsigned char>(cost)) {
+            using namespace nav2_costmap_2d; // NOLINT
+            case (LETHAL_OBSTACLE):
+                return true;
+            case (INSCRIBED_INFLATED_OBSTACLE):
+                return consider_footprint_ ? false : true;
+            case (NO_INFORMATION):
+                return is_tracking_unknown ? false : true;
+        }
+
+        return false;
+    }
 
   /**
     * @brief cost at a robot pose
@@ -63,14 +79,31 @@ protected:
     * @param theta theta of pose
     * @return Collision information at pose
     */
-  inline CollisionCost costAtPose(float x, float y, float theta);
+    CollisionCost costAtPose(float x, float y, float theta, const MapView& map_view)
+    {
+        CollisionCost collision_cost;
+        float & cost = collision_cost.cost;
+        collision_cost.using_footprint = false;
+        unsigned int x_i, y_i;
+
+        cost = map_view.getCost(x_i, y_i);
+
+        if (consider_footprint_ )
+        {
+            cost = static_cast<float>(map_view.footprintCostAtPose(
+                x, y, theta, map_view.getRobotFootprint()));
+            collision_cost.using_footprint = true;
+        }
+
+        return collision_cost;
+    }
 
   /**
     * @brief Distance to obstacle from cost
     * @param cost Costmap cost
     * @return float Distance to the obstacle represented by cost
     */
-  inline float distanceToObstacle(const CollisionCost & cost);
+//  inline float distanceToObstacle(const CollisionCost & cost);
 
   /**
     * @brief Find the min cost of the inflation decay function for which the robot MAY be
@@ -79,11 +112,9 @@ protected:
     * @return double circumscribed cost, any higher than this and need to do full footprint collision checking
     * since some element of the robot could be in collision
     */
-  float findCircumscribedCost(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap);
+//  float findCircumscribedCost(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap);  //这个函数仅在哟膨胀层时有效果
 
 protected:
-  nav2_costmap_2d::FootprintCollisionChecker<nav2_costmap_2d::Costmap2D *>
-  collision_checker_{nullptr};
 
   bool consider_footprint_{true};
   float collision_cost_{0};
