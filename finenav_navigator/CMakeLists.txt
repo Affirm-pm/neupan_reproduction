@@ -13,15 +13,27 @@ include_directories(include)
 
 ament_auto_find_build_dependencies()
 
-ament_auto_add_library(test_library SHARED
-        src/test.cpp
+
+generate_parameter_library(
+        navigator_params
+        src/finenav_navigator.yaml
 )
+
+ament_auto_add_library(finenav_navigator
+        src/naviagtor.cpp
+        src/behavior_tree_engine.cpp
+)
+target_link_libraries(finenav_navigator
+        navigator_params
+)
+
 ament_auto_add_executable(test_node
         src/test_node.cpp
 )
 target_link_libraries(test_node
-        test_library
+        finenav_navigator
 )
+
 
 ament_auto_add_library(navigator_library SHARED
         src/plugins/action/compute_plan.cpp

@@ -11,7 +11,9 @@
 
     <depend>rclcpp</depend>
     <depend>behaviortree_ros2</depend>
+    <depend>generate_parameter_library</depend>
     <depend>finenav_msgs</depend>
+    <depend>finenav_util</depend>
 
     <export>
         <build_type>ament_cmake</build_type>
