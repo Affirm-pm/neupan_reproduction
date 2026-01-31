@@ -7,6 +7,7 @@
 #include <iostream>
 #include <rclcpp/rclcpp.hpp>
 #include "navigator.hpp"
+#include "behavior_tree_engine.hpp"
 
 namespace finenav {
 
