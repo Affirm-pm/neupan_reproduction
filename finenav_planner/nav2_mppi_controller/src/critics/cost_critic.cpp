@@ -23,14 +23,14 @@ namespace mppi::critics
 template <typename MapView>
 void CostCritic<MapView>::initialize()
 {
-//  auto getParam = parameters_handler_->getParamGetter(name_);
-//  getParam(consider_footprint_, "consider_footprint", false);
-//  getParam(power_, "cost_power", 1);
-//  getParam(weight_, "cost_weight", 3.81);
-//  getParam(critical_cost_, "critical_cost", 300.0);
-//  getParam(collision_cost_, "collision_cost", 1000000.0);
-//  getParam(near_goal_distance_, "near_goal_distance", 0.5);
-//  getParam(inflation_layer_name_, "inflation_layer_name", std::string(""));
+  // 以前通过参数服务器加载的参数，改为直接赋固定值（无需动态加载）
+  consider_footprint_ = false;
+  power_ = 1;
+  weight_ = 3.81f;
+  critical_cost_ = 300.0f;
+  collision_cost_ = 1000000.0f;
+  near_goal_distance_ = 0.5f;
+  inflation_layer_name_ = std::string("");
 
   // Normalized by cost value to pu t in same regime as other weights
   weight_ /= 254.0f;
@@ -39,8 +39,7 @@ void CostCritic<MapView>::initialize()
   auto weightDynamicCb = [&](const rclcpp::Parameter & weight) {
       weight_ = weight.as_double() / 254.0f;
     };
-//  parameters_handler_->addDynamicParamCallback(name_ + ".cost_weight", weightDynamicCb);
-
+  // parameters_handler_->addDynamicParamCallback(name_ + ".cost_weight", weightDynamicCb);
 }
 
 

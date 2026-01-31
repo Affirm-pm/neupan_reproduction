@@ -22,18 +22,16 @@ namespace mppi::critics
 template <typename MapView>
 void ObstaclesCritic<MapView>::initialize()
 {
-//  auto getParam = parameters_handler_->getParamGetter(name_);
-//  getParam(consider_footprint_, "consider_footprint", false);
-//  getParam(power_, "cost_power", 1);
-//  getParam(repulsion_weight_, "repulsion_weight", 1.5);
-//  getParam(critical_weight_, "critical_weight", 20.0);
-//  getParam(collision_cost_, "collision_cost", 10000.0);
-//  getParam(collision_margin_distance_, "collision_margin_distance", 0.10);
-//  getParam(near_goal_distance_, "near_goal_distance", 0.5);
+  // 直接赋默认值，不动态加载
+  consider_footprint_ = false;
+  power_ = 1;
+  repulsion_weight_ = 1.5f;
+  critical_weight_ = 20.0f;
+  collision_cost_ = 10000.0f;
+  collision_margin_distance_ = 0.10f;
+  near_goal_distance_ = 0.5f;
 
-//  possibly_inscribed_cost_ = findCircumscribedCost(costmap_ros_);
-
-
+  // possibly_inscribed_cost_ = findCircumscribedCost(costmap_ros_);
 }
 
 //float ObstaclesCritic::findCircumscribedCost(

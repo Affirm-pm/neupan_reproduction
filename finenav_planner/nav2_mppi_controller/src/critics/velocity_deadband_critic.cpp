@@ -20,14 +20,13 @@ namespace mppi::critics
 template <typename MapView>
 void VelocityDeadbandCritic<MapView>::initialize()
 {
-//  auto getParam = parameters_handler_->getParamGetter(name_);
-//
-//  getParam(power_, "cost_power", 1);
-//  getParam(weight_, "cost_weight", 35.0);    //TODO：参数加载
+  // 直接赋默认值，不动态加载
+  power_ = 1;
+  weight_ = 35.0f;
 
   // Recast double to float
   std::vector<double> deadband_velocities{0.0, 0.0, 0.0};
-//  getParam(deadband_velocities, "deadband_velocities", std::vector<double>{0.0, 0.0, 0.0});
+  // 如果需要修改 deadband，可在此处直接更改以上数组
   std::transform(
     deadband_velocities.begin(), deadband_velocities.end(), deadband_velocities_.begin(),
     [](double d) {return static_cast<float>(d);});

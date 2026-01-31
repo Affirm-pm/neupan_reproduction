@@ -23,6 +23,11 @@ using xt::evaluation_strategy::immediate;
 template <typename MapView>
 void GoalCritic<MapView>::initialize()
 {
+  // 直接赋默认值，不动态加载
+  power_ = 1;
+  weight_ = 5.0f;
+  threshold_to_consider_ = 1.4f;
+
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //
 //  getParam(power_, "cost_power", 1);

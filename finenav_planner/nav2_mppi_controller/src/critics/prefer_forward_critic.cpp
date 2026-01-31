@@ -20,15 +20,10 @@ namespace mppi::critics
 template <typename MapView>
 void PreferForwardCritic<MapView>::initialize()
 {
-//  auto getParam = parameters_handler_->getParamGetter(name_);
-//  getParam(power_, "cost_power", 1);
-//  getParam(weight_, "cost_weight", 5.0);
-//  getParam(
-//    threshold_to_consider_,
-//    "threshold_to_consider", 0.5);        //TODO：参数加载
-
-//  RCLCPP_INFO(
-//    logger_, "PreferForwardCritic instantiated with %d power and %f weight.", power_, weight_);
+  // 直接赋默认值，不动态加载
+  power_ = 1;
+  weight_ = 5.0f;
+  threshold_to_consider_ = 0.5f;
 }
 
 template <typename MapView>
@@ -49,5 +44,4 @@ void PreferForwardCritic<MapView>::score(CriticData & data, const MapView& map_v
 }
 
 }  // namespace mppi::critics
-
 

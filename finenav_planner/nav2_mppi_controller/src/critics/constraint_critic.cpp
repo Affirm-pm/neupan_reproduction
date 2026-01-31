@@ -20,21 +20,16 @@ namespace mppi::critics
 template <typename MapView>
 void ConstraintCritic<MapView>::initialize()
 {
-//  auto getParam = parameters_handler_->getParamGetter(name_);
-//  auto getParentParam = parameters_handler_->getParamGetter(parent_name_);
-//
-//  getParam(power_, "cost_power", 1);
-//  getParam(weight_, "cost_weight", 4.0);
-//  RCLCPP_INFO(
-//    logger_, "ConstraintCritic instantiated with %d power and %f weight.",
-//    power_, weight_);
+  // 以前通过参数服务器加载的参数，改为直接赋固定值（无需动态加载）
+  power_ = 1;              // 原始默认值：1
+  weight_ = 4.0f;          // 原始默认值：4.0
 
-  float vx_max, vy_max, vx_min;
-//  getParentParam(vx_max, "vx_max", 0.5);
-//  getParentParam(vy_max, "vy_max", 0.0);
-//  getParentParam(vx_min, "vx_min", -0.35);     //TODO：参数加载
+  // 父节点参数的默认值，直接赋值（原注释默认值）
+  float vx_max = 0.5f;
+  float vy_max = 0.0f;
+  float vx_min = -0.35f;   // TODO：如需调整，修改此处常量
 
-  const float min_sgn = vx_min > 0.0 ? 1.0 : -1.0;
+  const float min_sgn = vx_min > 0.0f ? 1.0f : -1.0f;
   max_vel_ = sqrtf(vx_max * vx_max + vy_max * vy_max);
   min_vel_ = min_sgn * sqrtf(vx_min * vx_min + vy_max * vy_max);
 }

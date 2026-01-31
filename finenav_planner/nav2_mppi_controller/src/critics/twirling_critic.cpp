@@ -20,12 +20,9 @@ namespace mppi::critics
 template <typename MapView>
 void TwirlingCritic<MapView>::initialize()
 {
-
-//  getParam(power_, "cost_power", 1);
-//  getParam(weight_, "cost_weight", 10.0);   //TODO：参数加载
-
-//  RCLCPP_INFO(
-//    logger_, "TwirlingCritic instantiated with %d power and %f weight.", power_, weight_);
+  // 直接赋默认值，不动态加载
+  power_ = 1;
+  weight_ = 10.0f;
 }
 
 template <typename MapView>
