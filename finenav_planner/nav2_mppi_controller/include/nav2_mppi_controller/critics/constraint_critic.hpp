@@ -27,7 +27,7 @@ namespace mppi::critics
  * @brief Critic objective function for enforcing feasible constraints
  */
 template <typename MapView>
-class ConstraintCritic : public CriticFunction
+class ConstraintCritic : public CriticFunction<MapView>
 {
 public:
   /**

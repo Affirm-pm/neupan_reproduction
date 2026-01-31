@@ -28,7 +28,7 @@ namespace mppi::critics
  * @brief Critic objective function for driving towards goal
  */
 template <typename MapView>
-class GoalCritic : public CriticFunction
+class GoalCritic : public CriticFunction<MapView>
 {
 public:
   /**

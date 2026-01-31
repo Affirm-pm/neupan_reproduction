@@ -46,6 +46,7 @@ using namespace mppi;  // NOLINT
  * @class mppi::MPPIController
  * @brief Main plugin controller for MPPI Controller
  */
+template <typename MapView>
 class MPPIController
 {
 public:
@@ -71,10 +72,9 @@ public:
     using Result  = std::optional<finenav::OutputDataT<MPPIController>>;
     using ConfigType = finenav_mppi_controller::Params;
     void configure(const ConfigType &params) {
-        if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
+        if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}    //TODO:初始化过程需要完善
     }
 
-    template <typename MapView>
     bool plan(const MapView& map_view, const finenav::PlanningContext<MPPIController>& ctx, finenav_msgs::msg::Trajectory& output_traj) {
 
         auto start_pose = ctx.start_pose;
@@ -159,6 +159,9 @@ public:
     */
   void setSpeedLimit(const double & speed_limit, const bool & percentage);
 
+  void registerCritic(std::unique_ptr<critics::CriticFunction<MapView>> critic) {
+        critics_.push_back(std::move(critic));        //TODO:在初始化的时候要换成注册
+  }
 
 
 protected:
@@ -177,11 +180,48 @@ protected:
     * @param robot_speed Robot speed
     * @param goal_checker Pointer to the goal checker for awareness if completed task
     */
-    template <typename MapView>
-    geometry_msgs::msg::TwistStamped computeVelocityCommands(
-       const geometry_msgs::msg::PoseStamped & robot_pose,
-       const geometry_msgs::msg::Twist & robot_speed,
-       const MapView& map_view);
+	geometry_msgs::msg::TwistStamped computeVelocityCommands(
+    	const geometry_msgs::msg::PoseStamped & robot_pose,
+  		const geometry_msgs::msg::Twist & robot_speed,
+    	const MapView& map_view)
+	{
+	#ifdef BENCHMARK_TESTING
+  	auto start = std::chrono::system_clock::now();
+	#endif
+
+	//  if (clock_->now() - last_time_called_ > rclcpp::Duration::from_seconds(reset_period_)) {
+	//    reset();
+	//  }
+  	last_time_called_ = clock_->now();
+
+  	std::lock_guard<std::mutex> param_lock(*parameters_handler_->getLock());
+  	nav_msgs::msg::Path transformed_plan = path_handler_.transformPath(robot_pose, map_view);
+
+
+  	geometry_msgs::msg::TwistStamped cmd =
+    optimizer_.evalControl(robot_pose, robot_speed, transformed_plan ,map_view);
+
+	#ifdef BENCHMARK_TESTING
+  	auto end = std::chrono::system_clock::now();
+  	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+  	RCLCPP_INFO(logger_, "Control loop execution time: %ld [ms]", duration);
+	#endif
+
+  	if (visualize_) {
+    	double z_height = 0.06;
+    	const std::string base_frame = map_view->getBaseFrameID();
+    	try {
+      	auto tfst = tf_buffer_->lookupTransform(
+        	map_view.getGlobalFrameID(), base_frame,  cmd.header.stamp);
+      		z_height = tfst.transform.translation.z;
+    	} catch (const tf2::TransformException & ex) {
+      	RCLCPP_WARN(logger_, "Failed to get transform %s -> %s: %s",
+                  map_view.getGlobalFrameID().c_str(), base_frame.c_str(), ex.what());
+    	}
+    	visualize(std::move(transformed_plan), cmd.header.stamp, z_height);
+  	}
+  	return cmd;
+}
 
   std::string name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
@@ -190,9 +230,10 @@ protected:
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
 
   std::unique_ptr<ParametersHandler> parameters_handler_;
-  Optimizer optimizer_;
+  Optimizer<MapView> optimizer_;
   PathHandler path_handler_;
   TrajectoryVisualizer trajectory_visualizer_;
+  std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> critics_;
 
   bool visualize_;
 
@@ -204,7 +245,7 @@ protected:
 }  // namespace nav2_mppi_controller
 
 
-FINENAV_REGISTER_ALGO_CONFIG(nav2_mppi_controller::MPPIController, finenav_mppi_controller)
+FINENAV_REGISTER_TEMPLATE_ALGO_CONFIG(nav2_mppi_controller::MPPIController, finenav_mppi_controller)
 
 
 #endif  // NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_

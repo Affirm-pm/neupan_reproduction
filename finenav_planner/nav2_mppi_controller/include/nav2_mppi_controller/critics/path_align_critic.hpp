@@ -30,7 +30,7 @@ namespace mppi::critics
  * This is an important critic to tune and consider in tandem with Obstacle.
  */
 template <typename MapView>
-class PathAlignCritic : public CriticFunction
+class PathAlignCritic : public CriticFunction<MapView>
 {
 public:
   /**

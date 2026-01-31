@@ -48,18 +48,19 @@ namespace mppi
  * @class mppi::Optimizer
  * @brief Main algorithm optimizer of the MPPI Controller
  */
+template <typename MapView>
 class Optimizer
 {
 public:
   /**
     * @brief Constructor for mppi::Optimizer
     */
-  Optimizer() = default;
+  	Optimizer() = default;
 
   /**
    * @brief Destructor for mppi::Optimizer
    */
-  ~Optimizer() {shutdown();}
+  	~Optimizer() {shutdown();}
 
 
   /**
@@ -69,13 +70,13 @@ public:
    * @param costmap_ros Costmap2DROS object of environment
    * @param dynamic_parameter_handler Parameter handler object
    */
-  void initialize(
-    rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name);
+  	void initialize(
+    	rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name, const std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> & critics);
 
   /**
    * @brief Shutdown for optimizer at process end
    */
-  void shutdown();
+  	void shutdown();
 
   /**
    * @brief Compute control using MPPI algorithm
@@ -85,16 +86,34 @@ public:
    * @param goal_checker Object to check if goal is completed
    * @return TwistStamped of the MPPI control
    */
-  template <typename MapView>
-  geometry_msgs::msg::TwistStamped evalControl(
-    const geometry_msgs::msg::PoseStamped & robot_pose,
-    const geometry_msgs::msg::Twist & robot_speed, const nav_msgs::msg::Path & plan,const MapView& map_view);
+	geometry_msgs::msg::TwistStamped evalControl(
+    	const geometry_msgs::msg::PoseStamped & robot_pose,
+    	const geometry_msgs::msg::Twist & robot_speed,
+    	const nav_msgs::msg::Path & plan,
+    	const MapView& map_view)
+    {
+    prepare(robot_pose, robot_speed, plan);
+
+    do {
+      optimize(map_view);
+    } while (fallback(critics_data_.fail_flag));
+
+    utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
+    auto control = getControlFromSequenceAsTwist(plan.header.stamp, map_view);
+
+    if (settings_.shift_control_sequence) {
+      shiftControlSequence();
+    }
+
+    return control;
+}
+
 
   /**
    * @brief Get the trajectories generated in a cycle for visualization
    * @return Set of trajectories evaluated in cycle
    */
-  models::Trajeritics_ctories & getGeneratedTrajectories();
+  models::Trajectories & getGeneratedTrajectories();
 
   /**
    * @brief Get the optimal trajectory for a cycle for visualization
@@ -118,9 +137,15 @@ protected:
   /**
    * @brief Main function to generate, score, and return trajectories
    */
-  template <typename MapView>
-  void optimize(const MapView& map_view);
 
+	void optimize(const MapView& map_view)
+	{
+  	for (size_t i = 0; i < settings_.iteration_count; ++i) {
+    	generateNoisedTrajectories();
+    	critic_manager_.evalTrajectoriesScores(critics_data_,map_view);
+    	updateControlSequence();
+ 		}
+	}
   /**
    * @brief Prepare state information on new request for trajectory rollouts
    * @param robot_pose Pose of the robot at given time
@@ -209,9 +234,21 @@ protected:
    * @param stamp Timestamp to use
    * @return TwistStamped of command to send to robot base
    */
-  geometry_msgs::msg::TwistStamped
-  getControlFromSequenceAsTwist(const builtin_interfaces::msg::Time & stamp);
+    geometry_msgs::msg::TwistStamped getControlFromSequenceAsTwist(
+        const builtin_interfaces::msg::Time & stamp, const MapView& map_view)
+    {
+        unsigned int offset = settings_.shift_control_sequence ? 1 : 0;
 
+        auto vx = control_sequence_.vx(offset);
+        auto wz = control_sequence_.wz(offset);
+
+        if (isHolonomic()) {
+            auto vy = control_sequence_.vy(offset);
+            return utils::toTwistStamped(vx, vy, wz, stamp, map_view.getBaseFrameID());
+        }
+
+        return utils::toTwistStamped(vx, wz, stamp, map_view.getBaseFrameID());
+    }
   /**
    * @brief Whether the motion model is holonomic
    * @return Bool if holonomic to populate `y` axis of state
@@ -232,15 +269,14 @@ protected:
 
 protected:
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros_;
-  nav2_costmap_2d::Costmap2D * costmap_;
   std::string name_;
 
   std::shared_ptr<MotionModel> motion_model_;
 
   ParametersHandler * parameters_handler_;
-  CriticManager critic_manager_;
+  CriticManager<MapView> critic_manager_;
   NoiseGenerator noise_generator_;
+  std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> critics_;
 
   models::OptimizerSettings settings_;
 

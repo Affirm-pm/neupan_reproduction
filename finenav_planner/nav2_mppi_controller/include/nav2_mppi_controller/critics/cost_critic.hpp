@@ -32,7 +32,7 @@ namespace mppi::critics
  * @brief Critic objective function for avoiding obstacles using costmap's inflated cost
  */
 template <typename MapView>
-class CostCritic : public CriticFunction
+class CostCritic : public CriticFunction<MapView>
 {
 public:
   /**
@@ -56,7 +56,6 @@ protected:
     * @param theta theta of pose
     * @return bool if in collision
     */
-    template <typename MapView>
     bool inCollision(float cost, float x, float y, float theta, const MapView& map_view)
     {
         return map_view.isCollision(cost, x, y, theta, consider_footprint_);
@@ -69,7 +68,6 @@ protected:
     * @param y Y of pose
     * @return Collision information at pose
     */
-    template <typename MapView>
     float costAtPose(float x, float y, const MapView& map_view)
     {
         return map_view.getCost(x, y, 0);

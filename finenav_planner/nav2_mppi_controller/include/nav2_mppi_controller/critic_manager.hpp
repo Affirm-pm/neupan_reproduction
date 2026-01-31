@@ -39,6 +39,7 @@ namespace mppi
  * @class mppi::CriticManager
  * @brief Manager of objective function plugins for scoring trajectories
  */
+template <typename MapView>
 class CriticManager
 {
 public:
@@ -60,13 +61,13 @@ public:
     * @param dynamic_parameter_handler Parameter handler object
     */
   void on_configure(
-    rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name);
+    rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name, const std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> & critics);
 
   /**
     * @brief Score trajectories by the set of loaded critic functions
     * @param CriticData Struct of necessary information to pass to the critic functions
     */
-  template <typename MapView>
+
   void evalTrajectoriesScores(CriticData & data ,const MapView& map_view) const;
 
 protected:
@@ -75,10 +76,6 @@ protected:
     */
   void getParams();
 
-  /**
-    * @brief Load the critic plugins
-    */
-  virtual void loadCritics();
 
   /**
     * @brief Get full-name namespaced critic IDs
@@ -88,10 +85,7 @@ protected:
 protected:
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
   std::string name_;
-
-  std::vector<std::string> critic_names_;
-  std::unique_ptr<pluginlib::ClassLoader<critics::CriticFunction>> loader_;
-  std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
+  std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> critics_;
 
   rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
 };

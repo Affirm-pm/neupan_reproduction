@@ -23,7 +23,8 @@ namespace mppi::critics
 using namespace xt::placeholders;  // NOLINT
 using xt::evaluation_strategy::immediate;
 
-void PathAlignCritic::initialize()
+template <typename MapView>
+void PathAlignCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //  getParam(power_, "cost_power", 1);
@@ -37,16 +38,17 @@ void PathAlignCritic::initialize()
 //    "threshold_to_consider", 0.5);
 //  getParam(use_path_orientations_, "use_path_orientations", false);     //TODO：参数加载
 
-  RCLCPP_INFO(
-    logger_,
-    "ReferenceTrajectoryCritic instantiated with %d power and %f weight",
-    power_, weight_);
+//  RCLCPP_INFO(
+//    logger_,
+//    "ReferenceTrajectoryCritic instantiated with %d power and %f weight",
+//    power_, weight_);
 }
 
-void PathAlignCritic::score(CriticData & data)
+template <typename MapView>
+void PathAlignCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
   // Don't apply close to goal, let the goal critics take over
-  if (!enabled_ ||
+  if (!this->enabled_ ||
     utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
   {
     return;
@@ -60,7 +62,7 @@ void PathAlignCritic::score(CriticData & data)
   }
 
   // Don't apply when dynamic obstacles are blocking significant proportions of the local path
-  utils::setPathCostsIfNotSet(data, costmap_ros_);
+  utils::setPathCostsIfNotSet(data, map_view);
   const size_t closest_initial_path_point = utils::findPathTrajectoryInitialPoint(data);
   unsigned int invalid_ctr = 0;
   const float range = *data.furthest_reached_path_point - closest_initial_path_point;
@@ -137,8 +139,4 @@ void PathAlignCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
 
-PLUGINLIB_EXPORT_CLASS(
-  mppi::critics::PathAlignCritic,
-  mppi::critics::CriticFunction)

@@ -17,20 +17,22 @@
 namespace mppi::critics
 {
 
-void TwirlingCritic::initialize()
+template <typename MapView>
+void TwirlingCritic<MapView>::initialize()
 {
 
 //  getParam(power_, "cost_power", 1);
 //  getParam(weight_, "cost_weight", 10.0);   //TODO：参数加载
 
-  RCLCPP_INFO(
-    logger_, "TwirlingCritic instantiated with %d power and %f weight.", power_, weight_);
+//  RCLCPP_INFO(
+//    logger_, "TwirlingCritic instantiated with %d power and %f weight.", power_, weight_);
 }
 
-void TwirlingCritic::score(CriticData & data)
+template <typename MapView>
+void TwirlingCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
-  if (!enabled_)
+  if (!this->enabled_)
   {
     return;
   }
@@ -41,8 +43,3 @@ void TwirlingCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
-
-PLUGINLIB_EXPORT_CLASS(
-  mppi::critics::TwirlingCritic,
-  mppi::critics::CriticFunction)

@@ -17,16 +17,17 @@
 namespace mppi::critics
 {
 
-void ConstraintCritic::initialize()
+template <typename MapView>
+void ConstraintCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //  auto getParentParam = parameters_handler_->getParamGetter(parent_name_);
 //
 //  getParam(power_, "cost_power", 1);
 //  getParam(weight_, "cost_weight", 4.0);
-  RCLCPP_INFO(
-    logger_, "ConstraintCritic instantiated with %d power and %f weight.",
-    power_, weight_);
+//  RCLCPP_INFO(
+//    logger_, "ConstraintCritic instantiated with %d power and %f weight.",
+//    power_, weight_);
 
   float vx_max, vy_max, vx_min;
 //  getParentParam(vx_max, "vx_max", 0.5);
@@ -38,11 +39,12 @@ void ConstraintCritic::initialize()
   min_vel_ = min_sgn * sqrtf(vx_min * vx_min + vy_max * vy_max);
 }
 
-void ConstraintCritic::score(CriticData & data)
+template <typename MapView>
+void ConstraintCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
 
-  if (!enabled_) {
+  if (!this->enabled_) {
     return;
   }
 
@@ -76,6 +78,3 @@ void ConstraintCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
-
-PLUGINLIB_EXPORT_CLASS(mppi::critics::ConstraintCritic, mppi::critics::CriticFunction)

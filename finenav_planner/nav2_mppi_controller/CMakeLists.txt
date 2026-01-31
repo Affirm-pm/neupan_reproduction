@@ -32,6 +32,7 @@ set(dependencies_pkgs
   tf2_geometry_msgs
   tf2_eigen
   tf2_ros
+        finenav_control_layers
         finenav_interface
         finenav_util
         finenav_core

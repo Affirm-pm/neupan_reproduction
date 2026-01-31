@@ -20,7 +20,8 @@ namespace mppi::critics
 
 using xt::evaluation_strategy::immediate;
 
-void GoalCritic::initialize()
+template <typename MapView>
+void GoalCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //
@@ -28,14 +29,15 @@ void GoalCritic::initialize()
 //  getParam(weight_, "cost_weight", 5.0);
 //  getParam(threshold_to_consider_, "threshold_to_consider", 1.4);  //TODO：参数加载
 
-  RCLCPP_INFO(
-    logger_, "GoalCritic instantiated with %d power and %f weight.",
-    power_, weight_);
+//  RCLCPP_INFO(
+//    logger_, "GoalCritic instantiated with %d power and %f weight.",
+//    power_, weight_);
 }
 
-void GoalCritic::score(CriticData & data)
+template <typename MapView>
+void GoalCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
-  if (!enabled_ || !utils::withinPositionGoalTolerance(
+  if (!this->enabled_ || !utils::withinPositionGoalTolerance(
       threshold_to_consider_, data.state.pose.pose, data.path))
   {
     return;
@@ -58,6 +60,3 @@ void GoalCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
-
-PLUGINLIB_EXPORT_CLASS(mppi::critics::GoalCritic, mppi::critics::CriticFunction)

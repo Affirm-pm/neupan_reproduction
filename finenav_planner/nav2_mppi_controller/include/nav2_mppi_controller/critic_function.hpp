@@ -20,6 +20,7 @@
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "nav2_costmap_2d/costmap_2d_ros.hpp"
+#include "finenav_control_layers/local_layer.hpp"
 
 #include "nav2_mppi_controller/tools/parameters_handler.hpp"
 #include "nav2_mppi_controller/critic_data.hpp"
@@ -69,7 +70,6 @@ public:
     const std::string & name)
   {
     parent_ = parent;
-    logger_ = parent_.lock()->get_logger();
     name_ = name;
     parent_name_ = parent_name;
 
@@ -100,8 +100,6 @@ protected:
   std::string name_, parent_name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
 
-
-  rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
 };
 
 }  // namespace mppi::critics

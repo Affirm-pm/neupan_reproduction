@@ -367,23 +367,23 @@ inline void setPathFurthestPointIfNotSet(CriticData & data)
  * @brief evaluate path costs
  * @param data Data to use
  */
+template <typename MapView>
 inline void findPathCosts(
   CriticData & data,
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
+  const MapView& map_view)
 {
-  auto * costmap = costmap_ros->getCostmap();
   unsigned int map_x, map_y;
   const size_t path_segments_count = data.path.x.shape(0) - 1;
   data.path_pts_valid = std::vector<bool>(path_segments_count, false);
   for (unsigned int idx = 0; idx < path_segments_count; idx++) {
     const auto path_x = data.path.x(idx);
     const auto path_y = data.path.y(idx);
-    if (!costmap->worldToMap(path_x, path_y, map_x, map_y)) {
-      (*data.path_pts_valid)[idx] = false;
-      continue;
-    }
+//    if (!costmap->worldToMap(path_x, path_y, map_x, map_y)) {   //TODO：应该做个检查是否在地图内
+//      (*data.path_pts_valid)[idx] = false;
+//      continue;
+//    }
 
-    switch (costmap->getCost(map_x, map_y)) {
+    switch (map_view.getCost(map_x, map_y, 0)) {
       using namespace nav2_costmap_2d; // NOLINT
       case (LETHAL_OBSTACLE):
         (*data.path_pts_valid)[idx] = false;
@@ -393,7 +393,7 @@ inline void findPathCosts(
         continue;
       case (NO_INFORMATION):
         const bool is_tracking_unknown =
-          costmap_ros->getLayeredCostmap()->isTrackingUnknown();
+          map_view.isTrackingUnknown();
         (*data.path_pts_valid)[idx] = is_tracking_unknown ? true : false;
         continue;
     }
@@ -406,12 +406,13 @@ inline void findPathCosts(
  * @brief evaluate path costs if it is not set
  * @param data Data to use
  */
+template <typename MapView>
 inline void setPathCostsIfNotSet(
   CriticData & data,
-  std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap_ros)
+  const MapView& map_view)
 {
   if (!data.path_pts_valid) {
-    findPathCosts(data, costmap_ros);
+    findPathCosts(data, map_view);
   }
 }
 

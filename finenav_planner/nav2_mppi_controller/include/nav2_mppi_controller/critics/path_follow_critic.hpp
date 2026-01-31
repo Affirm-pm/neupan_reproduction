@@ -32,7 +32,7 @@ namespace mppi::critics
  * faster and push the follow point further ahead, creating some shortcutting.
  */
 template <typename MapView>
-class PathFollowCritic : public CriticFunction
+class PathFollowCritic : public CriticFunction<MapView>
 {
 public:
   /**

@@ -17,7 +17,8 @@
 namespace mppi::critics
 {
 
-void GoalAngleCritic::initialize()
+template <typename MapView>
+void GoalAngleCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //
@@ -26,16 +27,17 @@ void GoalAngleCritic::initialize()
 //
 //  getParam(threshold_to_consider_, "threshold_to_consider", 0.5);    //TODO：参数加载
 
-  RCLCPP_INFO(
-    logger_,
-    "GoalAngleCritic instantiated with %d power, %f weight, and %f "
-    "angular threshold.",
-    power_, weight_, threshold_to_consider_);
+//  RCLCPP_INFO(
+//    logger_,
+//    "GoalAngleCritic instantiated with %d power, %f weight, and %f "
+//    "angular threshold.",
+//    power_, weight_, threshold_to_consider_);
 }
 
-void GoalAngleCritic::score(CriticData & data)
+template <typename MapView>
+void GoalAngleCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
-  if (!enabled_ || !utils::withinPositionGoalTolerance(
+  if (!this->enabled_ || !utils::withinPositionGoalTolerance(
       threshold_to_consider_, data.state.pose.pose, data.path))
   {
     return;
@@ -51,8 +53,4 @@ void GoalAngleCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
 
-PLUGINLIB_EXPORT_CLASS(
-  mppi::critics::GoalAngleCritic,
-  mppi::critics::CriticFunction)

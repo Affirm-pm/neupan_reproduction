@@ -20,7 +20,8 @@
 namespace mppi::critics
 {
 
-void CostCritic::initialize()
+template <typename MapView>
+void CostCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //  getParam(consider_footprint_, "consider_footprint", false);
@@ -44,10 +45,10 @@ void CostCritic::initialize()
 
 
 template <typename MapView>
-void CostCritic::score(CriticData & data,const MapView& map_view)
+void CostCritic<MapView>::score(CriticData & data,const MapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
-  if (!enabled_) {
+  if (!this->enabled_) {
     return;
   }
 
@@ -105,8 +106,3 @@ void CostCritic::score(CriticData & data,const MapView& map_view)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
-
-PLUGINLIB_EXPORT_CLASS(
-  mppi::critics::CostCritic,
-  mppi::critics::CriticFunction)

@@ -20,7 +20,8 @@
 namespace mppi::critics
 {
 
-void PathFollowCritic::initialize()
+template <typename MapView>
+void PathFollowCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //
@@ -32,16 +33,16 @@ void PathFollowCritic::initialize()
 //  getParam(weight_, "cost_weight", 5.0);   //TODO：参数加载
 }
 
-void PathFollowCritic::score(CriticData & data)
+template <typename MapView>
+void PathFollowCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
-  if (!enabled_ || data.path.x.shape(0) < 2 ||
+  if (!this->enabled_ || data.path.x.shape(0) < 2 ||
     utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
   {
     return;
   }
-
   utils::setPathFurthestPointIfNotSet(data);
-  utils::setPathCostsIfNotSet(data, costmap_ros_);
+  utils::setPathCostsIfNotSet(data, map_view);
   const size_t path_size = data.path.x.shape(0) - 1;
 
   auto offseted_idx = std::min(
@@ -72,8 +73,3 @@ void PathFollowCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
-
-PLUGINLIB_EXPORT_CLASS(
-  mppi::critics::PathFollowCritic,
-  mppi::critics::CriticFunction)

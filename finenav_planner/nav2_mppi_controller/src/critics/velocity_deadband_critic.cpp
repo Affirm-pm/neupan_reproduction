@@ -17,7 +17,8 @@
 namespace mppi::critics
 {
 
-void VelocityDeadbandCritic::initialize()
+template <typename MapView>
+void VelocityDeadbandCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //
@@ -30,19 +31,20 @@ void VelocityDeadbandCritic::initialize()
   std::transform(
     deadband_velocities.begin(), deadband_velocities.end(), deadband_velocities_.begin(),
     [](double d) {return static_cast<float>(d);});
-
-  RCLCPP_INFO_STREAM(
-    logger_, "VelocityDeadbandCritic instantiated with "
-      << power_ << " power, " << weight_ << " weight, deadband_velocity ["
-      << deadband_velocities_.at(0) << "," << deadband_velocities_.at(1) << ","
-      << deadband_velocities_.at(2) << "]");
+//
+//  RCLCPP_INFO_STREAM(
+//    logger_, "VelocityDeadbandCritic instantiated with "
+//      << power_ << " power, " << weight_ << " weight, deadband_velocity ["
+//      << deadband_velocities_.at(0) << "," << deadband_velocities_.at(1) << ","
+//      << deadband_velocities_.at(2) << "]");
 }
 
-void VelocityDeadbandCritic::score(CriticData & data)
+template <typename MapView>
+void VelocityDeadbandCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
 
-  if (!enabled_) {
+  if (!this->enabled_) {
     return;
   }
 
@@ -99,6 +101,3 @@ void VelocityDeadbandCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
-
-PLUGINLIB_EXPORT_CLASS(mppi::critics::VelocityDeadbandCritic, mppi::critics::CriticFunction)

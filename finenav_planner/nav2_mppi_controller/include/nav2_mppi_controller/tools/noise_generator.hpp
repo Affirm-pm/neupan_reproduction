@@ -53,7 +53,7 @@ public:
    */
   void initialize(
     mppi::models::OptimizerSettings & settings,
-    bool is_holonomic, const std::string & name);
+    bool is_holonomic);
 
   /**
    * @brief Shutdown noise generator thread

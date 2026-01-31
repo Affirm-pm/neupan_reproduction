@@ -20,7 +20,8 @@
 namespace mppi::critics
 {
 
-void PathAngleCritic::initialize()
+template <typename MapView>
+void PathAngleCritic<MapView>::initialize()
 {
 //  auto getParentParam = parameters_handler_->getParamGetter(parent_name_);
   float vx_min;
@@ -49,16 +50,17 @@ void PathAngleCritic::initialize()
     forward_preference_ = true;
   }
 
-  RCLCPP_INFO(
-    logger_,
-    "PathAngleCritic instantiated with %d power and %f weight. Reversing %s",
-    power_, weight_, reversing_allowed_ ? "allowed." : "not allowed.");
+//  RCLCPP_INFO(
+//    logger_,
+//    "PathAngleCritic instantiated with %d power and %f weight. Reversing %s",
+//    power_, weight_, reversing_allowed_ ? "allowed." : "not allowed.");
 }
 
-void PathAngleCritic::score(CriticData & data)
+template <typename MapView>
+void PathAngleCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
-  if (!enabled_) {
+  if (!this->enabled_) {
     return;
   }
 
@@ -100,8 +102,3 @@ void PathAngleCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
-
-PLUGINLIB_EXPORT_CLASS(
-  mppi::critics::PathAngleCritic,
-  mppi::critics::CriticFunction)

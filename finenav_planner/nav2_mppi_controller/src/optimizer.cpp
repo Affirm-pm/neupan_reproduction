@@ -31,30 +31,33 @@ namespace mppi
 
 using namespace xt::placeholders;  // NOLINT
 using xt::evaluation_strategy::immediate;
-
-void Optimizer::initialize(
-  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name)
+template <typename MapView>
+void Optimizer<MapView>::initialize(
+  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name, const std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> & critics)
 {
   parent_ = parent;
   name_ = name;
+  critics_ = critics;
 
   auto node = parent_.lock();
   logger_ = node->get_logger();
 
   getParams();
 
-  critic_manager_.on_configure(parent_, name_);
-  noise_generator_.initialize(settings_, isHolonomic(), name_);
+
+  noise_generator_.initialize(settings_, isHolonomic());
 
   reset();
 }
 
-void Optimizer::shutdown()
+template <typename MapView>
+void Optimizer<MapView>::shutdown()
 {
   noise_generator_.shutdown();
 }
 
-void Optimizer::getParams()
+template <typename MapView>
+void Optimizer<MapView>::getParams()
 {
   std::string motion_model_name;
 
@@ -87,7 +90,8 @@ void Optimizer::getParams()
   setOffset(controller_frequency);
 }
 
-void Optimizer::setOffset(double controller_frequency)
+template <typename MapView>
+void Optimizer<MapView>::setOffset(double controller_frequency)
 {
   const double controller_period = 1.0 / controller_frequency;
   constexpr double eps = 1e-6;
@@ -108,7 +112,8 @@ void Optimizer::setOffset(double controller_frequency)
   }
 }
 
-void Optimizer::reset()
+template <typename MapView>
+void Optimizer<MapView>::reset()
 {
   state_.reset(settings_.batch_size, settings_.time_steps);
   control_sequence_.reset(settings_.time_steps);
@@ -125,40 +130,10 @@ void Optimizer::reset()
   noise_generator_.reset(settings_, isHolonomic());
   RCLCPP_INFO(logger_, "Optimizer reset");
 }
-template <typename MapView>
-geometry_msgs::msg::TwistStamped Optimizer::evalControl(
-    const geometry_msgs::msg::PoseStamped & robot_pose,
-    const geometry_msgs::msg::Twist & robot_speed,
-    const nav_msgs::msg::Path & plan,
-    const MapView& map_view)
-{
-    prepare(robot_pose, robot_speed, plan);
 
-    do {
-      optimize(map_view);
-    } while (fallback(critics_data_.fail_flag));
-
-    utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
-    auto control = getControlFromSequenceAsTwist(plan.header.stamp);
-
-    if (settings_.shift_control_sequence) {
-      shiftControlSequence();
-    }
-
-    return control;
-}
 
 template <typename MapView>
-void Optimizer::optimize(const MapView& map_view)
-{
-  for (size_t i = 0; i < settings_.iteration_count; ++i) {
-    generateNoisedTrajectories();
-    critic_manager_.evalTrajectoriesScores(critics_data_,map_view);
-    updateControlSequence();
-  }
-}
-
-bool Optimizer::fallback(bool fail)
+bool Optimizer<MapView>::fallback(bool fail)
 {
   static size_t counter = 0;
 
@@ -177,7 +152,8 @@ bool Optimizer::fallback(bool fail)
   return true;
 }
 
-void Optimizer::prepare(
+template <typename MapView>
+void Optimizer<MapView>::prepare(
     const geometry_msgs::msg::PoseStamped & robot_pose,
     const geometry_msgs::msg::Twist & robot_speed,
     const nav_msgs::msg::Path & plan)
@@ -193,7 +169,8 @@ void Optimizer::prepare(
   critics_data_.path_pts_valid.reset();
 }
 
-void Optimizer::shiftControlSequence()
+template <typename MapView>
+void Optimizer<MapView>::shiftControlSequence()
 {
   using namespace xt::placeholders;  // NOLINT
   control_sequence_.vx = xt::roll(control_sequence_.vx, -1);
@@ -214,7 +191,8 @@ void Optimizer::shiftControlSequence()
   }
 }
 
-void Optimizer::generateNoisedTrajectories()
+template <typename MapView>
+void Optimizer<MapView>::generateNoisedTrajectories()
 {
   noise_generator_.setNoisedControls(state_, control_sequence_);
   noise_generator_.generateNextNoises();
@@ -222,9 +200,11 @@ void Optimizer::generateNoisedTrajectories()
   integrateStateVelocities(generated_trajectories_, state_);
 }
 
-bool Optimizer::isHolonomic() const {return motion_model_->isHolonomic();}
+template <typename MapView>
+bool Optimizer<MapView>::isHolonomic() const {return motion_model_->isHolonomic();}
 
-void Optimizer::applyControlSequenceConstraints()
+template <typename MapView>
+void Optimizer<MapView>::applyControlSequenceConstraints()
 {
   auto & s = settings_;
 
@@ -238,14 +218,16 @@ void Optimizer::applyControlSequenceConstraints()
   motion_model_->applyConstraints(control_sequence_);
 }
 
-void Optimizer::updateStateVelocities(
+template <typename MapView>
+void Optimizer<MapView>::updateStateVelocities(
   models::State & state) const
 {
   updateInitialStateVelocities(state);
   propagateStateVelocitiesFromInitials(state);
 }
 
-void Optimizer::updateInitialStateVelocities(
+template <typename MapView>
+void Optimizer<MapView>::updateInitialStateVelocities(
   models::State & state) const
 {
   xt::noalias(xt::view(state.vx, xt::all(), 0)) = state.speed.linear.x;
@@ -256,13 +238,15 @@ void Optimizer::updateInitialStateVelocities(
   }
 }
 
-void Optimizer::propagateStateVelocitiesFromInitials(
+template <typename MapView>
+void Optimizer<MapView>::propagateStateVelocitiesFromInitials(
   models::State & state) const
 {
   motion_model_->predict(state);
 }
 
-void Optimizer::integrateStateVelocities(
+template <typename MapView>
+void Optimizer<MapView>::integrateStateVelocities(
   xt::xtensor<float, 2> & trajectory,
   const xt::xtensor<float, 2> & sequence) const
 {
@@ -300,7 +284,8 @@ void Optimizer::integrateStateVelocities(
   xt::noalias(traj_y) = state_.pose.pose.position.y + xt::cumsum(dy * settings_.model_dt, 0);
 }
 
-void Optimizer::integrateStateVelocities(
+template <typename MapView>
+void Optimizer<MapView>::integrateStateVelocities(
   models::Trajectories & trajectories,
   const models::State & state) const
 {
@@ -332,7 +317,8 @@ void Optimizer::integrateStateVelocities(
     xt::cumsum(dy * settings_.model_dt, 1);
 }
 
-xt::xtensor<float, 2> Optimizer::getOptimizedTrajectory()
+template <typename MapView>
+xt::xtensor<float, 2> Optimizer<MapView>::getOptimizedTrajectory()
 {
   auto && sequence =
     xt::xtensor<float, 2>::from_shape({settings_.time_steps, isHolonomic() ? 3u : 2u});
@@ -349,7 +335,8 @@ xt::xtensor<float, 2> Optimizer::getOptimizedTrajectory()
   return std::move(trajectories);
 }
 
-void Optimizer::updateControlSequence()
+template <typename MapView>
+void Optimizer<MapView>::updateControlSequence()
 {
   auto & s = settings_;
   auto bounded_noises_vx = state_.cvx - control_sequence_.vx;
@@ -383,23 +370,9 @@ void Optimizer::updateControlSequence()
   applyControlSequenceConstraints();
 }
 
-geometry_msgs::msg::TwistStamped Optimizer::getControlFromSequenceAsTwist(
-    const builtin_interfaces::msg::Time & stamp)
-{
-    unsigned int offset = settings_.shift_control_sequence ? 1 : 0;
 
-    auto vx = control_sequence_.vx(offset);
-    auto wz = control_sequence_.wz(offset);
-
-    if (isHolonomic()) {
-        auto vy = control_sequence_.vy(offset);
-        return utils::toTwistStamped(vx, vy, wz, stamp, map_view_>getBaseFrameID());
-    }
-
-    return utils::toTwistStamped(vx, wz, stamp, map_view_->getBaseFrameID());
-}
-
-void Optimizer::setMotionModel(const std::string & model)
+template <typename MapView>
+void Optimizer<MapView>::setMotionModel(const std::string & model)
 {
   if (model == "DiffDrive") {
     motion_model_ = std::make_shared<DiffDriveMotionModel>();
@@ -414,8 +387,8 @@ void Optimizer::setMotionModel(const std::string & model)
               "or Ackermann"));
   }
 }
-
-void Optimizer::setSpeedLimit(double speed_limit, bool percentage)
+template <typename MapView>
+void Optimizer<MapView>::setSpeedLimit(double speed_limit, bool percentage)
 {
   auto & s = settings_;
   if (speed_limit == nav2_costmap_2d::NO_SPEED_LIMIT) {
@@ -442,7 +415,8 @@ void Optimizer::setSpeedLimit(double speed_limit, bool percentage)
   }
 }
 
-models::Trajectories & Optimizer::getGeneratedTrajectories()
+template <typename MapView>
+models::Trajectories & Optimizer<MapView>::getGeneratedTrajectories()
 {
   return generated_trajectories_;
 }

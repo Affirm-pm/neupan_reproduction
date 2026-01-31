@@ -28,7 +28,7 @@ namespace mppi::critics
  * or turning
  */
 template <typename MapView>
-class PathAngleCritic : public CriticFunction
+class PathAngleCritic : public CriticFunction<MapView>
 {
 public:
   /**

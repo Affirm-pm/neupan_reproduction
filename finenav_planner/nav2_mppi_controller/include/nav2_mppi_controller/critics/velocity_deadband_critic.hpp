@@ -29,7 +29,7 @@ namespace mppi::critics
  * @brief Critic objective function for enforcing feasible constraints
  */
 template <typename MapView>
-class VelocityDeadbandCritic : public CriticFunction
+class VelocityDeadbandCritic : public CriticFunction<MapView>
 {
 public:
   /**

@@ -26,7 +26,7 @@ namespace mppi::critics
  * @brief Critic objective function for penalizing wiggling/twirling
  */
 template <typename MapView>
-class TwirlingCritic : public CriticFunction
+class TwirlingCritic : public CriticFunction<MapView>
 {
 public:
   /**

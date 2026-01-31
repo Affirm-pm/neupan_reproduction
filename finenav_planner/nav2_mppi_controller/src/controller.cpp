@@ -22,69 +22,9 @@
 
 namespace nav2_mppi_controller
 {
+
 template <typename MapView>
-geometry_msgs::msg::TwistStamped MPPIController::computeVelocityCommands(
-    const geometry_msgs::msg::PoseStamped & robot_pose,
-  	const geometry_msgs::msg::Twist & robot_speed,
-    const MapView& map_view)
-{
-#ifdef BENCHMARK_TESTING
-  auto start = std::chrono::system_clock::now();
-#endif
-
-//  if (clock_->now() - last_time_called_ > rclcpp::Duration::from_seconds(reset_period_)) {
-//    reset();
-//  }
-  last_time_called_ = clock_->now();
-
-  std::lock_guard<std::mutex> param_lock(*parameters_handler_->getLock());
-  nav_msgs::msg::Path transformed_plan = path_handler_.transformPath(robot_pose);
-
-	nav2_costmap_2d::Costmap2D * costmap ;
-	unsigned int size_x = costmap->getSizeInCellsX();
-	unsigned int size_y = costmap->getSizeInCellsY();
-
-	for (unsigned int mx = 0; mx < size_x; ++mx) {
-		for (unsigned int my = 0; my < size_y; ++my) {
-			double wx, wy;
-				costmap->mapToWorld(mx, my, wx, wy); // 将地图坐标转换为世界坐标
-
-				Position3D pos{wx, wy, 0.0}; // 假设 z 坐标为 0
-        		double cost = map_view.getCost(pos); // 获取代价
-
-       	 		costmap->setCost(mx, my, static_cast<unsigned char>(cost)); // 设置代价
-           }
-		}
-  		std::unique_lock<nav2_costmap_2d::Costmap2D::mutex_t> costmap_lock(*(costmap->getMutex()));
-
-  geometry_msgs::msg::TwistStamped cmd =
-    optimizer_.evalControl(robot_pose, robot_speed, transformed_plan ,map_view);
-
-#ifdef BENCHMARK_TESTING
-  auto end = std::chrono::system_clock::now();
-  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-  RCLCPP_INFO(logger_, "Control loop execution time: %ld [ms]", duration);
-#endif
-
-  if (visualize_) {
-    double z_height = 0.06;
-    const std::string base_frame = costmap_ros_->getBaseFrameID();
-    try {
-      auto tfst = tf_buffer_->lookupTransform(
-        map_view->getGlobalFrameID(), base_frame,  cmd.header.stamp);
-      z_height = tfst.transform.translation.z;
-    } catch (const tf2::TransformException & ex) {
-      RCLCPP_WARN(logger_, "Failed to get transform %s -> %s: %s",
-                  map_view->getGlobalFrameID().c_str(), base_frame.c_str(), ex.what());
-    }
-
-    visualize(std::move(transformed_plan), cmd.header.stamp, z_height);
-  }
-
-  return cmd;
-}
-
-void MPPIController::visualize(
+void MPPIController<MapView>::visualize(
   nav_msgs::msg::Path transformed_plan,
   const builtin_interfaces::msg::Time & cmd_stamp,
   double z_height)
@@ -94,12 +34,14 @@ void MPPIController::visualize(
   trajectory_visualizer_.visualize(std::move(transformed_plan));
 }
 
-void MPPIController::setPlan(const nav_msgs::msg::Path & path)
+template <typename MapView>
+void MPPIController<MapView>::setPlan(const nav_msgs::msg::Path & path)
 {
   path_handler_.setPath(path);
 }
 
-void MPPIController::setSpeedLimit(const double & speed_limit, const bool & percentage)
+template <typename MapView>
+void MPPIController<MapView>::setSpeedLimit(const double & speed_limit, const bool & percentage)
 {
   optimizer_.setSpeedLimit(speed_limit, percentage);
 }

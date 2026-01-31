@@ -19,7 +19,8 @@
 namespace mppi::critics
 {
 
-void ObstaclesCritic::initialize()
+template <typename MapView>
+void ObstaclesCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //  getParam(consider_footprint_, "consider_footprint", false);
@@ -97,10 +98,10 @@ void ObstaclesCritic::initialize()
 //}
 
 template <typename MapView>
-void ObstaclesCritic::score(CriticData & data, const MapView& map_view)
+void ObstaclesCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
-  if (!enabled_) {
+  if (!this->enabled_) {
     return;
   }
 
@@ -172,8 +173,3 @@ void ObstaclesCritic::score(CriticData & data, const MapView& map_view)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
-
-PLUGINLIB_EXPORT_CLASS(
-  mppi::critics::ObstaclesCritic,
-  mppi::critics::CriticFunction)

@@ -31,7 +31,7 @@ namespace mppi::critics
  * This is the initial 'Legacy' implementation before replacement Oct 2023.
  */
 template <typename MapView>
-class PathAlignLegacyCritic : public CriticFunction
+class PathAlignLegacyCritic : public CriticFunction<MapView>
 {
 public:
   /**

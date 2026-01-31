@@ -26,7 +26,7 @@ namespace mppi::critics
  * @brief Critic objective function for preferring forward motion
  */
 template <typename MapView>
-class PreferForwardCritic : public CriticFunction
+class PreferForwardCritic : public CriticFunction<MapView>
 {
 public:
   /**

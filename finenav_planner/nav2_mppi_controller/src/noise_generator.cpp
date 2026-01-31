@@ -24,8 +24,7 @@ namespace mppi
 {
 
 void NoiseGenerator::initialize(
-  mppi::models::OptimizerSettings & settings, bool is_holonomic,
-  const std::string & name)
+  mppi::models::OptimizerSettings & settings, bool is_holonomic)
 {
   settings_ = settings;
   is_holonomic_ = is_holonomic;

@@ -17,59 +17,42 @@
 namespace mppi
 {
 
-void CriticManager::on_configure(
-  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name)
+template <typename MapView>
+void CriticManager<MapView>::on_configure(
+  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name, const std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> & critics)
 {
-  parent_ = parent;
-  name_ = name;
-  auto node = parent_.lock();
-  logger_ = node->get_logger();
-  parameters_handler_ = param_handler;
+    parent_ = parent;
+    name_ = name;
+    auto node = parent_.lock();
+    logger_ = node->get_logger();
+    critics_ = std::move(critics);
 
-  getParams();
-  loadCritics();
+//  getParams();   //TODO:参数加载
 }
 
-void CriticManager::getParams()
-{
-  auto node = parent_.lock();
-  auto getParam = parameters_handler_->getParamGetter(name_);
-  getParam(critic_names_, "critics", std::vector<std::string>{}, ParameterType::Static);
-}
+//void CriticManager::getParams()
+//{
+//  auto node = parent_.lock();
+//  auto getParam = parameters_handler_->getParamGetter(name_);
+//  getParam(critic_names_, "critics", std::vector<std::string>{}, ParameterType::Static);
+//}
 
-void CriticManager::loadCritics()
-{
-  if (!loader_) {
-    loader_ = std::make_unique<pluginlib::ClassLoader<critics::CriticFunction>>(
-      "nav2_mppi_controller", "mppi::critics::CriticFunction");
-  }
 
-  critics_.clear();
-  for (auto name : critic_names_) {
-    std::string fullname = getFullName(name);
-    auto instance = std::unique_ptr<critics::CriticFunction>(
-      loader_->createUnmanagedInstance(fullname));
-    critics_.push_back(std::move(instance));
-    critics_.back()->on_configure(
-      parent_, name_, name_ + "." + name);
-    RCLCPP_INFO(logger_, "Critic loaded : %s", fullname.c_str());
-  }
-}
-
-std::string CriticManager::getFullName(const std::string & name)
+template <typename MapView>
+std::string CriticManager<MapView>::getFullName(const std::string & name)
 {
   return "mppi::critics::" + name;
 }
 
 template <typename MapView>
-void CriticManager::evalTrajectoriesScores(
+void CriticManager<MapView>::evalTrajectoriesScores(
   CriticData & data, const MapView& map_view) const
 {
   for (size_t q = 0; q < critics_.size(); q++) {
     if (data.fail_flag) {
       break;
     }
-    critics_[q]->score(data,mapview);
+    critics_[q]->score(data,map_view);
   }
 }
 

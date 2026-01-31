@@ -17,7 +17,8 @@
 namespace mppi::critics
 {
 
-void PreferForwardCritic::initialize()
+template <typename MapView>
+void PreferForwardCritic<MapView>::initialize()
 {
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //  getParam(power_, "cost_power", 1);
@@ -26,14 +27,15 @@ void PreferForwardCritic::initialize()
 //    threshold_to_consider_,
 //    "threshold_to_consider", 0.5);        //TODO：参数加载
 
-  RCLCPP_INFO(
-    logger_, "PreferForwardCritic instantiated with %d power and %f weight.", power_, weight_);
+//  RCLCPP_INFO(
+//    logger_, "PreferForwardCritic instantiated with %d power and %f weight.", power_, weight_);
 }
 
-void PreferForwardCritic::score(CriticData & data)
+template <typename MapView>
+void PreferForwardCritic<MapView>::score(CriticData & data, const MapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
-  if (!enabled_ ||
+  if (!this->enabled_ ||
     utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
   {
     return;
@@ -48,8 +50,4 @@ void PreferForwardCritic::score(CriticData & data)
 
 }  // namespace mppi::critics
 
-#include <pluginlib/class_list_macros.hpp>
 
-PLUGINLIB_EXPORT_CLASS(
-  mppi::critics::PreferForwardCritic,
-  mppi::critics::CriticFunction)

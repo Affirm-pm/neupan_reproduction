@@ -27,7 +27,7 @@ namespace mppi::critics
  * @brief Critic objective function for driving towards goal orientation
  */
 template <typename MapView>
-class GoalAngleCritic : public CriticFunction
+class GoalAngleCritic : public CriticFunction<MapView>
 {
 public:
   /**

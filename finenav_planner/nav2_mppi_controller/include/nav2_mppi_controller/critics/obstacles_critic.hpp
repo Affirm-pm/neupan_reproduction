@@ -33,7 +33,7 @@ namespace mppi::critics
  * particular application
  */
 template <typename MapView>
-class ObstaclesCritic : public CriticFunction
+class ObstaclesCritic : public CriticFunction<MapView>
 {
 public:
   /**
