@@ -19,6 +19,7 @@
 #include "finenav_msgs/msg/trajectory.hpp"
 #include "finenav_msgs/action/compute_plan.hpp"
 #include "finenav_util/trajectory_io/conversions.hpp"
+#include "finenav_util/simple_action_server.hpp"
 
 namespace finenav {
 
@@ -51,6 +52,8 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
     using MapT      = Traits::Map;
     using PlannersT = Traits::Planners;
     using MapViewsT = Traits::MapViews;
+    using ActionT = finenav_msgs::action::ComputePlan;
+    using ActionServer = SimpleActionServer<ActionT>;
 
     explicit ControlLayer(const std::string& name, const rclcpp::NodeOptions& options, const ControlLayerConfig config)
         : Node(name, options), config_(config) {
@@ -69,12 +72,11 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         // --- 4. 控制流 ---
         // TODO: 看看 Nav2 如何封装 ActionServer 逻辑，拿来主义
         if (!config_.task_action.empty()) {
-            action_server_ = rclcpp_action::create_server<finenav_msgs::action::ComputePlan>(
-                this,
+            action_server_ = std::make_unique<ActionServer>(
+                shared_from_this(),
                 config_.task_action,
-                std::bind(&ControlLayer::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
-                std::bind(&ControlLayer::handle_cancel, this, std::placeholders::_1),
-                std::bind(&ControlLayer::handle_accepted, this, std::placeholders::_1));
+                std::bind(&ControlLayer::execute, this)
+            );
         }
 
         // --- 5. 规划数据流 ---
@@ -136,28 +138,9 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
     /// THREAD 1: 执行规划
     using GoalHandleComputePlan = rclcpp_action::ServerGoalHandle<finenav_msgs::action::ComputePlan>;
 
-    rclcpp_action::GoalResponse handle_goal(
-        const rclcpp_action::GoalUUID & uuid,
-        std::shared_ptr<const finenav_msgs::action::ComputePlan::Goal> goal) {
-        RCLCPP_INFO(this->get_logger(), "Received goal request");
-        (void)uuid;
-        (void)goal;
-        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
-    }
-    rclcpp_action::CancelResponse handle_cancel(const std::shared_ptr<GoalHandleComputePlan> goal_handle) {
-        RCLCPP_INFO(this->get_logger(), "Received request to cancel goal");
-        (void)goal_handle;
-        return rclcpp_action::CancelResponse::ACCEPT;
-    }
-    void handle_accepted(
-        const std::shared_ptr<GoalHandleComputePlan> goal_handle) {
-        std::thread{std::bind(&ControlLayer::execute, this, std::placeholders::_1), goal_handle}.detach();
-        RCLCPP_INFO(this->get_logger(), "Goal accepted");
-    }
-
-    void execute(const std::shared_ptr<GoalHandleComputePlan> goal_handle) {
+    void execute() {
         RCLCPP_INFO(this->get_logger(), "Executing goal");
-        const auto goal = goal_handle->get_goal();
+        auto goal = action_server_->get_current_goal();
         auto result = std::make_shared<finenav_msgs::action::ComputePlan::Result>();
         active_planner_id_ = goal->planner_id; // 记录当前请求的规划器 ID
 
@@ -169,13 +152,13 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         // 创建一个周期调用的定时器，定时器频率为控制周期
         {
             // 检查 ROS 客户端请求是否被取消
-            if (goal_handle->is_canceling()) {
-                goal_handle->canceled(result);
+            if (action_server_->is_cancel_requested()) {
                 RCLCPP_INFO(this->get_logger(), "Goal canceled");
+                action_server_->terminate_all(); // TODO: terminate_all 返回的是 abort 而不是 canceled
                 return;
             }
 
-            /****** 进行一次规划 ******/
+
             // 从 TF 获取当前机器人位姿作为起点, map 系下 base_link 的位置，对应 base_link->map 的变换
             geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
                 "map", "base_link", tf2::TimePointZero); // TODO: TF 时间戳相关细节，可参考 nav2_planner
@@ -218,12 +201,12 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
 
             if (!planner_found_and_run) {
                 RCLCPP_ERROR_STREAM(this->get_logger(), "Planner with ID " << active_planner_id_ << " not found");
-                goal_handle->abort(result);
+                action_server_->terminate_all();
                 return;
             }
             if (!plan_success) {
                 RCLCPP_ERROR_STREAM(this->get_logger(), "Planner " << active_planner_id_ << " failed to compute a plan");
-                goal_handle->abort(result);
+                action_server_->terminate_all();
                 return;
             }
 
@@ -236,16 +219,14 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         }
 
         // 设置成功结果
-        goal_handle->succeed(result);
+        action_server_->succeeded_current();
         RCLCPP_INFO(this->get_logger(), "Goal succeeded");
     }
 
 
     rclcpp::TimerBase::SharedPtr timer_;
 
-    rclcpp_action::Server<finenav_msgs::action::ComputePlan>::SharedPtr action_server_;
-
-
+    std::unique_ptr<ActionServer> action_server_;
 
     rclcpp::Subscription<finenav_msgs::msg::Trajectory>::SharedPtr plan_ref_sub_; // 这里是固定的 Trajectory 消息类型
     rclcpp::Publisher<finenav_msgs::msg::Trajectory>::SharedPtr plan_result_pub_;
