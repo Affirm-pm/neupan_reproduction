@@ -67,14 +67,15 @@ struct PlanningContext {
  * 1. 特质自省： 暴露它的类型特质，以区分是否需要参考轨迹
  * 2. 不持有地图，只接受地图试图 MapView
  */
-template <typename T,  typename MapView>
+template <typename T>
 concept PlannerConcept = std::default_initializable<T> &&
     requires {
         typename T::ConfigType;
+        typename T::IMapView;
         typename InputDataT<T>;
         typename OutputDataT<T>;
     } &&
-    requires(T planner, const typename T::ConfigType& config, const PlanningContext<T>& ctx, const MapView map_view) {
+    requires(T planner, const typename T::ConfigType& config, const PlanningContext<T>& ctx, const typename T::IMapView& map_view) {
 
         // --- 基本配置 ---
         { planner.configure(config) } -> std::same_as<void>;
@@ -91,7 +92,6 @@ template <typename T>
 concept LayerTraits = requires {
     typename T::Map;      // 必须包含 MapType
     typename T::Planners;   // 必须包含 PlannerSet
-    typename T::MapViews;    // 必须包含 MapViews
 }; // TODO: 可能还要补充 PlannerSet 和 FilterSet 的类型检查，之后再说
 
 

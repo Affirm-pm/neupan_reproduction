@@ -80,6 +80,12 @@ public:
         .time = false
     };
 
+    class IMapView {
+    public:
+        virtual ~IMapView() = default;
+        virtual double getCost(const Position3D& pos) const = 0;
+    };
+
     using Context = PlanningContext<SimpleTestPlanner>;
     using Result  = std::optional<OutputDataT<SimpleTestPlanner>>;
 
@@ -87,8 +93,7 @@ public:
         if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
     }
 
-    template <typename MapView>
-    Result plan(const Context& ctx, MapView map_view) {
+    Result plan(const Context& ctx, const IMapView& map_view) {
         auto start_pose = ctx.start_pose;
         auto goal_pose = ctx.goal_pose;
         auto ref_traj = ctx.ref_traj;
@@ -100,25 +105,29 @@ public:
     }
 };
 
+
+
 /* ------------------------------------------------------------------------------------------------ */
 
-class SimpleGridMapView {
+class SimpleGridMapView : public SimpleTestPlanner::IMapView {
 public:
     explicit SimpleGridMapView( finenav::GridMap<float>& map) : map_(map) {}
 
-    double getCost(const Position3D& pos) const {
+    double getCost(const Position3D& pos) const override {
         /* 简单的成本逻辑 */
+        return 0.0;
     }
 private:
     finenav::GridMap<float>& map_;
 };
 
-class ComplexGridMapView {
+class ComplexGridMapView : public SimpleTestPlanner::IMapView{
 public:
     explicit ComplexGridMapView( finenav::GridMap<float>& map) : map_(map) {}
 
-    double getCost(const Position3D& pos) const {
+    double getCost(const Position3D& pos) const override {
         /* 复杂的成本逻辑 */
+        return 0.0;
     }
 private:
     finenav::GridMap<float>& map_;
@@ -128,7 +137,6 @@ struct LocalLayerConfig {
     // using Map = SimpleTestMap;
     using Map = finenav::GridMap<float>;
     using Planners = PlannerSet<SimpleTestPlanner>; // TODO: 如果注册同名怎么办
-    using MapViews = std::variant<SimpleGridMapView, ComplexGridMapView>; // TODO: 把 variant 封装起来
 };
 
 bool custom_map_integrate(const Position& position, const LocalLayerConfig::Map::DataType& data) {
@@ -164,9 +172,9 @@ public:
         offload_pub_ = this->template create_publisher<finenav_msgs::msg::MapChunk>("map_offload", 10);
     }
 
-    MapViewsT get_planning_map_view() {
-        // if (this->active_planner_id == ... )
-        return SimpleGridMapView(this->map_instance_);
+    MapViewsVariant get_planning_map_view(const std::string& planner_id) override {
+        simple_test_map_view_ = std::make_shared<SimpleGridMapView>(this->map_instance_);
+        return simple_test_map_view_;
     }
 
 private:
@@ -174,6 +182,7 @@ private:
     // 地图交互
     rclcpp::Publisher<finenav_msgs::msg::MapChunk>::SharedPtr offload_pub_;
     rclcpp::Subscription<finenav_msgs::msg::MapChunk>::SharedPtr load_sub_;
+    std::shared_ptr<SimpleGridMapView> simple_test_map_view_;
 
 };
 

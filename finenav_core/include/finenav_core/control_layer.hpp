@@ -4,8 +4,8 @@
 
 #pragma once
 
+#include <any>
 #include <pcl_conversions/pcl_conversions.h>
-
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -33,6 +33,25 @@ struct PlannerSet {
     using Tuple = std::tuple<Ts...>;
 };
 
+// 1. 提取器：给定 PlannerT，提取 std::shared_ptr<PlannerT::IMapView>
+template <typename PlannerT>
+struct GetMapViewSharedPtr {
+    using type = std::shared_ptr<typename PlannerT::IMapView>;
+};
+
+// 2. 转换器：Tuple<P...> -> Variant<shared_ptr<P::View>...>
+template <typename Tuple> struct ToVariant;
+
+template <typename... Planners>
+struct ToVariant<std::tuple<Planners...>> {
+    using type = std::variant<typename GetMapViewSharedPtr<Planners>::type...>;
+};
+
+// 3. 对外别名
+template <typename PlannerSetT>
+using GenerateMapViewsVariant = typename ToVariant<typename PlannerSetT::Tuple>::type;
+
+
 enum class ControlMode {
     OneShot = 0,
     ServoLoop = 1
@@ -50,8 +69,8 @@ requires MapConcept<typename Traits::Map>   // TODO: 逐个检查 PlannersT 中�
 class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 或者 ControlLayerBase
   public:
     using MapT      = Traits::Map;
-    using PlannersT = Traits::Planners;
-    using MapViewsT = Traits::MapViews;
+    using PlannersT = Traits::Planners; // TODO: 不能有一样的 Planner 类模板，即，每个 Planner 都只能注册一次
+    using MapViewsVariant = GenerateMapViewsVariant<PlannersT>;
     using ActionT = finenav_msgs::action::ComputePlan;
     using ActionServer = SimpleActionServer<ActionT>;
 
@@ -116,7 +135,8 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
     std::string active_planner_id_; // 运行时请求的 ID (来自 Action Goal)
 
     // TODO: onPrePlan(), OnPlanResult() 等函数接口，可能要考虑下语义区分的问题，防止和 LocalLayer 中定义的混淆
-    virtual MapViewsT get_planning_map_view() = 0; // TODO: 要不要改成回调
+
+    virtual MapViewsVariant get_planning_map_view(const std::string& planner_id) = 0; // TODO: 要不要改成回调
 
   private:
 
@@ -185,16 +205,30 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
                     ctx.goal_pose = goal_pose;
                     fromROSMsg(std::move(plan_ref_msg_), ctx.ref_traj); // TODO: 这里需要做互斥
 
-                    // TODO: 给地图上锁
-                    auto plan_result = planner.plan(ctx, this->get_planning_map_view());
-                    if (plan_result.has_value()) {
-                        plan_success = true;
-                        toROSMsg(std::move(plan_result.value()), output_traj_msg);
+                    MapViewsVariant view_variant = this->get_planning_map_view(active_planner_id_);
+                    using ExpectedPtrType = std::shared_ptr<typename PlannerT::IMapView>;
+
+                    if (auto* ptr_to_ptr = std::get_if<ExpectedPtrType>(&view_variant)) {
+                        auto map_view_ptr = *ptr_to_ptr;
+                        if (map_view_ptr) {
+                            // TODO: 给地图上锁
+                            auto plan_result = planner.plan(ctx, *map_view_ptr);
+                            if (plan_result.has_value()) {
+                                plan_success = true;
+                                toROSMsg(std::move(plan_result.value()), output_traj_msg);
+                            }
+                            else {
+                                RCLCPP_ERROR(this->get_logger(), "User returned a nullptr MapView!");
+                            }
+                        } else {
+                            RCLCPP_ERROR(this->get_logger(), "MapView Type Mismatch for planner %s", active_planner_id_.c_str());
+                        }
                     }
                     return true; // 返回 true 以触发短路，停止后续遍历
                 }
                 return false;
             };
+
             std::apply([&](auto&... planners) {
                 planner_found_and_run = (try_run_planner(planners) || ...);
             }, planners_instance_);
@@ -244,5 +278,5 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
 
 };
 
-};
+}
 
