@@ -89,14 +89,6 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
         tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
 
         // --- 4. 控制流 ---
-        // TODO: 看看 Nav2 如何封装 ActionServer 逻辑，拿来主义
-        if (!config_.task_action.empty()) {
-            action_server_ = std::make_unique<ActionServer>(
-                shared_from_this(),
-                config_.task_action,
-                std::bind(&ControlLayer::execute, this)
-            );
-        }
 
         // --- 5. 规划数据流 ---
         if (!config_.input_topic.empty()) {
@@ -122,6 +114,14 @@ class ControlLayer : public rclcpp::Node { // TODO: 改名 AbstracControltLayer 
                 keep_alive(AlgoConfigurator<T>::load(this->shared_from_this(), p));
             }(planners), ...);
         }, planners_instance_);
+
+        if (!config_.task_action.empty()) {
+            action_server_ = std::make_unique<ActionServer>(
+                shared_from_this(),
+                config_.task_action,
+                std::bind(&ControlLayer::execute, this)
+            );
+        }
 
     }
 
