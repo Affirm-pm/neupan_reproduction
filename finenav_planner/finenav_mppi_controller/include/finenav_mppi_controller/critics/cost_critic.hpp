@@ -18,7 +18,6 @@
 #include <memory>
 #include <string>
 
-#include "nav2_costmap_2d/inflation_layer.hpp"
 
 #include "finenav_mppi_controller/critic_function.hpp"
 #include "finenav_mppi_controller/models/state.hpp"
@@ -80,7 +79,7 @@ protected:
     * @return double circumscribed cost, any higher than this and need to do full footprint collision checking
     * since some element of the robot could be in collision
     */
-  float findCircumscribedCost(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap);
+//  float findCircumscribedCost(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap);
 
 protected:
   float possibly_inscribed_cost_;

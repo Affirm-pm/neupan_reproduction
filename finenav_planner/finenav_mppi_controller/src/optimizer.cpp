@@ -24,7 +24,6 @@
 #include <xtensor/xrandom.hpp>
 #include <xtensor/xnoalias.hpp>
 
-#include "nav2_costmap_2d/costmap_filters/filter_values.hpp"
 
 namespace mppi
 {
@@ -59,34 +58,37 @@ void Optimizer<MapView>::shutdown()
 template <typename MapView>
 void Optimizer<MapView>::getParams()
 {
-  std::string motion_model_name;
+  // 使用硬编码值，移除 parameters_handler_ 依赖
+  std::string motion_model_name = std::string("DiffDrive");
 
   auto & s = settings_;
-  auto getParam = parameters_handler_->getParamGetter(name_);
-  auto getParentParam = parameters_handler_->getParamGetter("");
-  getParam(s.model_dt, "model_dt", 0.05f);
-  getParam(s.time_steps, "time_steps", 56);
-  getParam(s.batch_size, "batch_size", 1000);
-  getParam(s.iteration_count, "iteration_count", 1);
-  getParam(s.temperature, "temperature", 0.3f);
-  getParam(s.gamma, "gamma", 0.015f);
-  getParam(s.base_constraints.vx_max, "vx_max", 0.5);
-  getParam(s.base_constraints.vx_min, "vx_min", -0.35);
-  getParam(s.base_constraints.vy, "vy_max", 0.5);
-  getParam(s.base_constraints.wz, "wz_max", 1.9);
-  getParam(s.sampling_std.vx, "vx_std", 0.2);
-  getParam(s.sampling_std.vy, "vy_std", 0.2);
-  getParam(s.sampling_std.wz, "wz_std", 0.4);
-  getParam(s.retry_attempt_limit, "retry_attempt_limit", 1);
 
-  getParam(motion_model_name, "motion_model", std::string("DiffDrive"));
+  // ...hardcoded parameters (以前由 parameters_handler_ 提供)...
+  s.model_dt = 0.05f;
+  s.time_steps = 56;
+  s.batch_size = 1000;
+  s.iteration_count = 1;
+  s.temperature = 0.3f;
+  s.gamma = 0.015f;
 
+  s.base_constraints.vx_max = 0.5;
+  s.base_constraints.vx_min = -0.35;
+  s.base_constraints.vy = 0.5;
+  s.base_constraints.wz = 1.9;
+
+  s.sampling_std.vx = 0.2;
+  s.sampling_std.vy = 0.2;
+  s.sampling_std.wz = 0.4;
+
+  s.retry_attempt_limit = 1;
+
+  // 保持原有流程：复制约束并设置 motion model（motion_model_name 可按需修改）
   s.constraints = s.base_constraints;
   setMotionModel(motion_model_name);
-  parameters_handler_->addPostCallback([this]() {reset();});
 
-  double controller_frequency;
-  getParentParam(controller_frequency, "controller_frequency", 0.0, ParameterType::Static);
+  // 不再使用 parameters_handler_->addPostCallback(...)
+  // 使用硬编码 controller_frequency（使 controller_period == model_dt，启用 shift 控制序列）
+  double controller_frequency = 1.0 / static_cast<double>(s.model_dt);
   setOffset(controller_frequency);
 }
 
@@ -379,7 +381,7 @@ void Optimizer<MapView>::setMotionModel(const std::string & model)
   } else if (model == "Omni") {
     motion_model_ = std::make_shared<OmniMotionModel>();
   } else if (model == "Ackermann") {
-    motion_model_ = std::make_shared<AckermannMotionModel>(parameters_handler_, name_);
+    motion_model_ = std::make_shared<AckermannMotionModel>(name_);
   } else {
     throw std::runtime_error(
             std::string(
@@ -391,7 +393,14 @@ template <typename MapView>
 void Optimizer<MapView>::setSpeedLimit(double speed_limit, bool percentage)
 {
   auto & s = settings_;
-  if (speed_limit == nav2_costmap_2d::NO_SPEED_LIMIT) {
+
+  // 使用局部哨兵值表示 "no speed limit"
+  // 说明：nav2_costmap_2d::NO_SPEED_LIMIT 在 nav2 的实现中是用于表示“无速度限制”的常量。
+  // 为了避免直接依赖外部宏/命名空间，这里使用本地常量 NO_SPEED_LIMIT_LOCAL 作为替代。
+  // 可替代策略还包括使用负值（例如 -1）或 std::optional<double> 来表示未设置限制。
+  constexpr double NO_SPEED_LIMIT_LOCAL = -1;
+
+  if (speed_limit == NO_SPEED_LIMIT_LOCAL) {
     s.constraints.vx_max = s.base_constraints.vx_max;
     s.constraints.vx_min = s.base_constraints.vx_min;
     s.constraints.vy = s.base_constraints.vy;

@@ -24,10 +24,9 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 
-#include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
-#include "finenav_mppi_controller/tools/parameters_handler.hpp"
+//#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 #include "finenav_mppi_controller/critic_data.hpp"
 #include "finenav_mppi_controller/critic_function.hpp"

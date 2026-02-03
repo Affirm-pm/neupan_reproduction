@@ -25,7 +25,7 @@
 #include <xtensor/xview.hpp>
 #include <xtensor/xnoalias.hpp>
 
-#include "finenav_mppi_controller/tools/parameters_handler.hpp"
+//#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 
 namespace mppi
 {
@@ -89,10 +89,9 @@ public:
   /**
     * @brief Constructor for mppi::AckermannMotionModel
     */
-  explicit AckermannMotionModel(ParametersHandler * param_handler, const std::string & name)
+  explicit AckermannMotionModel(const std::string & name)
   {
-    auto getParam = param_handler->getParamGetter(name + ".AckermannConstraints");
-    getParam(min_turning_r_, "min_turning_r", 0.2);
+    min_turning_r_= 0.2 ;
   }
 
   /**

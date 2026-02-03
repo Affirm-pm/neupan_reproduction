@@ -23,21 +23,21 @@
 namespace nav2_mppi_controller
 {
 
-template <typename MapView>
-void MPPIController<MapView>::visualize(
-  nav_msgs::msg::Path transformed_plan,
-  const builtin_interfaces::msg::Time & cmd_stamp,
-  double z_height)
-{
-  trajectory_visualizer_.add(optimizer_.getGeneratedTrajectories(), "Candidate Trajectories", z_height);
-  trajectory_visualizer_.add(optimizer_.getOptimizedTrajectory(), "Optimal Trajectory", cmd_stamp, z_height);
-  trajectory_visualizer_.visualize(std::move(transformed_plan));
-}
+//template <typename MapView>
+//void MPPIController<MapView>::visualize(
+//  nav_msgs::msg::Path transformed_plan,
+//  const builtin_interfaces::msg::Time & cmd_stamp,
+//  double z_height)
+//{
+//  trajectory_visualizer_.add(optimizer_.getGeneratedTrajectories(), "Candidate Trajectories", z_height);
+//  trajectory_visualizer_.add(optimizer_.getOptimizedTrajectory(), "Optimal Trajectory", cmd_stamp, z_height);
+//  trajectory_visualizer_.visualize(std::move(transformed_plan));
+//}
 
 template <typename MapView>
 void MPPIController<MapView>::setPlan(const nav_msgs::msg::Path & path)
 {
-  path_handler_.setPath(path);
+    path_ = path;
 }
 
 template <typename MapView>

@@ -23,8 +23,6 @@
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
-#include "nav2_costmap_2d/costmap_2d_ros.hpp"
-#include "nav2_core/goal_checker.hpp"
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
@@ -38,7 +36,7 @@
 #include "finenav_mppi_controller/models/trajectories.hpp"
 #include "finenav_mppi_controller/models/path.hpp"
 #include "finenav_mppi_controller/tools/noise_generator.hpp"
-#include "finenav_mppi_controller/tools/parameters_handler.hpp"
+//#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
 namespace mppi
@@ -273,7 +271,7 @@ protected:
 
   std::shared_ptr<MotionModel> motion_model_;
 
-  ParametersHandler * parameters_handler_;
+//  ParametersHandler * parameters_handler_;
   CriticManager<MapView> critic_manager_;
   NoiseGenerator noise_generator_;
   std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> critics_;

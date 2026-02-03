@@ -16,7 +16,6 @@
 #define NAV2_MPPI_CONTROLLER__CRITICS__OBSTACLES_CRITIC_HPP_
 
 #include <memory>
-#include "nav2_costmap_2d/inflation_layer.hpp"
 
 #include "finenav_mppi_controller/critic_function.hpp"
 #include "finenav_mppi_controller/models/state.hpp"
@@ -60,12 +59,13 @@ protected:
           map_view->isTrackingUnknown();
 
         switch (static_cast<unsigned char>(cost)) {
-            using namespace nav2_costmap_2d; // NOLINT
-            case (LETHAL_OBSTACLE):
+            // 使用具体数值替代 nav2_costmap_2d 宏
+            // NO_INFORMATION = 255, LETHAL_OBSTACLE = 254, INSCRIBED_INFLATED_OBSTACLE = 253
+            case 254: // LETHAL_OBSTACLE
                 return true;
-            case (INSCRIBED_INFLATED_OBSTACLE):
+            case 253: // INSCRIBED_INFLATED_OBSTACLE
                 return consider_footprint_ ? false : true;
-            case (NO_INFORMATION):
+            case 255: // NO_INFORMATION
                 return is_tracking_unknown ? false : true;
         }
 

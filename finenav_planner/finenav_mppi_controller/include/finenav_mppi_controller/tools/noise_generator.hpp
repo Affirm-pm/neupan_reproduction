@@ -25,7 +25,7 @@
 #include <xtensor/xview.hpp>
 
 #include "finenav_mppi_controller/models/optimizer_settings.hpp"
-#include "finenav_mppi_controller/tools/parameters_handler.hpp"
+//#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/models/control_sequence.hpp"
 #include "finenav_mppi_controller/models/state.hpp"
 

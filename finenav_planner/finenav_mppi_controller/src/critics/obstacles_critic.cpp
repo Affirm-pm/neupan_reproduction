@@ -14,7 +14,6 @@
 
 #include <cmath>
 #include "finenav_mppi_controller/critics/obstacles_critic.hpp"
-#include "nav2_core/exceptions.hpp"
 
 namespace mppi::critics
 {

@@ -41,7 +41,6 @@
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 #include "nav2_util/node_utils.hpp"
-#include "nav2_core/goal_checker.hpp"
 
 #include "finenav_mppi_controller/models/optimizer_settings.hpp"
 #include "finenav_mppi_controller/models/control_sequence.hpp"
@@ -199,7 +198,6 @@ inline models::Path toTensor(const nav_msgs::msg::Path & path)
  * @return bool If robot is within goal checker tolerances to the goal
  */
 inline bool withinPositionGoalTolerance(
-  nav2_core::GoalChecker * goal_checker,
   const geometry_msgs::msg::Pose & robot,
   const models::Path & path)
 {
@@ -207,10 +205,18 @@ inline bool withinPositionGoalTolerance(
   const auto goal_x = path.x(goal_idx);
   const auto goal_y = path.y(goal_idx);
 
-  if (goal_checker) {
     geometry_msgs::msg::Pose pose_tolerance;
     geometry_msgs::msg::Twist velocity_tolerance;
-    goal_checker->getTolerances(pose_tolerance, velocity_tolerance);
+
+    // 硬编码 pose_tolerance 的值
+    pose_tolerance.position.x = 0.1;
+    pose_tolerance.position.y = 0.1;
+    pose_tolerance.position.z = 0.1;
+    pose_tolerance.orientation.x = 0.0;
+    pose_tolerance.orientation.y = 0.0;
+    pose_tolerance.orientation.z = 0.0;
+    pose_tolerance.orientation.w = 1.0;
+
 
     const auto pose_tolerance_sq = pose_tolerance.position.x * pose_tolerance.position.x;
 
@@ -222,7 +228,7 @@ inline bool withinPositionGoalTolerance(
     if (dist_sq < pose_tolerance_sq) {
       return true;
     }
-  }
+
 
   return false;
 }
@@ -384,18 +390,21 @@ inline void findPathCosts(
 //    }
 
     switch (map_view.getCost(map_x, map_y, 0)) {
-      using namespace nav2_costmap_2d; // NOLINT
-      case (LETHAL_OBSTACLE):
+      // 使用具体数值替代 nav2_costmap_2d 宏常量：
+      // NO_INFORMATION = 255, LETHAL_OBSTACLE = 254, INSCRIBED_INFLATED_OBSTACLE = 253
+      case 254: // LETHAL_OBSTACLE
         (*data.path_pts_valid)[idx] = false;
         continue;
-      case (INSCRIBED_INFLATED_OBSTACLE):
+      case 253: // INSCRIBED_INFLATED_OBSTACLE
         (*data.path_pts_valid)[idx] = false;
         continue;
-      case (NO_INFORMATION):
+      case 255: // NO_INFORMATION
+      {
         const bool is_tracking_unknown =
           map_view.isTrackingUnknown();
         (*data.path_pts_valid)[idx] = is_tracking_unknown ? true : false;
         continue;
+      }
     }
 
     (*data.path_pts_valid)[idx] = true;

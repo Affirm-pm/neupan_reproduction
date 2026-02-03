@@ -19,10 +19,9 @@
 #include <memory>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
-#include "nav2_costmap_2d/costmap_2d_ros.hpp"
 #include "finenav_control_layers/local_layer.hpp"
 
-#include "finenav_mppi_controller/tools/parameters_handler.hpp"
+//#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/critic_data.hpp"
 
 namespace mppi::critics

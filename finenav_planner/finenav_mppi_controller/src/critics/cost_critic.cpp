@@ -15,7 +15,7 @@
 
 #include <cmath>
 #include "finenav_mppi_controller/critics/cost_critic.hpp"
-#include "nav2_core/exceptions.hpp"
+
 
 namespace mppi::critics
 {
@@ -83,8 +83,7 @@ void CostCritic<MapView>::score(CriticData & data,const MapView& map_view)
       // Let near-collision trajectory points be punished severely
       // Note that we collision check based on the footprint actual,
       // but score based on the center-point cost regardless
-      using namespace nav2_costmap_2d; // NOLINT
-      if (pose_cost >= INSCRIBED_INFLATED_OBSTACLE) {
+      if (pose_cost >= 253) {
         repulsive_cost[i] += critical_cost_;
       } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
         repulsive_cost[i] += pose_cost;

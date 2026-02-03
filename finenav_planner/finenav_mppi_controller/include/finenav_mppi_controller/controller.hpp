@@ -18,14 +18,12 @@
 #include <string>
 #include <memory>
 
-#include "finenav_mppi_controller/tools/path_handler.hpp"
+//#include "finenav_mppi_controller/tools/path_handler.hpp"
 #include "finenav_mppi_controller/optimizer.hpp"
-#include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
+//#include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
 #include "finenav_mppi_controller/models/constraints.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
-#include "nav2_core/controller.hpp"
-#include "nav2_core/goal_checker.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 
@@ -169,10 +167,10 @@ protected:
     * @brief Visualize trajectories
     * @param transformed_plan Transformed input plan
     */
-    void visualize(
-        nav_msgs::msg::Path transformed_plan,
-        const builtin_interfaces::msg::Time & cmd_stamp,
-        double z_height);
+//    void visualize(
+//        nav_msgs::msg::Path transformed_plan,
+//        const builtin_interfaces::msg::Time & cmd_stamp,
+//        double z_height);
 
     /**
     * @brief Main method to compute velocities using the optimizer
@@ -194,12 +192,12 @@ protected:
 	//  }
   	last_time_called_ = clock_->now();
 
-  	std::lock_guard<std::mutex> param_lock(*parameters_handler_->getLock());
-  	nav_msgs::msg::Path transformed_plan = path_handler_.transformPath(robot_pose, map_view);
+//  	std::lock_guard<std::mutex> param_lock(*parameters_handler_->getLock());
+//
 
 
   	geometry_msgs::msg::TwistStamped cmd =
-    optimizer_.evalControl(robot_pose, robot_speed, transformed_plan ,map_view);
+    optimizer_.evalControl(robot_pose, robot_speed, path_ ,map_view);
 
 	#ifdef BENCHMARK_TESTING
   	auto end = std::chrono::system_clock::now();
@@ -207,19 +205,19 @@ protected:
   	RCLCPP_INFO(logger_, "Control loop execution time: %ld [ms]", duration);
 	#endif
 
-  	if (visualize_) {
-    	double z_height = 0.06;
-    	const std::string base_frame = map_view->getBaseFrameID();
-    	try {
-      	auto tfst = tf_buffer_->lookupTransform(
-        	map_view.getGlobalFrameID(), base_frame,  cmd.header.stamp);
-      		z_height = tfst.transform.translation.z;
-    	} catch (const tf2::TransformException & ex) {
-      	RCLCPP_WARN(logger_, "Failed to get transform %s -> %s: %s",
-                  map_view.getGlobalFrameID().c_str(), base_frame.c_str(), ex.what());
-    	}
-    	visualize(std::move(transformed_plan), cmd.header.stamp, z_height);
-  	}
+//  	if (visualize_) {
+//    	double z_height = 0.06;
+//    	const std::string base_frame = map_view->getBaseFrameID();
+//    	try {
+//      	auto tfst = tf_buffer_->lookupTransform(
+//        	map_view.getGlobalFrameID(), base_frame,  cmd.header.stamp);
+//      		z_height = tfst.transform.translation.z;
+//    	} catch (const tf2::TransformException & ex) {
+//      	RCLCPP_WARN(logger_, "Failed to get transform %s -> %s: %s",
+//                  map_view.getGlobalFrameID().c_str(), base_frame.c_str(), ex.what());
+//    	}
+//    	visualize(std::move(path_, cmd.header.stamp, z_height);
+//  	}
   	return cmd;
 }
 
@@ -228,11 +226,11 @@ protected:
   rclcpp::Clock::SharedPtr clock_;
   rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  nav_msgs::msg::Path path_;
 
-  std::unique_ptr<ParametersHandler> parameters_handler_;
+//  std::unique_ptr<ParametersHandler> parameters_handler_;
   Optimizer<MapView> optimizer_;
-  PathHandler path_handler_;
-  TrajectoryVisualizer trajectory_visualizer_;
+//  TrajectoryVisualizer trajectory_visualizer_;
   std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> critics_;
 
   bool visualize_;

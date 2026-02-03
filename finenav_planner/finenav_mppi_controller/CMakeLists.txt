@@ -20,18 +20,14 @@ include_directories(
 
 set(dependencies_pkgs
   rclcpp
-  nav2_common
-  pluginlib
   tf2
   geometry_msgs
   visualization_msgs
   nav_msgs
-  nav2_core
-  nav2_costmap_2d
-  nav2_util
   tf2_geometry_msgs
   tf2_eigen
   tf2_ros
+  angles
         finenav_control_layers
         finenav_interface
         finenav_util
@@ -44,7 +40,6 @@ foreach(pkg IN LISTS dependencies_pkgs)
   find_package(${pkg} REQUIRED)
 endforeach()
 
-nav2_package()
 
 # ↓ 覆盖 nav2_package() 设置
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -89,7 +84,6 @@ add_compile_options(-O3 -finline-limit=10000000 -ffp-contract=fast -ffast-math -
 
 add_library(mppi_controller SHARED
   src/controller.cpp
-  src/optimizer.cpp
   src/critic_manager.cpp
   src/trajectory_visualizer.cpp
   src/path_handler.cpp
@@ -121,6 +115,11 @@ foreach(lib IN LISTS libraries)
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
 
+# Test MPPI Node
+add_executable(test_mppi_node test_mppi_node/test_node.cpp)
+target_link_libraries(test_mppi_node mppi_controller mppi_critics)
+
+
 install(TARGETS mppi_controller mppi_critics
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -140,10 +139,9 @@ if(BUILD_TESTING)
   # add_subdirectory(benchmark)
 endif()
 
+
 ament_export_libraries(${libraries})
 ament_export_dependencies(${dependencies_pkgs})
 ament_export_include_directories(include)
-pluginlib_export_plugin_description_file(nav2_core mppic.xml)
-pluginlib_export_plugin_description_file(nav2_mppi_controller critics.xml)
 
 ament_package()
