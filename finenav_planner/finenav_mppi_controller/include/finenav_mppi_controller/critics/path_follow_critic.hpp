@@ -20,6 +20,7 @@
 #include "finenav_mppi_controller/models/state.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
+
 namespace mppi::critics
 {
 
@@ -31,8 +32,8 @@ namespace mppi::critics
  * A higher weight here with an offset > 1 will accelerate the samples to full speed
  * faster and push the follow point further ahead, creating some shortcutting.
  */
-template <typename MapView>
-class PathFollowCritic : public CriticFunction<MapView>
+
+class PathFollowCritic : public CriticFunction
 {
 public:
   /**
@@ -46,7 +47,7 @@ public:
    *
    * @param costs [out] add goal angle cost values to this tensor
    */
-  void score(CriticData & data, const MapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   float threshold_to_consider_{0};

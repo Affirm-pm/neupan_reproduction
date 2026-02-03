@@ -19,29 +19,28 @@
 
 namespace mppi::critics
 {
-
+using namespace nav2_mppi_controller;
 using namespace xt::placeholders;  // NOLINT
 using xt::evaluation_strategy::immediate;
 
-template <typename MapView>
-void PathAlignCritic<MapView>::initialize()
+void PathAlignCritic::initialize()
 {
   // 直接赋默认值，不动态加载
   power_ = 1;
   weight_ = 10.0f;
   max_path_occupancy_ratio_ = 0.07f;
-  offset_from_furthest_ = 20u;
+  offset_from_furthest_ = 5u;   //TODO:为测试需要，设置为5u,原来为20u.
   trajectory_point_step_ = 4u;
   threshold_to_consider_ = 0.5f;
   use_path_orientations_ = false;
+  enabled_ = true;
 }
 
-template <typename MapView>
-void PathAlignCritic<MapView>::score(CriticData & data, const MapView& map_view)
+void PathAlignCritic::score(CriticData & data, const IMapView& map_view)
 {
   // Don't apply close to goal, let the goal critics take over
-  if (!this->enabled_ ||
-    utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
+
+  if (!this->enabled_ )
   {
     return;
   }
@@ -50,6 +49,7 @@ void PathAlignCritic<MapView>::score(CriticData & data, const MapView& map_view)
   utils::setPathFurthestPointIfNotSet(data);
   const size_t path_segments_count = *data.furthest_reached_path_point;  // up to furthest only
   if (path_segments_count < offset_from_furthest_) {
+      std::cout<<"Warning"<<std::endl;
     return;
   }
 
@@ -127,6 +127,7 @@ void PathAlignCritic<MapView>::score(CriticData & data, const MapView& map_view)
   }
 
   data.costs += xt::pow(std::move(cost) * weight_, power_);
+    std::cout<<"[PathAlignCritic]: Scored"<<std::endl;
 }
 
 }  // namespace mppi::critics

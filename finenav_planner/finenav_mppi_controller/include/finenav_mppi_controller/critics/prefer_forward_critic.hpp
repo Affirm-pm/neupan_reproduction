@@ -25,8 +25,8 @@ namespace mppi::critics
  * @class mppi::critics::ConstraintCritic
  * @brief Critic objective function for preferring forward motion
  */
-template <typename MapView>
-class PreferForwardCritic : public CriticFunction<MapView>
+
+class PreferForwardCritic : public CriticFunction
 {
 public:
   /**
@@ -40,7 +40,7 @@ public:
    *
    * @param costs [out] add goal angle cost values to this tensor
    */
-  void score(CriticData & data, const MapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   unsigned int power_{0};

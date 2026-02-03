@@ -16,14 +16,14 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void ConstraintCritic<MapView>::initialize()
+void ConstraintCritic::initialize()
 {
   // 以前通过参数服务器加载的参数，改为直接赋固定值（无需动态加载）
   power_ = 1;              // 原始默认值：1
   weight_ = 4.0f;          // 原始默认值：4.0
-
+  enabled_ = true;
   // 父节点参数的默认值，直接赋值（原注释默认值）
   float vx_max = 0.5f;
   float vy_max = 0.0f;
@@ -32,17 +32,18 @@ void ConstraintCritic<MapView>::initialize()
   const float min_sgn = vx_min > 0.0f ? 1.0f : -1.0f;
   max_vel_ = sqrtf(vx_max * vx_max + vy_max * vy_max);
   min_vel_ = min_sgn * sqrtf(vx_min * vx_min + vy_max * vy_max);
+
+    std::cout<<"[ContraintCritic] Critic initialized"<<std::endl;
 }
 
-template <typename MapView>
-void ConstraintCritic<MapView>::score(CriticData & data, const MapView& map_view)
+void ConstraintCritic::score(CriticData & data, const IMapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
-
+  std::cout<<"[ConstrainCritic]: Begin to score"<<std::endl;
+    std::cout<<"[ConstrainCritic]: Weight = "<< weight_ <<std::endl;
   if (!this->enabled_) {
     return;
   }
-
   auto sgn = xt::where(data.state.vx > 0.0, 1.0, -1.0);
   auto vel_total = sgn * xt::sqrt(data.state.vx * data.state.vx + data.state.vy * data.state.vy);
   auto out_of_max_bounds_motion = xt::maximum(vel_total - max_vel_, 0);
@@ -61,6 +62,7 @@ void ConstraintCritic<MapView>::score(CriticData & data, const MapView& map_view
         std::move(out_of_min_bounds_motion) +
         std::move(out_of_turning_rad_motion)) *
         data.model_dt, {1}, immediate) * weight_, power_);
+      std::cout<<"[ConstraintCritic]: Scored"<<std::endl;
     return;
   }
 
@@ -69,6 +71,7 @@ void ConstraintCritic<MapView>::score(CriticData & data, const MapView& map_view
       (std::move(out_of_max_bounds_motion) +
       std::move(out_of_min_bounds_motion)) *
       data.model_dt, {1}, immediate) * weight_, power_);
+    std::cout<<"[ConstraintCritic]: Scored"<<std::endl;
 }
 
 }  // namespace mppi::critics

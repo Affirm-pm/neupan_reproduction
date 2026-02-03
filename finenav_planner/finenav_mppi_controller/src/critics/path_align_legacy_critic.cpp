@@ -19,29 +19,27 @@
 
 namespace mppi::critics
 {
-
+using namespace nav2_mppi_controller;
 using namespace xt::placeholders;  // NOLINT
 using xt::evaluation_strategy::immediate;
 
-template <typename MapView>
-void PathAlignLegacyCritic<MapView>::initialize()
+void PathAlignLegacyCritic::initialize()
 {
   // 直接赋默认值，不动态加载
   power_ = 1;
   weight_ = 10.0f;
   max_path_occupancy_ratio_ = 0.07f;
-  offset_from_furthest_ = 20u;
+  offset_from_furthest_ = 5u;
   trajectory_point_step_ = 4u;
   threshold_to_consider_ = 0.5f;
   use_path_orientations_ = false;
+  enabled_ = true;
 }
 
-template <typename MapView>
-void PathAlignLegacyCritic<MapView>::score(CriticData & data, const MapView& map_view)
+void PathAlignLegacyCritic::score(CriticData & data, const IMapView& map_view)
 {
   // Don't apply close to goal, let the goal critics take over
-  if (!this->enabled_ ||
-    utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
+  if (!this->enabled_ )
   {
     return;
   }
@@ -92,7 +90,7 @@ void PathAlignLegacyCritic<MapView>::score(CriticData & data, const MapView& map
       min_dist_sq = std::numeric_limits<float>::max();
       min_s = 0;
 
-      // Find closest path segment to the trajectory point
+      // Find closest path segment to the trajectory point<MapView>
       for (size_t s = 0; s < path_segments_count - 1; s++) {
         xt::xtensor_fixed<float, xt::xshape<2>> P;
         dx = P_x(s) - T_x(t, p);
@@ -110,7 +108,7 @@ void PathAlignLegacyCritic<MapView>::score(CriticData & data, const MapView& map
       }
 
       // The nearest path point to align to needs to be not in collision, else
-      // let the obstacle critic take over in this region due to dynamic obstacles
+      // let the obstacle critic take over in this region due to dynam<MapView>ic obstacles
       if (min_s != 0 && (*data.path_pts_valid)[min_s]) {
         summed_dist += sqrtf(min_dist_sq);
       }
@@ -120,6 +118,7 @@ void PathAlignLegacyCritic<MapView>::score(CriticData & data, const MapView& map
   }
 
   data.costs += xt::pow(std::move(cost) * weight_, power_);
+    std::cout<<"[PathAlignLegacyCritic]: Scored"<<std::endl;
 }
 
 }  // namespace mppi::critics

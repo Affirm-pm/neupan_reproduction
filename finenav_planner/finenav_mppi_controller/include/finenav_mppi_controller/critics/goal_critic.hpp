@@ -27,8 +27,8 @@ namespace mppi::critics
  * @class mppi::critics::ConstraintCritic
  * @brief Critic objective function for driving towards goal
  */
-template <typename MapView>
-class GoalCritic : public CriticFunction<MapView>
+
+class GoalCritic : public CriticFunction
 {
 public:
   /**
@@ -41,7 +41,7 @@ public:
    *
    * @param costs [out] add reference cost values to this tensor
    */
-  void score(CriticData & data, const MapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   unsigned int power_{0};

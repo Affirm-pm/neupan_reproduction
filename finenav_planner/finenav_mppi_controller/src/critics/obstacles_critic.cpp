@@ -17,9 +17,9 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void ObstaclesCritic<MapView>::initialize()
+void ObstaclesCritic::initialize()
 {
   // 直接赋默认值，不动态加载
   consider_footprint_ = false;
@@ -29,6 +29,7 @@ void ObstaclesCritic<MapView>::initialize()
   collision_cost_ = 10000.0f;
   collision_margin_distance_ = 0.10f;
   near_goal_distance_ = 0.5f;
+  enabled_ = true;
 
   // possibly_inscribed_cost_ = findCircumscribedCost(costmap_ros_);
 }
@@ -40,7 +41,7 @@ void ObstaclesCritic<MapView>::initialize()
 //  bool inflation_layer_found = false;
 //
 //  const double circum_radius = costmap->getLayeredCostmap()->getCircumscribedRadius();
-//  if (static_cast<float>(circum_radius) == circumscribed_radius_) {
+//  if (static_cast<float>(circum_radius) == ci<MapView>rcumscribed_radius_) {
 //    // early return if footprint size is unchanged
 //    return circumscribed_cost_;
 //  }
@@ -94,8 +95,8 @@ void ObstaclesCritic<MapView>::initialize()
 //  return dist_to_obj;
 //}
 
-template <typename MapView>
-void ObstaclesCritic<MapView>::score(CriticData & data, const MapView& map_view)
+
+void ObstaclesCritic::score(CriticData & data, const IMapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
   if (!this->enabled_) {
@@ -135,24 +136,24 @@ void ObstaclesCritic<MapView>::score(CriticData & data, const MapView& map_view)
         break;
       }
 
-//      // Cannot process repulsion if inflation layer does not exist
-//      if (inflation_radius_ == 0.0f || inflation_scale_factor_ == 0.0f) {
-//        continue;
-//      }
-//
-//      const float dist_to_obj = distanceToObstacle(pose_cost);
-//
-//      // Let near-collision trajectory points be punished severely
-//      if (dist_to_obj < collision_margin_distance_) {
-//        traj_cost += (collision_margin_distance_ - dist_to_obj);
-//      } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
-//        repulsive_cost[i] += (inflation_radius_ - dist_to_obj);
-//      }
-//    }
-//
-//    if (!trajectory_collide) {all_trajectories_collide = false;}
-//    raw_cost[i] = trajectory_collide ? collision_cost_ : traj_cost;   //在膨胀层不存在的时候多余的逻辑
-  }
+    //   // Cannot process repulsion if inflation layer does not exist
+    //   if (inflation_radius_ == 0.0f || inflation_scale_factor_ == 0.0f) {
+    //     continue;
+    //   }
+    //
+    //   const float dist_to_obj = distanceToObstacle(pose_cost);
+    //
+    //   // Let near-collision trajectory points be punished severely
+    //   if (dist_to_obj < collision_margin_distance_) {
+    //     traj_cost += (collision_margin_distance_ - dist_to_obj);
+    //   } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
+    //     repulsive_cost[i] += (inflation_radius_ - dist_to_obj);
+    //   }
+    }
+
+    if (!trajectory_collide) {all_trajectories_collide = false;
+    raw_cost[i] = trajectory_collide ? collision_cost_ : traj_cost;   //在膨胀层不存在的时候多余的逻辑
+    }
 
   data.costs += xt::pow(
     (critical_weight_ * raw_cost) +
@@ -160,6 +161,7 @@ void ObstaclesCritic<MapView>::score(CriticData & data, const MapView& map_view)
     power_);
   data.fail_flag = all_trajectories_collide;
   }
+    std::cout<<"[ObstaclesCritic]: Scored"<<std::endl;
 }
 /**
   * @brief Checks if cost represents a collision

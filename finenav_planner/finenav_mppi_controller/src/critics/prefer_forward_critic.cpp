@@ -16,22 +16,21 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void PreferForwardCritic<MapView>::initialize()
+void PreferForwardCritic::initialize()
 {
   // 直接赋默认值，不动态加载
   power_ = 1;
   weight_ = 5.0f;
   threshold_to_consider_ = 0.5f;
+  enabled_ = true;
 }
 
-template <typename MapView>
-void PreferForwardCritic<MapView>::score(CriticData & data, const MapView& map_view)
+void PreferForwardCritic::score(CriticData & data, const IMapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
-  if (!this->enabled_ ||
-    utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
+  if (!this->enabled_ )
   {
     return;
   }
@@ -41,6 +40,7 @@ void PreferForwardCritic<MapView>::score(CriticData & data, const MapView& map_v
     xt::sum(
       std::move(
         backward_motion) * data.model_dt, {1}, immediate) * weight_, power_);
+    std::cout<<"[PreferForwardCritic]: Scored"<<std::endl;
 }
 
 }  // namespace mppi::critics

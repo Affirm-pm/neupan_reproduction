@@ -16,17 +16,17 @@
 
 namespace mppi
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void CriticManager<MapView>::on_configure(
-  rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name, const std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> & critics)
+void CriticManager::on_configure(
+    std::vector<std::unique_ptr<critics::CriticFunction>> & critics)
 {
-    parent_ = parent;
-    name_ = name;
-    auto node = parent_.lock();
-    logger_ = node->get_logger();
-    critics_ = std::move(critics);
 
+    critics_ = std::move(critics);
+    std::cout<<"[Critic Manager] Critic Manager configured;"<<std::endl;
+    for (size_t q = 0; q < critics_.size(); q++) {
+        critics_[q]->initialize();
+    }
 //  getParams();   //TODO:参数加载
 }
 
@@ -38,22 +38,21 @@ void CriticManager<MapView>::on_configure(
 //}
 
 
-template <typename MapView>
-std::string CriticManager<MapView>::getFullName(const std::string & name)
+std::string CriticManager::getFullName(const std::string & name)
 {
   return "mppi::critics::" + name;
 }
 
-template <typename MapView>
-void CriticManager<MapView>::evalTrajectoriesScores(
-  CriticData & data, const MapView& map_view) const
+void CriticManager::evalTrajectoriesScores(
+  CriticData & data, const IMapView& map_view) const
 {
-  for (size_t q = 0; q < critics_.size(); q++) {
-    if (data.fail_flag) {
-      break;
+    std::cout<<"[Critic Manager]: Scoring..."<<std::endl;
+    for (size_t q = 0; q < critics_.size(); q++) {
+        if (data.fail_flag) {
+            break;
+        }
+        critics_[q]->score(data,map_view);
     }
-    critics_[q]->score(data,map_view);
-  }
 }
 
 }  // namespace mppi

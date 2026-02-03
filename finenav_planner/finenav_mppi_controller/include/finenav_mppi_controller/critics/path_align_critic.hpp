@@ -29,8 +29,8 @@ namespace mppi::critics
  * difficult (or impossible) to deviate in the presence of dynamic obstacles.
  * This is an important critic to tune and consider in tandem with Obstacle.
  */
-template <typename MapView>
-class PathAlignCritic : public CriticFunction<MapView>
+
+class PathAlignCritic : public CriticFunction
 {
 public:
   /**
@@ -43,7 +43,7 @@ public:
    *
    * @param costs [out] add reference cost values to this tensor
    */
-  void score(CriticData & data, const MapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   size_t offset_from_furthest_{0};

@@ -19,9 +19,9 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void PathAngleCritic<MapView>::initialize()
+void PathAngleCritic::initialize()
 {
   // 直接从父节点参数取固定默认值（原来注释给出的默认）
   float vx_min = -0.35f;
@@ -38,6 +38,7 @@ void PathAngleCritic<MapView>::initialize()
   threshold_to_consider_ = 0.5f;
   max_angle_to_furthest_ = 1.2f;
   forward_preference_ = true;
+  enabled_ = true;
 
   if (!reversing_allowed_) {
     forward_preference_ = true;
@@ -49,8 +50,7 @@ void PathAngleCritic<MapView>::initialize()
 //    power_, weight_, reversing_allowed_ ? "allowed." : "not allowed.");
 }
 
-template <typename MapView>
-void PathAngleCritic<MapView>::score(CriticData & data, const MapView& map_view)
+void PathAngleCritic::score(CriticData & data, const IMapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
   if (!this->enabled_) {
@@ -88,8 +88,10 @@ void PathAngleCritic<MapView>::score(CriticData & data, const MapView& map_view)
     const auto corrected_yaws = xt::abs(
       utils::shortest_angular_distance(data.trajectories.yaws, yaws_between_points_corrected));
     data.costs += xt::pow(xt::mean(corrected_yaws, {1}, immediate) * weight_, power_);
+      std::cout<<"[PathAngleCritic]: Scored"<<std::endl;
   } else {
     data.costs += xt::pow(xt::mean(yaws, {1}, immediate) * weight_, power_);
+      std::cout<<"[PathAngleCritic]: Scored"<<std::endl;
   }
 }
 

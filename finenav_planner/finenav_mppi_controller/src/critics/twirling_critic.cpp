@@ -16,17 +16,18 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void TwirlingCritic<MapView>::initialize()
+void TwirlingCritic::initialize()
 {
   // 直接赋默认值，不动态加载
   power_ = 1;
   weight_ = 10.0f;
+  enabled_ = true;
 }
 
-template <typename MapView>
-void TwirlingCritic<MapView>::score(CriticData & data, const MapView& map_view)
+
+void TwirlingCritic::score(CriticData & data, const IMapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
   if (!this->enabled_)
@@ -36,6 +37,7 @@ void TwirlingCritic<MapView>::score(CriticData & data, const MapView& map_view)
 
   const auto wz = xt::abs(data.state.wz);
   data.costs += xt::pow(xt::mean(wz, {1}, immediate) * weight_, power_);
+    std::cout<<"[TwirlingCritic]: Scored"<<std::endl;
 }
 
 }  // namespace mppi::critics

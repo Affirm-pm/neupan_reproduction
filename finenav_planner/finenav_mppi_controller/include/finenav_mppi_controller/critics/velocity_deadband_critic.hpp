@@ -21,6 +21,7 @@
 #include "finenav_mppi_controller/models/state.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
+
 namespace mppi::critics
 {
 
@@ -28,8 +29,8 @@ namespace mppi::critics
  * @class mppi::critics::VelocityDeadbandCritic
  * @brief Critic objective function for enforcing feasible constraints
  */
-template <typename MapView>
-class VelocityDeadbandCritic : public CriticFunction<MapView>
+
+class VelocityDeadbandCritic : public CriticFunction
 {
 public:
   /**
@@ -42,7 +43,7 @@ public:
    *
    * @param costs [out] add reference cost values to this tensor
    */
-  void score(CriticData & data, const MapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   unsigned int power_{0};

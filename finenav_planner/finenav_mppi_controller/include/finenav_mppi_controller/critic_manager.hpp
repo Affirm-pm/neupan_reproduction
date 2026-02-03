@@ -18,7 +18,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <pluginlib/class_loader.hpp>
 #include <xtensor/xtensor.hpp>
 
 #include "geometry_msgs/msg/twist.hpp"
@@ -31,6 +30,19 @@
 #include "finenav_mppi_controller/critic_data.hpp"
 #include "finenav_mppi_controller/critic_function.hpp"
 
+#include "finenav_mppi_controller/critics/constraint_critic.hpp"
+#include "finenav_mppi_controller/critics/cost_critic.hpp"
+#include "finenav_mppi_controller/critics/goal_angle_critic.hpp"
+#include "finenav_mppi_controller/critics/goal_critic.hpp"
+#include "finenav_mppi_controller/critics/obstacles_critic.hpp"
+#include "finenav_mppi_controller/critics/path_align_critic.hpp"
+#include "finenav_mppi_controller/critics/path_align_legacy_critic.hpp"
+#include "finenav_mppi_controller/critics/path_angle_critic.hpp"
+#include "finenav_mppi_controller/critics/path_follow_critic.hpp"
+#include "finenav_mppi_controller/critics/prefer_forward_critic.hpp"
+#include "finenav_mppi_controller/critics/twirling_critic.hpp"
+#include "finenav_mppi_controller/critics/velocity_deadband_critic.hpp"
+
 namespace mppi
 {
 
@@ -38,7 +50,7 @@ namespace mppi
  * @class mppi::CriticManager
  * @brief Manager of objective function plugins for scoring trajectories
  */
-template <typename MapView>
+
 class CriticManager
 {
 public:
@@ -60,14 +72,14 @@ public:
     * @param dynamic_parameter_handler Parameter handler object
     */
   void on_configure(
-    rclcpp_lifecycle::LifecycleNode::WeakPtr parent, const std::string & name, const std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> & critics);
+     std::vector<std::unique_ptr<critics::CriticFunction>> & critics);
 
   /**
     * @brief Score trajectories by the set of loaded critic functions
     * @param CriticData Struct of necessary information to pass to the critic functions
     */
 
-  void evalTrajectoriesScores(CriticData & data ,const MapView& map_view) const;
+  void evalTrajectoriesScores(CriticData & data ,const nav2_mppi_controller::IMapView& map_view) const;
 
 protected:
   /**
@@ -84,7 +96,7 @@ protected:
 protected:
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
   std::string name_;
-  std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> critics_;
+  std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
 
   rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
 };

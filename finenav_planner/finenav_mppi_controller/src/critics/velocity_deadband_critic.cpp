@@ -16,13 +16,14 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void VelocityDeadbandCritic<MapView>::initialize()
+void VelocityDeadbandCritic::initialize()
 {
   // 直接赋默认值，不动态加载
   power_ = 1;
   weight_ = 35.0f;
+  enabled_ = true;
 
   // Recast double to float
   std::vector<double> deadband_velocities{0.0, 0.0, 0.0};
@@ -38,8 +39,8 @@ void VelocityDeadbandCritic<MapView>::initialize()
 //      << deadband_velocities_.at(2) << "]");
 }
 
-template <typename MapView>
-void VelocityDeadbandCritic<MapView>::score(CriticData & data, const MapView& map_view)
+
+void VelocityDeadbandCritic::score(CriticData & data, const IMapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
 

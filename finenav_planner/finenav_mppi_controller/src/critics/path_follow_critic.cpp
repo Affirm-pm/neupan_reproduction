@@ -19,19 +19,19 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void PathFollowCritic<MapView>::initialize()
+void PathFollowCritic::initialize()
 {
   // 直接赋默认值，不动态加载
   threshold_to_consider_ = 1.4f;
   offset_from_furthest_ = 6u;
   power_ = 1;
   weight_ = 5.0f;
+  enabled_ = true;
 }
 
-template <typename MapView>
-void PathFollowCritic<MapView>::score(CriticData & data, const MapView& map_view)
+void PathFollowCritic::score(CriticData & data, const IMapView& map_view)
 {
   if (!this->enabled_ || data.path.x.shape(0) < 2 ||
     utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
@@ -44,7 +44,6 @@ void PathFollowCritic<MapView>::score(CriticData & data, const MapView& map_view
 
   auto offseted_idx = std::min(
     *data.furthest_reached_path_point + offset_from_furthest_, path_size);
-
   // Drive to the first valid path point, in case of dynamic obstacles on path
   // we want to drive past it, not through it
   bool valid = false;
@@ -66,6 +65,7 @@ void PathFollowCritic<MapView>::score(CriticData & data, const MapView& map_view
     xt::pow(last_y - path_y, 2));
 
   data.costs += xt::pow(weight_ * std::move(dists), power_);
+    std::cout<<"[PathFollowCritic]: Scored"<<std::endl;
 }
 
 }  // namespace mppi::critics

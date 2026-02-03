@@ -19,7 +19,6 @@
 #include <memory>
 
 //#include "finenav_mppi_controller/tools/path_handler.hpp"
-#include "finenav_mppi_controller/optimizer.hpp"
 //#include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
 #include "finenav_mppi_controller/models/constraints.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
@@ -34,6 +33,8 @@
 #include "finenav_util/trajectory_io/data_packet.hpp"
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_mppi_controller/finenav_mppi_controller_params.hpp"
+#include "finenav_mppi_controller/optimizer.hpp"
+#include "finenav_mppi_controller/map_view_def.hpp"
 
 namespace nav2_mppi_controller
 {
@@ -44,7 +45,8 @@ using namespace mppi;  // NOLINT
  * @class mppi::MPPIController
  * @brief Main plugin controller for MPPI Controller
  */
-template <typename MapView>
+
+
 class MPPIController
 {
 public:
@@ -66,14 +68,36 @@ public:
         .time = false
     };
 
+    using IMapView = nav2_mppi_controller::IMapView;
     using Context = finenav::PlanningContext<MPPIController>;
-    using Result  = std::optional<finenav::OutputDataT<MPPIController>>;
     using ConfigType = finenav_mppi_controller::Params;
-    void configure(const ConfigType &params) {
-        if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}    //TODO:初始化过程需要完善
+    void configure(const ConfigType& params) {              //应该传入参数 因测试先去除
+
+        registerCritic(std::make_unique<critics::ConstraintCritic>());
+        registerCritic(std::make_unique<critics::CostCritic>());
+        registerCritic(std::make_unique<critics::GoalAngleCritic>());
+        registerCritic(std::make_unique<critics::GoalCritic>());
+        registerCritic(std::make_unique<critics::ObstaclesCritic>());
+        registerCritic(std::make_unique<critics::PathAlignCritic>());
+        registerCritic(std::make_unique<critics::PathAlignLegacyCritic>());
+        registerCritic(std::make_unique<critics::PathAngleCritic>());
+        registerCritic(std::make_unique<critics::PathFollowCritic>());
+        registerCritic(std::make_unique<critics::PreferForwardCritic>());
+        registerCritic(std::make_unique<critics::TwirlingCritic>());
+        registerCritic(std::make_unique<critics::VelocityDeadbandCritic>());
+
+        std::cout<<"[nav2_mppi_controller] Critics registered. Initializing optimizer..."<<std::endl;
+        std::cout<<"[nav2_mppi_controller] Number of critics: "<<critics_.size()<<std::endl;
+
+
+        optimizer_.initialize(
+            "MPPIController",
+            critics_
+            );
+       //TODO:初始化过程需要完善
     }
 
-    bool plan(const MapView& map_view, const finenav::PlanningContext<MPPIController>& ctx, finenav_msgs::msg::Trajectory& output_traj) {
+    bool plan(const IMapView& map_view, const finenav::PlanningContext<MPPIController>& ctx, finenav_msgs::msg::Trajectory& output_traj) {
 
         auto start_pose = ctx.start_pose;
         auto goal_pose = ctx.goal_pose;
@@ -91,10 +115,12 @@ public:
 
         computeVelocityCommands(
             start_pose_stamped,
-            geometry_msgs::msg::Twist(),
+            geometry_msgs::msg::Twist(),  //TODO: 传入实际速度，先用零速度占位
             map_view
             );
         // 装填输出轨迹
+
+        std::cout<<"[nav2_mppi_controller] Planning completed. Going to fill output trajectory."<<std::endl;
 
     // 获取最优轨迹
     auto optimized_trajectory = optimizer_.getOptimizedTrajectory();
@@ -114,30 +140,9 @@ public:
         geometry_msgs::msg::Pose pose;
         pose.position.x = optimized_trajectory(i, 0);
         pose.position.y = optimized_trajectory(i, 1);
-        if (optimized_trajectory.shape(1) > 2) {
-            pose.position.z = optimized_trajectory(i, 2);
-        }
+        pose.position.z = 0.0;
         output_traj.poses.push_back(pose);
-
-        // 如果有速度、加速度或时间数据，填充对应字段
-        if (optimized_trajectory.shape(1) > 3) {
-            geometry_msgs::msg::Twist twist;
-            twist.linear.x = optimized_trajectory(i, 3);
-            twist.linear.y = optimized_trajectory(i, 4);
-            output_traj.twists.push_back(twist);
-        }
-        if (optimized_trajectory.shape(1) > 5) {
-            geometry_msgs::msg::Accel accel;
-            accel.linear.x = optimized_trajectory(i, 5);
-            accel.linear.y = optimized_trajectory(i, 6);
-            output_traj.accels.push_back(accel);
-        }
-        if (optimized_trajectory.shape(1) > 7) {
-            builtin_interfaces::msg::Duration time;
-            time.sec = static_cast<int32_t>(optimized_trajectory(i, 7));
-            time.nanosec = static_cast<uint32_t>((optimized_trajectory(i, 7) - time.sec) * 1e9);
-            output_traj.time_from_start.push_back(time);
-        }
+        // 如果需要，可以在这里填充速度、加速度和时间戳等信息
     }
 
         return true;
@@ -157,7 +162,7 @@ public:
     */
   void setSpeedLimit(const double & speed_limit, const bool & percentage);
 
-  void registerCritic(std::unique_ptr<critics::CriticFunction<MapView>> critic) {
+  void registerCritic (std::unique_ptr<critics::CriticFunction> critic) {
         critics_.push_back(std::move(critic));        //TODO:在初始化的时候要换成注册
   }
 
@@ -178,10 +183,11 @@ protected:
     * @param robot_speed Robot speed
     * @param goal_checker Pointer to the goal checker for awareness if completed task
     */
-	geometry_msgs::msg::TwistStamped computeVelocityCommands(
+	// geometry_msgs::msg::TwistStamped computeVelocityCommands(
+    void computeVelocityCommands(
     	const geometry_msgs::msg::PoseStamped & robot_pose,
   		const geometry_msgs::msg::Twist & robot_speed,
-    	const MapView& map_view)
+    	const IMapView& map_view)
 	{
 	#ifdef BENCHMARK_TESTING
   	auto start = std::chrono::system_clock::now();
@@ -190,13 +196,13 @@ protected:
 	//  if (clock_->now() - last_time_called_ > rclcpp::Duration::from_seconds(reset_period_)) {
 	//    reset();
 	//  }
-  	last_time_called_ = clock_->now();
+//  	last_time_called_ = clock_->now();
 
 //  	std::lock_guard<std::mutex> param_lock(*parameters_handler_->getLock());
 //
 
-
-  	geometry_msgs::msg::TwistStamped cmd =
+    std::cout<<"[nav2_mppi_controller] Computing velocity commands..."<<std::endl;
+  	// geometry_msgs::msg::TwistStamped cmd =
     optimizer_.evalControl(robot_pose, robot_speed, path_ ,map_view);
 
 	#ifdef BENCHMARK_TESTING
@@ -218,32 +224,32 @@ protected:
 //    	}
 //    	visualize(std::move(path_, cmd.header.stamp, z_height);
 //  	}
-  	return cmd;
+  	// return cmd;
 }
 
-  std::string name_;
-  rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
-  rclcpp::Clock::SharedPtr clock_;
-  rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
-  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+//  std::string name_;
+//  rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
+//  rclcpp::Clock::SharedPtr clock_;
+//  rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
+//  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   nav_msgs::msg::Path path_;
 
 //  std::unique_ptr<ParametersHandler> parameters_handler_;
-  Optimizer<MapView> optimizer_;
+  Optimizer optimizer_;
 //  TrajectoryVisualizer trajectory_visualizer_;
-  std::vector<std::unique_ptr<critics::CriticFunction<MapView>>> critics_;
+  std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
 
   bool visualize_;
 
   double reset_period_;
   // Last time computeVelocityCommands was called
-  rclcpp::Time last_time_called_;
+//  rclcpp::Time last_time_called_;
 };
 
 }  // namespace nav2_mppi_controller
 
 
-FINENAV_REGISTER_TEMPLATE_ALGO_CONFIG(nav2_mppi_controller::MPPIController, finenav_mppi_controller)
+FINENAV_REGISTER_ALGO_CONFIG(nav2_mppi_controller::MPPIController, finenav_mppi_controller)
 
 
 #endif  // NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_

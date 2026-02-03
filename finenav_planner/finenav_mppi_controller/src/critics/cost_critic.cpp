@@ -19,9 +19,9 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void CostCritic<MapView>::initialize()
+void CostCritic::initialize()
 {
   // 以前通过参数服务器加载的参数，改为直接赋固定值（无需动态加载）
   consider_footprint_ = false;
@@ -31,6 +31,7 @@ void CostCritic<MapView>::initialize()
   collision_cost_ = 1000000.0f;
   near_goal_distance_ = 0.5f;
   inflation_layer_name_ = std::string("");
+  enabled_ = true;
 
   // Normalized by cost value to pu t in same regime as other weights
   weight_ /= 254.0f;
@@ -43,8 +44,8 @@ void CostCritic<MapView>::initialize()
 }
 
 
-template <typename MapView>
-void CostCritic<MapView>::score(CriticData & data,const MapView& map_view)
+
+void CostCritic::score(CriticData & data,const IMapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
   if (!this->enabled_) {
@@ -99,6 +100,7 @@ void CostCritic<MapView>::score(CriticData & data,const MapView& map_view)
 
   data.costs += xt::pow((weight_ * repulsive_cost / traj_len), power_);
   data.fail_flag = all_trajectories_collide;
+  std::cout<<"[CostCritic]: Scored"<<std::endl;
 }
 
 

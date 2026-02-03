@@ -23,7 +23,7 @@
 
 namespace mppi::critics
 {
-
+using namespace nav2_mppi_controller;
 /**
  * @class mppi::critics::ConstraintCritic
  * @brief Critic objective function for avoiding obstacles, allowing it to deviate off
@@ -31,8 +31,8 @@ namespace mppi::critics
  * between path-tracking and dynamic obstacle avoidance capabilities as desirable for a
  * particular application
  */
-template <typename MapView>
-class ObstaclesCritic : public CriticFunction<MapView>
+
+class ObstaclesCritic : public CriticFunction
 {
 public:
   /**
@@ -45,7 +45,7 @@ public:
    *
    * @param costs [out] add obstacle cost values to this tensor
    */
-    void score(CriticData & data,const MapView& map_view) override;
+    void score(CriticData & data,const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   /**
@@ -53,10 +53,10 @@ protected:
     * @param cost Costmap cost
     * @return bool if in collision
     */
-    bool inCollision(float cost, const MapView& map_view) const
+    bool inCollision(float cost, const nav2_mppi_controller::IMapView& map_view) const
     {
         bool is_tracking_unknown =
-          map_view->isTrackingUnknown();
+          map_view.isTrackingUnknown();
 
         switch (static_cast<unsigned char>(cost)) {
             // 使用具体数值替代 nav2_costmap_2d 宏
@@ -79,14 +79,16 @@ protected:
     * @param theta theta of pose
     * @return Collision information at pose
     */
-    CollisionCost costAtPose(float x, float y, float theta, const MapView& map_view)
+    CollisionCost costAtPose(float x, float y, float theta, const nav2_mppi_controller::IMapView& map_view)
     {
         CollisionCost collision_cost;
         float & cost = collision_cost.cost;
         collision_cost.using_footprint = false;
         unsigned int x_i, y_i;
 
-        cost = map_view.getCost(x_i, y_i);
+      cost = map_view.getCost(finenav::Position3D{static_cast<double>(x_i),
+                                                  static_cast<double>(y_i),
+                                                  0.0});
 
         if (consider_footprint_ )
         {

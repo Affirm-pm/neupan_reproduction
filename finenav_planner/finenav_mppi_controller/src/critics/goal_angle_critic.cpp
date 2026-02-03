@@ -16,15 +16,15 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
-template <typename MapView>
-void GoalAngleCritic<MapView>::initialize()
+void GoalAngleCritic::initialize()
 {
   // 直接赋固定默认值（不再从参数服务器读取）
   power_ = 1;
   weight_ = 3.0f;
   threshold_to_consider_ = 0.5f;
-
+  enabled_ = true;
   // RCLCPP_INFO(
   //   logger_,
   //   "GoalAngleCritic instantiated with %d power, %f weight, and %f "
@@ -32,11 +32,9 @@ void GoalAngleCritic<MapView>::initialize()
   //   power_, weight_, threshold_to_consider_);
 }
 
-template <typename MapView>
-void GoalAngleCritic<MapView>::score(CriticData & data, const MapView& map_view)
+void GoalAngleCritic::score(CriticData & data, const IMapView& map_view)
 {
-  if (!this->enabled_ || !utils::withinPositionGoalTolerance(
-      threshold_to_consider_, data.state.pose.pose, data.path))
+  if (!this->enabled_ )    //TODO:旧有的检查与距离的逻辑会触发，为什么
   {
     return;
   }
@@ -47,6 +45,7 @@ void GoalAngleCritic<MapView>::score(CriticData & data, const MapView& map_view)
   data.costs += xt::pow(
     xt::mean(xt::abs(utils::shortest_angular_distance(data.trajectories.yaws, goal_yaw)), {1}) *
     weight_, power_);
+  std::cout<<"[GoalAngleCritic]: Scored"<<std::endl;
 }
 
 }  // namespace mppi::critics

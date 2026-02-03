@@ -26,8 +26,8 @@ namespace mppi::critics
  * @class mppi::critics::ConstraintCritic
  * @brief Critic objective function for driving towards goal orientation
  */
-template <typename MapView>
-class GoalAngleCritic : public CriticFunction<MapView>
+
+class GoalAngleCritic : public CriticFunction
 {
 public:
   /**
@@ -41,7 +41,7 @@ public:
    *
    * @param costs [out] add goal angle cost values to this tensor
    */
-  void score(CriticData & data, const MapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   float threshold_to_consider_{0};

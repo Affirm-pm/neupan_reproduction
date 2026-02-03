@@ -19,10 +19,10 @@
 #include <memory>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
-#include "finenav_control_layers/local_layer.hpp"
 
 //#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/critic_data.hpp"
+#include "finenav_mppi_controller/map_view_def.hpp"
 
 namespace mppi::critics
 {
@@ -41,7 +41,7 @@ struct CollisionCost
  * @class mppi::critics::CriticFunction
  * @brief Abstract critic objective function to score trajectories
  */
-template <typename MapView>
+
 class CriticFunction
 {
 public:
@@ -63,7 +63,7 @@ public:
     * @param costmap_ros Costmap2DROS object of environment
     * @param dynamic_parameter_handler Parameter handler object
     */
-  void on_configure(
+  void on_configure(                     //TODO:去除了动态参数加载还有这个函数的必要吗
     rclcpp_lifecycle::LifecycleNode::WeakPtr parent,
     const std::string & parent_name,
     const std::string & name)
@@ -79,7 +79,7 @@ public:
     * @brief Main function to score trajectory
     * @param data Critic data to use in scoring
     */
-  virtual void score(CriticData & data, const MapView& map_view) = 0;
+  virtual void score(CriticData & data, const nav2_mppi_controller::IMapView & map_view) = 0;
 
   /**
     * @brief Initialize critic
@@ -87,7 +87,7 @@ public:
   virtual void initialize() = 0;
 
   /**
-    * @brief Get name of critic
+    * @brief Get name of critic#include "finenav_control_layers/local_layer.hpp"
     */
   std::string getName()
   {

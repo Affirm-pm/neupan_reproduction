@@ -19,6 +19,7 @@
 #include "finenav_mppi_controller/models/state.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
+
 namespace mppi::critics
 {
 
@@ -30,8 +31,8 @@ namespace mppi::critics
  * This is an important critic to tune and consider in tandem with Obstacle.
  * This is the initial 'Legacy' implementation before replacement Oct 2023.
  */
-template <typename MapView>
-class PathAlignLegacyCritic : public CriticFunction<MapView>
+
+class PathAlignLegacyCritic : public CriticFunction
 {
 public:
   /**
@@ -44,7 +45,7 @@ public:
    *
    * @param costs [out] add reference cost values to this tensor
    */
-  void score(CriticData & data, const MapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   size_t offset_from_furthest_{0};

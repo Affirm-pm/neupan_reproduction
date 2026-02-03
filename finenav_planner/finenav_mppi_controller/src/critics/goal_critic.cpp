@@ -17,17 +17,17 @@
 
 namespace mppi::critics
 {
+using namespace nav2_mppi_controller;
 
 using xt::evaluation_strategy::immediate;
 
-template <typename MapView>
-void GoalCritic<MapView>::initialize()
+void GoalCritic::initialize()
 {
   // 直接赋默认值，不动态加载
   power_ = 1;
   weight_ = 5.0f;
   threshold_to_consider_ = 1.4f;
-
+    enabled_ = true;
 //  auto getParam = parameters_handler_->getParamGetter(name_);
 //
 //  getParam(power_, "cost_power", 1);
@@ -39,11 +39,9 @@ void GoalCritic<MapView>::initialize()
 //    power_, weight_);
 }
 
-template <typename MapView>
-void GoalCritic<MapView>::score(CriticData & data, const MapView& map_view)
+void GoalCritic::score(CriticData & data, const IMapView& map_view)
 {
-  if (!this->enabled_ || !utils::withinPositionGoalTolerance(
-      threshold_to_consider_, data.state.pose.pose, data.path))
+  if (!this->enabled_ )
   {
     return;
   }
@@ -61,6 +59,7 @@ void GoalCritic<MapView>::score(CriticData & data, const MapView& map_view)
     xt::pow(traj_y - goal_y, 2));
 
   data.costs += xt::pow(xt::mean(dists, {1}, immediate) * weight_, power_);
+    std::cout<<"[GoalCritic]: Scored"<<std::endl;
 }
 
 }  // namespace mppi::critics

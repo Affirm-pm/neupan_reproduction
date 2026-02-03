@@ -34,14 +34,12 @@ namespace nav2_mppi_controller
 //  trajectory_visualizer_.visualize(std::move(transformed_plan));
 //}
 
-template <typename MapView>
-void MPPIController<MapView>::setPlan(const nav_msgs::msg::Path & path)
+void MPPIController::setPlan(const nav_msgs::msg::Path & path)
 {
     path_ = path;
 }
 
-template <typename MapView>
-void MPPIController<MapView>::setSpeedLimit(const double & speed_limit, const bool & percentage)
+void MPPIController::setSpeedLimit(const double & speed_limit, const bool & percentage)
 {
   optimizer_.setSpeedLimit(speed_limit, percentage);
 }

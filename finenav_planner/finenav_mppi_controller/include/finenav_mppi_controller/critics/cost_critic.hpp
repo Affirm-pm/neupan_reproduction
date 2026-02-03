@@ -23,6 +23,8 @@
 #include "finenav_mppi_controller/models/state.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
+
+
 namespace mppi::critics
 {
 
@@ -30,8 +32,8 @@ namespace mppi::critics
  * @class mppi::critics::CostCritic
  * @brief Critic objective function for avoiding obstacles using costmap's inflated cost
  */
-template <typename MapView>
-class CostCritic : public CriticFunction<MapView>
+
+class CostCritic : public CriticFunction
 {
 public:
   /**
@@ -44,7 +46,7 @@ public:
    *
    * @param costs [out] add obstacle cost values to this tensor
    */
-  void score(CriticData & data, const MapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
 protected:
   /**
@@ -55,7 +57,7 @@ protected:
     * @param theta theta of pose
     * @return bool if in collision
     */
-    bool inCollision(float cost, float x, float y, float theta, const MapView& map_view)
+    bool inCollision(float cost, float x, float y, float theta, const nav2_mppi_controller::IMapView& map_view)
     {
         return map_view.isCollision(cost, x, y, theta, consider_footprint_);
     }
@@ -67,9 +69,12 @@ protected:
     * @param y Y of pose
     * @return Collision information at pose
     */
-    float costAtPose(float x, float y, const MapView& map_view)
+    float costAtPose(float x, float y, const nav2_mppi_controller::IMapView& map_view)
     {
-        return map_view.getCost(x, y, 0);
+        // 使用 Position3D 作为参数传入 map_view
+        return map_view.getCost(finenav::Position3D{static_cast<double>(x),
+                                                    static_cast<double>(y),
+                                                    0.0});
     }
 
   /**
