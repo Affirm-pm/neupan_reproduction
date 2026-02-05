@@ -5,10 +5,9 @@
 #pragma once
 
 #include <rclcpp/rclcpp.hpp>
-#include "behaviortree_ros2/bt_action_node.hpp"
 
 #include "finenav_msgs/action/compute_plan.hpp"
-
+#include "thirdparty/bt_action_node.hpp"
 
 
 namespace finenav {

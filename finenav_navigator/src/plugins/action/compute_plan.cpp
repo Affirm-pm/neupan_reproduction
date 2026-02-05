@@ -33,5 +33,7 @@ BT::NodeStatus ComputePlanAction::onResultReceived(const WrappedResult& result) 
     return BT::NodeStatus::FAILURE;
 }
 
-
 }
+
+#include "thirdparty/plugins.hpp"
+CreateRosNodePlugin(finenav::ComputePlanAction, "ComputePlan");
