@@ -10,8 +10,10 @@
 #include <filesystem>
 
 #include <rclcpp/rclcpp.hpp>
+
 #include "behaviortree_cpp/bt_factory.h"
-#include "behaviortree_ros2/ros_node_params.hpp"
+#include "thirdparty/ros_node_params.hpp"
+#include "thirdparty/plugins.hpp"
 
 namespace finenav {
 
@@ -24,10 +26,17 @@ class BehaviorTreeEngine {
 
     void registerBehaviorTrees(const std::vector<std::string>& tree_dirs);
 
+    bool loadPlugin(BT::BehaviorTreeFactory& factory, const std::filesystem::path& file_path, BT::RosNodeParams params);
+
+    bool loadBehaviorTree(BT::BehaviorTreeFactory& factory, const std::filesystem::path& file_path);
+
     BT::BehaviorTreeFactory& factory();
 
   private:
-    rclcpp::Node::WeakPtr node_;
+    // Expect "[package_name]/.../..."
+    static std::pair<std::string, std::string> parseParamPath(const std::string& input);
+
+    rclcpp::Logger logger_;
     BT::BehaviorTreeFactory factory_;
     BT::RosNodeParams ros_params_;
 
