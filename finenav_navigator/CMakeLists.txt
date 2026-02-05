@@ -73,6 +73,8 @@ install(TARGETS finenav_compute_plan_behavior
         RUNTIME DESTINATION bin
 )
 
+install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
+
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)
 #    ament_find_gtest()
