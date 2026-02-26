@@ -24,7 +24,7 @@ using namespace nav2_mppi_controller;
 void CostCritic::initialize()
 {
   // 以前通过参数服务器加载的参数，改为直接赋固定值（无需动态加载）
-  consider_footprint_ = false;
+//  consider_footprint_ = false;
   power_ = 1;
   weight_ = 3.81f;
   critical_cost_ = 300.0f;

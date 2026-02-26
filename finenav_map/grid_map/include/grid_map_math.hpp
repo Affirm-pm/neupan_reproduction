@@ -181,7 +181,6 @@ inline void getDifferenceSet(const Index& index_shift, const Size& size, const S
             }
         }
     };
-
     // 依次判断 z,x,y
     if (a_min.z() <= b_max.z() && b_max.z() <= a_max.z()) {
         add_range(a_min.x(), a_max.x(), a_min.y(), a_max.y(), b_max.z() + 1, a_max.z());
