@@ -3,89 +3,67 @@
 // All rights reserved.
 
 #include "finenav_collision_model/obb_collision_model.hpp"
-#include <cmath>
+#include <stdexcept>
 
 namespace finenav {
 
-//构造函数,初始化OBB的尺寸和边界，定义机器人坐标系下OBB的最小边界和最大边界，policy存储碰撞检测策略参数
-//local_pose存储OBB在机器人坐标系下的位姿，通过传入的size参数计算出OBB在机器人坐标系下的最小边界和最大边界
 OBBCollisionModel::OBBCollisionModel(const Vector3D& size, const Pose& local_pose, const Policy& policy)
     : size_(size), local_pose_(local_pose), policy_(policy) {
+    if (policy_.step <= 0.0) {
+        throw std::invalid_argument(
+            "OBBCollisionModel: policy.step must be greater than 0");
+    }
     min_ = -size_ / 2.0;
-    max_ = size_ / 2.0;
+    max_ =  size_ / 2.0;
 }
 
-//检测函数
-bool OBBCollisionModel::checkCollision(const Pose& pose, const GridMap<float>& map) const {
-    double res = map.getResolution();
+void OBBCollisionModel::precompute(const Pose& pose) {
+    cached_points_.clear();
 
-    // 防止分辨率为 0 导致死循环
-    if (res <= 0.0) {
-        return false;
-    }
+    const double step = policy_.step;
 
-    // 遍历 OBB 的 6 个面进行采样
-    // 采样步长设为地图分辨率，目前选择将面上的所有点都视作采样点
-    double step = res;
+    // 预先合并两次变换：OBB 本体系 → 机器人本体系 → 世界系
+    // 避免在每个采样点重复计算 pose * local_pose_
+    const Pose body_to_world = pose * local_pose_;
 
-    // 定义 3 个轴的方向索引
+    // 遍历 OBB 的 6 个面（每个轴各 min/max 两个面）进行表面采样
+    // 轴旋转技巧：对于固定轴 axis，u = (axis+1)%3，v = (axis+2)%3
     for (int axis = 0; axis < 3; ++axis) {
-        int u_axis = (axis + 1) % 3;
-        int v_axis = (axis + 2) % 3;
+        const int u_axis = (axis + 1) % 3;
+        const int v_axis = (axis + 2) % 3;
 
-        // 每个轴有两个面 (min 和 max)
-        for (double side : {min_[axis], max_[axis]}) {
+        for (const double side : {min_[axis], max_[axis]}) {
             for (double u = min_[u_axis]; u <= max_[u_axis]; u += step) {
                 for (double v = min_[v_axis]; v <= max_[v_axis]; v += step) {
                     Position3D local_pt;
-                    local_pt[axis] = side;
+                    local_pt[axis]   = side;
                     local_pt[u_axis] = u;
                     local_pt[v_axis] = v;
-
-                    // 先经过 OBB 局部位姿（本体系内旋转/偏移），再变换到世界坐标系
-                    Position3D world_pt = pose * local_pose_ * local_pt;
-
-                    if (isPointCollide(world_pt, map)) {
-                        return true;
-                    }
+                    cached_points_.push_back(body_to_world * local_pt);
                 }
-                // 确保包含 v 方向最大边界点（浮点步进可能漏掉 max_v）
-                Position3D local_pt_edge;
-                local_pt_edge[axis] = side;
-                local_pt_edge[u_axis] = u;
-                local_pt_edge[v_axis] = max_[v_axis];
-                if (isPointCollide(pose * local_pose_ * local_pt_edge, map)) return true;
+                // 补全 v 方向最大边界（浮点步进可能漏掉 max_v）
+                Position3D edge_v;
+                edge_v[axis]   = side;
+                edge_v[u_axis] = u;
+                edge_v[v_axis] = max_[v_axis];
+                cached_points_.push_back(body_to_world * edge_v);
             }
-            // 确保包含 u 方向最大边界线（浮点步进可能漏掉 max_u 整列）
+            // 补全 u 方向最大边界列（浮点步进可能漏掉 max_u）
             for (double v = min_[v_axis]; v <= max_[v_axis]; v += step) {
-                Position3D local_pt_edge;
-                local_pt_edge[axis] = side;
-                local_pt_edge[u_axis] = max_[u_axis];
-                local_pt_edge[v_axis] = v;
-                if (isPointCollide(pose * local_pose_ * local_pt_edge, map)) return true;
+                Position3D edge_u;
+                edge_u[axis]   = side;
+                edge_u[u_axis] = max_[u_axis];
+                edge_u[v_axis] = v;
+                cached_points_.push_back(body_to_world * edge_u);
             }
+            // 补全 (max_u, max_v) 角点（edge_v 和 edge_u 均未覆盖此交叉点）
+            Position3D corner;
+            corner[axis]   = side;
+            corner[u_axis] = max_[u_axis];
+            corner[v_axis] = max_[v_axis];
+            cached_points_.push_back(body_to_world * corner);
         }
     }
-
-    return false;
-}
-
-bool OBBCollisionModel::isPointCollide(const Position3D& pos, const GridMap<float>& map) const {
-    if (!map.isInside(pos)) {
-        return policy_.out_of_bounds_as_collision; // 可配置：地图外是否视为碰撞
-    }
-
-    try {
-        float val = map.atPosition(pos);
-        // 大于threshold且不是NaN的值视为碰撞
-        if (!std::isnan(val) && val > policy_.occupancy_threshold) {
-            return true;
-        }
-    } catch (const std::out_of_range&) {
-        return false;
-    }
-
-    return false;
 }
 
 } // namespace finenav

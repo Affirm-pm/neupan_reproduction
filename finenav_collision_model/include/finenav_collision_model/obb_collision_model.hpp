@@ -5,73 +5,102 @@
 #pragma once
 
 #include "finenav_collision_model/collision_model.hpp"
+#include <stdexcept>
+#include <vector>
 
 namespace finenav {
 
 /**
- * @brief OBBCollisionModel 的碰撞检测策略参数
- * @param occupancy_threshold      栅格占用判定阈值，栅格值大于此值时认为碰撞，默认为 0.0
- * @param out_of_bounds_as_collision 地图外的点是否视为碰撞，默认为 false（视为自由空间）
+ * @brief OBBCollisionModel 的参数
+ * @param step 表面采样步长（单位：m），控制碰撞检测的空间精度，由用户决定，default=0.1m
  */
 struct OBBCollisionPolicy {
-    float occupancy_threshold       = 0.0f;  ///< 栅格占用判定阈值，栅格值大于此值时认为碰撞
-    bool  out_of_bounds_as_collision = false; ///< 地图外的点是否视为碰撞
+    double step = 0.1; ///< 表面采样步长（m）
 };
 
 /**
  * @brief OBB (Oriented Bounding Box) 碰撞模型
- * @details 描述一个包围盒，并提供基于表面采样点的碰撞检测
+ *
+ * @details
+ * 碰撞判断完全由调用方通过 CollisionRule 提供，因此可适配任意地图类型
+ * 碰撞检测分为两阶段以支持各种场景:
+ *   - precompute(pose)：       在机器人位姿改变时调用一次，缓存世界系下的所有采样点。
+ *   - checkCollisionHF(rule)：  [HF] High Fre，直接遍历缓存点，零几何变换开销，需先调用 precompute。
+ *   - checkCollisionLF(pose, rule)：[LF] Low Fre，内部自动 precompute，适用于普通调用。
  */
-// TODO: 建议不要用继承机制，至少现在不要
-// 原因：在用户的视角里，他在编译期就能确定创建一个哪一个具体的 CollisionModel 对象，而不需要对它进行动态管理
-// 这会让未来的其他碰撞检测工具僵化，比如我们之前提到的神奇的 RC-ESDF 方案
+class OBBCollisionModel {
+public:
+    using Policy = OBBCollisionPolicy;
 
-class OBBCollisionModel : public CollisionModel {
-    public:
-        using Policy = OBBCollisionPolicy;
+    /**
+     * @brief 构造函数
+     * @param size      OBB 在三个轴方向的尺寸 (L, W, H)
+     * @param local_pose OBB 在机器人本体坐标系下的位姿（含旋转和偏移），默认为单位变换
+     * @param policy    采样策略参数
+     */
+    explicit OBBCollisionModel(const Vector3D& size,
+                               const Pose& local_pose = Pose::Identity(),
+                               const Policy& policy   = Policy{});
 
-        /**
-         * @brief 构造函数
-         * @param size OBB 在三个轴方向的尺寸 (L, W, H)
-         * @param local_pose OBB 在机器人本体坐标系下的位姿（含旋转和偏移），默认为单位变换
-         * @param policy 碰撞检测策略参数
-         */
-        explicit OBBCollisionModel(const Vector3D& size,
-                                const Pose& local_pose = Pose::Identity(),
-                                const Policy& policy = Policy{});
+    /**
+     * @brief 预计算并缓存世界坐标系下的所有表面采样点
+     * @details 只需在机器人位姿改变时调用一次。
+     *          调用后可多次调用 checkCollisionHF(rule) 而无需重复几何变换。
+     * @param pose 机器人在世界坐标系下的位姿
+     */
+    void precompute(const Pose& pose);
 
-        /**
-         * @brief 检查碰撞
-         * @param pose 机器人在世界坐标系下的位姿
-         * @param map 栅格地图
-         * @return 如果发生碰撞返回true，否则返回false
-         */
-        // TODO: 性能相关，碰撞检测机制分为两步：(1) 找到世界坐标系下的所有检测点； (2) 遍历所有点进行检测
-        // (1) 只有在机器人移动的时候才需要计算一次
-        // 而 (2) 需要进行高频检测 【e.g. 调用一次 MPPI 规划时，规划器在此时的机器人位置和地图下，产生数千条轨迹，每条轨迹都要高频访问地图进行检测】
-        // 目前 (1) 和 （2）完全耦合，导致每次调用都需要变换一次box，然后步进计算 point
-        // 应当把两步分开，并且在内部维护一个缓存，存储当前 box 对应的所有 point
-        bool checkCollision(const Pose& pose, const GridMap<float>& map) const override;
+    /**
+     * @brief [HF] High Fre 碰撞检测（使用缓存采样点）
+     * @details 调用前须先调用 precompute(pose)，适用于 MPPI 等需要极低延迟的场景。
+     * @note 此接口为 const。checkCollisionLF 因内部调用 precompute（修改缓存）而为非 const，
+     *       须在对象变为 const 之前由外部提前调用 precompute(pose) 填充缓存。
+     * @tparam CR 满足 CollisionRule concept 的可调用对象
+     * @param rule 碰撞判断函数，由调用方提供
+     * @return 任意一个采样点触发 rule 返回 true 时，整体返回 true
+     */
+    template <CollisionRule CR>
+    bool checkCollisionHF(CR&& rule) const;
 
-    private:
-        /**
-         * @brief 检查某个点是否与地图碰撞 (内部工具)
-         * @param pos 世界坐标系下的点
-         * @param map 栅格地图
-         * @return 如果点所在栅格被占用返回true
-         */
-        bool isPointCollide(const Position3D& pos, const GridMap<float>& map) const;
+    /**
+     * @brief [LF] Low Fre 碰撞检测（自动 precompute）
+     * @details 内部自动调用 precompute(pose) 后执行检测，无需手动管理缓存，适用于普通场景。
+     * @tparam CR 满足 CollisionRule concept 的可调用对象
+     * @param pose 机器人在世界坐标系下的位姿
+     * @param rule 碰撞判断函数
+     * @return 如果发生碰撞返回 true
+     */
+    template <CollisionRule CR>
+    bool checkCollisionLF(const Pose& pose, CR&& rule);
 
-        Vector3D size_;       ///< OBB 尺寸
-        Vector3D min_;        ///< OBB 自身坐标系下的最小边界
-        Vector3D max_;        ///< OBB 自身坐标系下的最大边界
-        Pose     local_pose_; ///< OBB 在机器人本体坐标系下的位姿（旋转 + 偏移）
-        Policy   policy_;     ///< 碰撞检测策略参数
+private:
+    Vector3D size_;       ///< OBB 尺寸
+    Vector3D min_;        ///< OBB 自身坐标系下的最小边界
+    Vector3D max_;        ///< OBB 自身坐标系下的最大边界
+    Pose     local_pose_; ///< OBB 在机器人本体坐标系下的位姿（旋转 + 偏移）
+    Policy   policy_;     ///< 采样策略参数
 
-        // TODO： box表面采样的步长应该是自己维护的属性，不应该直接向 map.getResolution() 索取
-        // 原因：它代表了“用户希望以多高的精度进行检测”，而不应该由地图来反向决定，我们把这个值的合理性交给用户
-
-
+    std::vector<Position3D> cached_points_; ///< 缓存的世界系采样点（由 precompute 填充）
 };
+
+template <CollisionRule CR>
+bool OBBCollisionModel::checkCollisionHF(CR&& rule) const {
+    if (cached_points_.empty()) {
+        throw std::logic_error(
+            "OBBCollisionModel::checkCollisionHF called before precompute");
+    }
+    for (const auto& pt : cached_points_) {
+        if (rule(pt)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template <CollisionRule CR>
+bool OBBCollisionModel::checkCollisionLF(const Pose& pose, CR&& rule) {
+    precompute(pose);
+    return checkCollisionHF(std::forward<CR>(rule));
+}
 
 } // namespace finenav
