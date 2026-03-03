@@ -24,9 +24,9 @@ struct OBBCollisionPolicy {
  * @details
  * 碰撞判断完全由调用方通过 CollisionRule 提供，因此可适配任意地图类型
  * 碰撞检测分为两阶段以支持各种场景:
- *   - precompute(pose)：       在机器人位姿改变时调用一次，缓存世界系下的所有采样点。
- *   - checkCollisionHF(rule)：  [HF] High Fre，直接遍历缓存点，零几何变换开销，需先调用 precompute。
- *   - checkCollisionLF(pose, rule)：[LF] Low Fre，内部自动 precompute，适用于普通调用。
+ *   - precompute(pose)：          在机器人位姿改变时调用一次，缓存世界系下的所有采样点。
+ *   - checkCollision(rule)：      高频接口，直接遍历缓存点，零几何变换开销，需先调用 precompute。
+ *   - checkCollision(pose, rule)：低频接口，内部自动 precompute，适用于普通调用。
  */
 class OBBCollisionModel {
 public:
@@ -45,25 +45,25 @@ public:
     /**
      * @brief 预计算并缓存世界坐标系下的所有表面采样点
      * @details 只需在机器人位姿改变时调用一次。
-     *          调用后可多次调用 checkCollisionHF(rule) 而无需重复几何变换。
+     *          调用后可多次调用 checkCollision(rule) 而无需重复几何变换。
      * @param pose 机器人在世界坐标系下的位姿
      */
     void precompute(const Pose& pose);
 
     /**
-     * @brief [HF] High Fre 碰撞检测（使用缓存采样点）
+     * @brief 高频碰撞检测（使用缓存采样点）
      * @details 调用前须先调用 precompute(pose)，适用于 MPPI 等需要极低延迟的场景。
-     * @note 此接口为 const。checkCollisionLF 因内部调用 precompute（修改缓存）而为非 const，
+     * @note 此接口为 const。低频重载因内部调用 precompute（修改缓存）而为非 const，
      *       须在对象变为 const 之前由外部提前调用 precompute(pose) 填充缓存。
      * @tparam CR 满足 CollisionRule concept 的可调用对象
      * @param rule 碰撞判断函数，由调用方提供
      * @return 任意一个采样点触发 rule 返回 true 时，整体返回 true
      */
     template <CollisionRule CR>
-    bool checkCollisionHF(CR&& rule) const;
+    bool checkCollision(CR&& rule) const;
 
     /**
-     * @brief [LF] Low Fre 碰撞检测（自动 precompute）
+     * @brief 低频碰撞检测（自动 precompute）
      * @details 内部自动调用 precompute(pose) 后执行检测，无需手动管理缓存，适用于普通场景。
      * @tparam CR 满足 CollisionRule concept 的可调用对象
      * @param pose 机器人在世界坐标系下的位姿
@@ -71,7 +71,7 @@ public:
      * @return 如果发生碰撞返回 true
      */
     template <CollisionRule CR>
-    bool checkCollisionLF(const Pose& pose, CR&& rule);
+    bool checkCollision(const Pose& pose, CR&& rule);
 
 private:
     Vector3D size_;       ///< OBB 尺寸
@@ -84,10 +84,10 @@ private:
 };
 
 template <CollisionRule CR>
-bool OBBCollisionModel::checkCollisionHF(CR&& rule) const {
+bool OBBCollisionModel::checkCollision(CR&& rule) const {
     if (cached_points_.empty()) {
         throw std::logic_error(
-            "OBBCollisionModel::checkCollisionHF called before precompute");
+            "OBBCollisionModel::checkCollision called before precompute");
     }
     for (const auto& pt : cached_points_) {
         if (rule(pt)) {
@@ -98,9 +98,9 @@ bool OBBCollisionModel::checkCollisionHF(CR&& rule) const {
 }
 
 template <CollisionRule CR>
-bool OBBCollisionModel::checkCollisionLF(const Pose& pose, CR&& rule) {
+bool OBBCollisionModel::checkCollision(const Pose& pose, CR&& rule) {
     precompute(pose);
-    return checkCollisionHF(std::forward<CR>(rule));
+    return checkCollision(std::forward<CR>(rule));
 }
 
 } // namespace finenav

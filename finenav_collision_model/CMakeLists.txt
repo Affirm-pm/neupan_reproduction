@@ -11,8 +11,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ament_cmake_auto REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(finenav_core REQUIRED)
-find_package(finenav_map_grid_map REQUIRED)
 
 ament_auto_find_build_dependencies()
 
@@ -29,15 +27,15 @@ target_link_libraries(${PROJECT_NAME}
     Eigen3::Eigen
 )
 
-ament_target_dependencies(${PROJECT_NAME}
-    finenav_core
-    finenav_map_grid_map
-)
 
-# if (BUILD_TESTING)
-#     find_package(ament_cmake_gtest REQUIRED)
-#     ament_find_gtest()
-#     add_subdirectory(test)
-# endif ()
+
+if (BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+    ament_find_gtest()
+    ament_add_gtest(${PROJECT_NAME}_test
+        test/obb_collision_model_test.cpp
+    )
+    target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME})
+endif ()
 
 ament_auto_package()
