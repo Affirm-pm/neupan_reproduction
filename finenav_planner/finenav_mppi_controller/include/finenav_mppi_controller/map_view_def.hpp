@@ -21,6 +21,8 @@ namespace nav2_mppi_controller {
         // 获取地图索引处的代价值（根据项目需要可改为返回 unsigned char 等）
         virtual int getCost(const finenav::Position3D& pos ) const = 0;
 
+        virtual int getCost(const finenav::Index& index) const = 0;
+
         // 足迹类型，通常为局部点集 (x,y)
         using Footprint = std::vector<std::pair<float, float>>;
 
