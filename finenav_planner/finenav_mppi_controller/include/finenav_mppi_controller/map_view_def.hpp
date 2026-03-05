@@ -13,10 +13,10 @@ namespace nav2_mppi_controller {
 
         virtual bool considerFootprint() const = 0;
 
-//        virtual bool isCollision(
-//          float cost,
-//          float x, float y, float theta,
-//          bool consider_footprint) const = 0;
+        // virtual bool isCollision(
+        //   float cost,
+        //   float x, float y, float theta,
+        //   bool consider_footprint) const = 0;
 
         // 获取地图索引处的代价值（根据项目需要可改为返回 unsigned char 等）
         virtual int getCost(const finenav::Position3D& pos ) const = 0;

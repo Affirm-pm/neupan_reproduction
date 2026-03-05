@@ -7,10 +7,12 @@
 //
 #include "finenav_mppi_controller/controller.hpp"
 #include "finenav_core/math_types.hpp"
+#include "finenav_collision_model/obb_collision_model.hpp"
 #include "grid_map.hpp"
 
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/point_field.hpp>
+#include <opencv2/opencv.hpp>
 
 #include <geometry_msgs/msg/point.hpp>
 #include <memory>
@@ -33,7 +35,7 @@ sensor_msgs::msg::PointCloud2 trajectoryToPointCloud(const finenav_msgs::msg::Tr
     pointcloud.fields.resize(3);
 
     // x字段
-    pointcloud.fields[0].name = "x";#
+    pointcloud.fields[0].name = "x";
     pointcloud.fields[0].offset = 0;
     pointcloud.fields[0].datatype = sensor_msgs::msg::PointField::FLOAT32;
     pointcloud.fields[0].count = 1;
@@ -120,7 +122,7 @@ nav_msgs::msg::Path createStraightPath() {
 class SimpleGridMapView : public nav2_mppi_controller::IMapView {
 public:
     explicit SimpleGridMapView(finenav::GridMap<float>& map) : map_(map) {
-        passability_array_ = Eigen::ArrayXXf::Constant(map_.getSize().x(), map_.getSize().y(), 0.0);
+        cv::Mat passability_image_ = cv::Mat::zeros(map_.getSize().x(), map_.getSize().y(), CV_8UC1);
     }
 
     // 是否将未知区域视为可通行（占位实现）
@@ -132,107 +134,107 @@ public:
         return consider_footprint_;
     }
 
-//    bool isCollision(
-//        float cost,
-//        float x, float y, float theta,
-//        bool consider_footprint) const override {
-//
-//        float pose_cost = cost;
-//
-//        double cost = footprintCostAtPose(x, y, theta, getRobotFootprint());
-//
-//        switch (static_cast<unsigned char>(cost)) {
-//            // 使用具体数值替代 nav2_costmap_2d 宏
-//            // NO_INFORMATION = 255, LETHAL_OBSTACLE = 254, INSCRIBED_INFLATED_OBSTACLE = 253
-//            case 254: // LETHAL_OBSTACLE
-//                return true;
-//            case 253: // INSCRIBED_INFLATED_OBSTACLE
-//                return consider_footprint_ ? false : true;
-//            case 255: // NO_INFORMATION
-//                return is_tracking_unknown ? false : true;
-//        }
-//
-//        return false;
-//    }
+    // bool isCollision(
+    //     float cost,
+    //     float x, float y, float theta,
+    //     bool consider_footprint) const override {
+    //
+    //     float pose_cost = cost;
+    //
+    //     double pose_cost = footprintCostAtPose(x, y, theta, getRobotFootprint());
+    //
+    //     switch (static_cast<unsigned char>(cost)) {
+    //         // 使用具体数值替代 nav2_costmap_2d 宏
+    //         // NO_INFORMATION = 255, LETHAL_OBSTACLE = 254, INSCRIBED_INFLATED_OBSTACLE = 253
+    //         case 254: // LETHAL_OBSTACLE
+    //             return true;
+    //         case 253: // INSCRIBED_INFLATED_OBSTACLE
+    //             return consider_footprint_ ? false : true;
+    //         case 255: // NO_INFORMATION
+    //             return is_tracking_unknown ? false : true;
+    //     }
+    //
+    //     return false;
+    // }
     // 根据位置返回代价值（占位实现）
     int getCost(const finenav::Position3D& pos) const override {
         return getCost(map_.getIndex(finenav::Position{pos.x(), pos.y(), pos.z()}));
     }
 
     int getCost(const finenav::Index& index) const override {
-        return passability_array_(index.x() + map_.getSize().x() / 2, index.y() + map_.getSize().y() / 2);   // TODO：将0/1的可通行性值转换为代价值
+        return passability_image_.at<uchar>(index.y() + map_.getSize().y() / 2, index.x() + map_.getSize().x() / 2);  // TODO：将0/1的可通行性值转换为代价值
     }
 
 
-//    // 返回机器人当前足迹（占位实现，返回内部存储的空足迹）
-//    const Footprint & getRobotFootprint() const override {
-//        return footprint_;
-//    }
+    // 返回机器人当前足迹（占位实现，返回内部存储的空足迹）
+    const Footprint & getRobotFootprint() const override {
+        return footprint_;
+    }
 
     // 在给定位姿处使用足迹计算代价（占位实现）
-//    float footprintCostAtPose(
-//        float x, float y, float theta,
-//        const Footprint & footprint) const override
-//    {
-//        double cos_th = cos(theta);
-//        double sin_th = sin(theta);
-//        Footprint oriented_footprint;
-//        oriented_footprint.reserve(footprint.size());
-//        std::pair<float, float> new_pt;
-//        for (unsigned int i = 0; i < footprint.size(); ++i) {
-//            new_pt.first = x + (footprint[i].first * cos_th - footprint[i].second * sin_th);
-//            new_pt.second = y + (footprint[i].first * sin_th + footprint[i].second * cos_th);
-//            oriented_footprint.push_back(new_pt);
-//        }
-//        return footprintCost(oriented_footprint);
-//    }
+   float footprintCostAtPose(
+       float x, float y, float theta,
+       const Footprint & footprint) const override
+   {
+       double cos_th = cos(theta);
+       double sin_th = sin(theta);
+       Footprint oriented_footprint;
+       oriented_footprint.reserve(footprint.size());
+       std::pair<float, float> new_pt;
+       for (unsigned int i = 0; i < footprint.size(); ++i) {
+           new_pt.first = x + (footprint[i].first * cos_th - footprint[i].second * sin_th);
+           new_pt.second = y + (footprint[i].first * sin_th + footprint[i].second * cos_th);
+           oriented_footprint.push_back(new_pt);
+       }
+       return footprintCost(oriented_footprint);
+   }
 
-//    double footprintCost(const Footprint & footprint) const {
-//
-//        // 将第一个点转换为地图坐标
-//        if (map_.isInside(finenav::Position{footprint[0].first, footprint[0].second, 0.0})) {
-//            return 254;
-//        }
-//
-//        double footprint_cost = 0.0;
-//        // 遍历足迹的每条边（线段）
-//        for (unsigned int i = 0; i < footprint.size() - 1; ++i) {
-//            // 将下一个点转换为地图坐标
-//            if (map_.isInside(finenav::Position{footprint[i+1].first, footprint[i+1].second, 0.0})) {
-//                return 254;
-//            }
-//
-//            // 计算这条线段上的最大成本
-//            footprint_cost = std::max(lineCost(footprint[i].first, footprint[i+1].first, footprint[i].second, footprint[i+1].second), footprint_cost);
-//
-//            // 如果已经发现致命障碍，提前返回
-//            if (footprint_cost == 254) {
-//                return footprint_cost;
-//            }
-//        }
-//
-//        // 连接最后一个点到第一个点（闭合多边形）
-//        return std::max(lineCost(footprint[3].first, footprint[0].first, footprint[3].second, footprint[0].second), footprint_cost);
-//    }
+   double footprintCost(const Footprint & footprint) const {
 
-//    double lineCost(double x0, double x1, double y0, double y1) const {
-//        // 这里可以实现 Bresenham 算法来遍历线段上的点，并返回最大代价
-//        // 目前占位实现，直接返回0
-//        std::vector<finenav::Index> grid_line_indices;
-//        map_.rayCast(finenav::Position{x0, y0, 0.0}, finenav::Position{x1, y1, 0.0}, grid_line_indices);
-//        double max_cost = 0.0;
-//        for (const auto& index : grid_line_indices) {
-//            if (map_.isInside(index)) {
-//                double cost = static_cast<double>(getCost(index));
-//                max_cost = std::max(max_cost, cost);
-//                if (max_cost == 254) {
-//                    break; // 提前退出，如果已经达到致命障碍#
-//                }
-//            }
-//        }
-//        return max_cost;
-//
-//    }
+       // 将第一个点转换为地图坐标
+       if (map_.isInside(finenav::Position{footprint[0].first, footprint[0].second, 0.0})) {
+           return 254;
+       }
+
+       double footprint_cost = 0.0;
+       // 遍历足迹的每条边（线段）
+       for (unsigned int i = 0; i < footprint.size() - 1; ++i) {
+           // 将下一个点转换为地图坐标
+           if (map_.isInside(finenav::Position{footprint[i+1].first, footprint[i+1].second, 0.0})) {
+               return 254;
+           }
+
+           // 计算这条线段上的最大成本
+           footprint_cost = std::max(lineCost(footprint[i].first, footprint[i+1].first, footprint[i].second, footprint[i+1].second), footprint_cost);
+
+           // 如果已经发现致命障碍，提前返回
+           if (footprint_cost == 254) {
+               return footprint_cost;
+           }
+       }
+
+       // 连接最后一个点到第一个点（闭合多边形）
+       return std::max(lineCost(footprint[3].first, footprint[0].first, footprint[3].second, footprint[0].second), footprint_cost);
+   }
+
+   double lineCost(double x0, double x1, double y0, double y1) const {
+       // 这里可以实现 Bresenham 算法来遍历线段上的点，并返回最大代价
+       // 目前占位实现，直接返回0
+       std::vector<finenav::Index> grid_line_indices;
+       map_.rayCast(finenav::Position{x0, y0, 0.0}, finenav::Position{x1, y1, 0.0}, grid_line_indices);
+       double max_cost = 0.0;
+       for (const auto& index : grid_line_indices) {
+           if (map_.isInside(index)) {
+               double cost = static_cast<double>(getCost(index));
+               max_cost = std::max(max_cost, cost);
+               if (max_cost == 254) {
+                   break; // 提前退出，如果已经达到致命障碍#
+               }
+           }
+       }
+       return max_cost;
+
+   }
 
     std::string getBaseFrameID() const override {
         return "map";
@@ -249,7 +251,6 @@ public:
     }
 }
     void TerrainAnalysis(float robot_pose_z) {
-
         const float ROBOT_HEIGHT = 1.0;  // 根据您的机器人实际高度设置
         const float MAX_GRADIENT = 0.5;  // 根据您的需求设置最大坡度
 
@@ -266,65 +267,92 @@ public:
         for (int x = sizeX_min; x <= sizeX_max; ++x) {
             for (int y = sizeY_min; y <= sizeY_max; ++y) {
                 std::span<float> voxels_along_z_indices = getVoxelsAlongZ(x, y);
- 			//这里可能要对获取的z值做一些处理，滤除掉特殊值之类
+                //这里可能要对获取的z值做一些处理，滤除掉特殊值之类
 
                 float nearest_ground = std::numeric_limits<float>::max();
                 if (!voxels_along_z_indices.empty()) {
-                	for (size_t i = 0; i < voxels_along_z_indices.size() - 1; ++i) {
-				    	if(voxels_along_z_indices[i + 1] - voxels_along_z_indices[i] > ROBOT_HEIGHT) {
-                        	if (fabs(voxels_along_z_indices[i] - robot_pose_z) < fabs(nearest_ground - robot_pose_z)) {
-                            	nearest_ground = voxels_along_z_indices[i];
-                       		}
-                    	}
-                	}
-                	if (fabs(voxels_along_z_indices.back() - robot_pose_z) < fabs(nearest_ground - robot_pose_z)) {
-                    	nearest_ground = voxels_along_z_indices.back();
-                	}
-            	}else{
+                    for (size_t i = 0; i < voxels_along_z_indices.size() - 1; ++i) {
+                        if(voxels_along_z_indices[i + 1] - voxels_along_z_indices[i] > ROBOT_HEIGHT) {
+                            if (fabs(voxels_along_z_indices[i] - robot_pose_z) < fabs(nearest_ground - robot_pose_z)) {
+                                nearest_ground = voxels_along_z_indices[i];
+                            }
+                        }
+                    }
+                    if (fabs(voxels_along_z_indices.back() - robot_pose_z) < fabs(nearest_ground - robot_pose_z)) {
+                        nearest_ground = voxels_along_z_indices.back();
+                    }
+                }else{
                     nearest_ground = NAN;
-            	}
+                }
                 ground_array(x + half_size_x, y + half_size_y) = nearest_ground;  // 记录ground NAN代表全空 其他值为有效值
             }
         }
 
         // TODO：对ground_array(x, y)进行中值滤波
 
-    for (size_t x = 0; x < size_x; ++x) {
-        for (size_t y = 0; y < size_y; ++y) {
-            // 定义四个方向：上、右、下、左
-            int dx[4] = {0, 1, 0, -1};
-            int dy[4] = {1, 0, -1, 0};
+        for (size_t x = 0; x < size_x; ++x) {
+            for (size_t y = 0; y < size_y; ++y) {
+                // 定义四个方向：上、右、下、左
+                int dx[4] = {0, 1, 0, -1};
+                int dy[4] = {1, 0, -1, 0};
 
-            float terrain_value = 0;                    // 默认可通行
-            float current_ground = ground_array(x, y);  //读取当前格子的ground高度
-            // 检查当前格子本身
-            if (!std::isnan(current_ground)) {  // 当前格子有ground
-                                                // 检查与周围四个格子的梯度
-                for (int i = 0; i < 4; ++i) {
-                    int nx = x + dx[i];
-                    int ny = y + dy[i];
+                float terrain_value = 0;                    // 默认可通行
+                float current_ground = ground_array(x, y);  //读取当前格子的ground高度
+                // 检查当前格子本身
+                if (!std::isnan(current_ground)) {  // 当前格子有ground
+                    // 检查与周围四个格子的梯度
+                    for (int i = 0; i < 4; ++i) {
+                        int nx = x + dx[i];
+                        int ny = y + dy[i];
 
-                    // 检查是否越界
-                    if (nx < 0 || nx > size_x - 1 || ny < 0 || ny > size_y - 1) {
-                        continue;  // 忽略边界格子
-                    }
+                        // 检查是否越界
+                        if (nx < 0 || nx > size_x - 1 || ny < 0 || ny > size_y - 1) {
+                            continue;  // 忽略边界格子
+                        }
 
-                    float neighbor_ground = ground_array(nx, ny);  // 读取邻居格子的ground高度
-                                                                   // 处理特殊值
-                    if (!std::isnan(neighbor_ground)) {            // 邻居格子有ground
-                         // 计算高度差
-                        float gradient = fabs(current_ground - neighbor_ground);
-                        if (gradient > MAX_GRADIENT) {
-                            terrain_value = 1;
-                            break;
+                        float neighbor_ground = ground_array(nx, ny);  // 读取邻居格子的ground高度
+                        // 处理特殊值
+                        if (!std::isnan(neighbor_ground)) {            // 邻居格子有ground
+                            // 计算高度差
+                            float gradient = fabs(current_ground - neighbor_ground);
+                            if (gradient > MAX_GRADIENT) {
+                                terrain_value = 255;
+                                break;
+                            }
                         }
                     }
                 }
+                passability_image_.at<uchar>(y, x) = terrain_value;  // 记录可通行性
             }
-            passability_array_(x, y) = terrain_value;  // 记录可通行性
         }
     }
-}
+    cv::Mat DistanceTransform() {
+        cv::Mat passability_binary = 255 - passability_image_;  // 可通行区域为255，障碍物区域为0
+        cv::Mat distance_transform;
+        cv::distanceTransform(passability_binary, distance_transform, cv::DIST_L2, 3);
+        return distance_transform;
+    }
+
+    void MapInflation() {
+        cv::Mat distance_transform = DistanceTransform();
+        for (int x = 0; x < passability_image_.cols; ++x) {
+            for (int y = 0; y < passability_image_.rows; ++y) {
+                if (passability_image_.at<uchar>(y, x) == 0) {  // 可通行区域
+                    float distance = distance_transform.at<float>(y, x);
+                    float cost;
+                    if (distance * map_.getResolution() <= inscribed_radius_) {
+                        cost = 253;
+                    } else {
+                        // make sure cost falls off by Euclidean distance
+                        double factor =
+                            exp(-1.0 * cost_scaling_factor_ * (distance * map_.getResolution() - inscribed_radius_));
+                        cost = static_cast<unsigned char>((253 - 1) * factor);
+                    }
+                    passability_image_.at<uchar>(y, x) = static_cast<uchar>(cost);
+                }
+            }
+        }
+    }
     std::span<float> getVoxelsAlongZ(const int& x , const int& y) const {
         // 这里可以实现获取(x,y)位置上沿z轴的一串栅格数据，并返回最大代价
         // 目前占位实现，直接返回0
@@ -336,10 +364,12 @@ public:
 
 private:
     finenav::GridMap<float>& map_;
-//    Footprint footprint_;
+    Footprint footprint_;
+    double inscribed_radius_;
+    double cost_scaling_factor_;
     bool is_tracking_unknown_{false};
     bool consider_footprint_{true};
-    Eigen::ArrayXXf passability_array_;  // 存储每个格子的可通行性值（0或1）
+    cv::Mat passability_image_;  // 存储每个格子的可通行性值（0或1）
 };
 
 // 新增：一个持有 MPPIController 的 ROS2 节点
