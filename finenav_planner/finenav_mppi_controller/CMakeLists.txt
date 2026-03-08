@@ -53,7 +53,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ↓ 生成参数
 generate_parameter_library(
-        finenav_mppi_controller_params111
+        finenav_mppi_controller_params
         src/finenav_mppi_controller.yaml
 )
 # ↑ 生成参数
@@ -113,7 +113,7 @@ set(libraries mppi_controller mppi_critics)
 foreach(lib IN LISTS libraries)
   target_compile_options(${lib} PUBLIC -fconcepts)
   target_include_directories(${lib} PUBLIC ${xsimd_INCLUDE_DIRS})  #  ${OpenMP_INCLUDE_DIRS}
-  target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd finenav_mppi_controller_params111)
+  target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd finenav_mppi_controller_params)
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
 
