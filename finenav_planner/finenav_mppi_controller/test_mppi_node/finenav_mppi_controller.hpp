@@ -126,10 +126,17 @@ public:
     }
 
     // 是否将未知区域视为可通行（占位实现）
+    /**
+     * @brief 是否将未知区域视为可通行
+     * @return 如果未知区域被视为可通行，则返回true；否则返回false
+    */
     bool isTrackingUnknown() const override {
         return is_tracking_unknown_;
     }
-
+    /**
+     * @brief 是否考虑机器人足迹进行碰撞检测
+     * @return 如果考虑足迹进行碰撞检测，则返回true；否则返回false
+    */
     bool considerFootprint() const override {
         return consider_footprint_;
     }
@@ -157,10 +164,21 @@ public:
     //     return false;
     // }
     // 根据位置返回代价值（占位实现）
-    int getCost(const finenav::Position3D& pos) const override {
-        return getCost(map_.getIndex(finenav::Position{pos.x(), pos.y(), pos.z()}));
-    }
 
+    /**
+     * @brief 根据位置返回代价值
+     * @param pos 位置，包含x、y、z坐标
+     * @return 在给定位置处的代价值，通常是一个整数，表示该位置的通行成本。
+    */
+    int getCost(const finenav::Position3D& pos) const override {
+        finenav::Index index = map_.getIndex(pos);
+        return getCost(index);
+    }
+    /**
+     * @brief 根据位置返回代价值
+     * @param index 位置索引，包含x和y坐标
+     * @return 在给定位置处的代价值，通常是一个整数，表示该位置的通行成本。
+    */
     int getCost(const finenav::Index& index) const override {
         return passability_image_.at<uchar>(index.y() + map_.getSize().y() / 2, index.x() + map_.getSize().x() / 2);  // TODO：将0/1的可通行性值转换为代价值
     }
@@ -347,7 +365,7 @@ public:
                         double factor =
                             exp(-1.0 * cost_scaling_factor_ * (distance * map_.getResolution() - inscribed_radius_));
                         cost = static_cast<unsigned char>((253 - 1) * factor);
-                    }
+                    }map_.getIndex
                     passability_image_.at<uchar>(y, x) = static_cast<uchar>(cost);
                 }
             }
