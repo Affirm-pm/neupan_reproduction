@@ -1,7 +1,8 @@
 # Clion
+cmake-build-debug/
 .idea/*
 !.idea/copyright/
-cmake-build-debug/
+!.idea/codeStyles/
 
 # ROS2
 build/
