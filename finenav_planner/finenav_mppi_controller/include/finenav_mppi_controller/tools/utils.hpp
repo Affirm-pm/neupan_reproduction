@@ -40,7 +40,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
-#include "nav2_util/node_utils.hpp"
 
 #include "finenav_mppi_controller/models/optimizer_settings.hpp"
 #include "finenav_mppi_controller/models/control_sequence.hpp"
