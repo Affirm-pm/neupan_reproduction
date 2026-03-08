@@ -229,3 +229,138 @@ TEST(OBBCollisionModelTest, CacheCountIsDeterministic) {
         << "got " << count1 << " vs " << count2;
     EXPECT_GT(count1, 0) << "cached_points_ should not be empty after precompute";
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// checkCost 测试
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── 14. 未调用 precompute 直接 checkCost 抛出异常 ──────────────────────
+TEST(OBBCollisionModelTest, CheckCostBeforePrecomputeThrows) {
+    OBBCollisionModel model({1.0, 1.0, 1.0});
+    auto cost_rule = [](const Position3D&) -> int { return 10; };
+    EXPECT_THROW(model.checkCost(cost_rule), std::logic_error);
+}
+
+// ─── 15. 所有点代价相同时返回该代价 ──────────────────────────────────────
+TEST(OBBCollisionModelTest, CheckCostUniformCost) {
+    OBBCollisionModel model({1.0, 1.0, 1.0});
+    Pose pose = Pose::Identity();
+
+    auto uniform_cost = [](const Position3D&) -> int { return 42; };
+    int max_cost = model.checkCost(pose, uniform_cost);
+    EXPECT_EQ(max_cost, 42);
+}
+
+// ─── 16. 返回最大代价值 ──────────────────────────────────────────────────
+TEST(OBBCollisionModelTest, CheckCostReturnsMaximum) {
+    OBBCollisionModel model({1.0, 1.0, 1.0});
+    Pose pose = Pose::Identity();
+
+    // 根据 z 坐标计算代价，z 越大代价越高
+    auto z_based_cost = [](const Position3D& pt) -> int {
+        return static_cast<int>(pt.z() * 100);
+    };
+
+    int max_cost = model.checkCost(pose, z_based_cost);
+    // OBB {1,1,1} 的 z 范围是 [-0.5, 0.5]，最大代价应该是 50
+    EXPECT_EQ(max_cost, 50);
+}
+
+// ─── 17. 处理负代价值 ────────────────────────────────────────────────────
+TEST(OBBCollisionModelTest, CheckCostHandlesNegativeValues) {
+    OBBCollisionModel model({1.0, 1.0, 1.0});
+    Pose pose = Pose::Identity();
+
+    // 所有点返回负代价
+    auto negative_cost = [](const Position3D&) -> int { return -10; };
+    int max_cost = model.checkCost(pose, negative_cost);
+    EXPECT_EQ(max_cost, 0) << "With all negative costs, should return 0 (initial value)";
+}
+
+// ─── 18. 高频接口：precompute 后多次 checkCost ───────────────────────────
+TEST(OBBCollisionModelTest, CheckCostHighFreqInterfaceReusesCache) {
+    OBBCollisionModel model({1.0, 1.0, 1.0});
+    Pose pose = Pose::Identity();
+    model.precompute(pose);
+
+    // 多次调用不同的代价规则
+    auto cost1 = [](const Position3D& pt) -> int { return static_cast<int>(pt.x() * 100); };
+    auto cost2 = [](const Position3D& pt) -> int { return static_cast<int>(pt.y() * 100); };
+
+    int max1 = model.checkCost(cost1);
+    int max2 = model.checkCost(cost2);
+
+    EXPECT_EQ(max1, 50);  // x 最大值 0.5
+    EXPECT_EQ(max2, 50);  // y 最大值 0.5
+}
+
+// ─── 19. 基于位置的代价计算 ──────────────────────────────────────────────
+TEST(OBBCollisionModelTest, CheckCostPositionBased) {
+    OBBCollisionModel model({2.0, 2.0, 2.0});
+    Pose pose = Pose::Identity();
+
+    // 距离原点越远代价越高
+    auto distance_cost = [](const Position3D& pt) -> int {
+        return static_cast<int>(pt.norm() * 100);
+    };
+
+    int max_cost = model.checkCost(pose, distance_cost);
+    // OBB {2,2,2} 的角点距离原点最远，约为 sqrt(3) ≈ 1.732
+    EXPECT_GE(max_cost, 170);
+    EXPECT_LE(max_cost, 174);
+}
+
+// ─── 20. 移动后代价计算更新 ──────────────────────────────────────────────
+TEST(OBBCollisionModelTest, CheckCostUpdatesWithPose) {
+    OBBCollisionModel model({1.0, 1.0, 1.0});
+
+    // 位姿1：OBB 在原点
+    Pose pose1 = Pose::Identity();
+    auto x_cost = [](const Position3D& pt) -> int { return static_cast<int>(pt.x() * 100); };
+    int cost1 = model.checkCost(pose1, x_cost);
+    EXPECT_EQ(cost1, 50);  // x 最大值 0.5
+
+    // 位姿2：机器人平移到 (10, 0, 0)
+    Pose pose2 = Pose::Identity();
+    pose2.translation() = Vector3D(10.0, 0.0, 0.0);
+    int cost2 = model.checkCost(pose2, x_cost);
+    EXPECT_EQ(cost2, 1050);  // x 最大值 10.5
+}
+
+// ─── 21. 捕获外部变量的代价规则 ──────────────────────────────────────────
+TEST(OBBCollisionModelTest, CheckCostWithCapturedVariables) {
+    OBBCollisionModel model({1.0, 1.0, 1.0});
+    Pose pose = Pose::Identity();
+
+    double scale_factor = 200.0;
+    auto scaled_cost = [scale_factor](const Position3D& pt) -> int {
+        return static_cast<int>(pt.z() * scale_factor);
+    };
+
+    int max_cost = model.checkCost(pose, scaled_cost);
+    EXPECT_EQ(max_cost, 100);  // z 最大值 0.5 * 200
+}
+
+// ─── 22. 零代价情况 ──────────────────────────────────────────────────────
+TEST(OBBCollisionModelTest, CheckCostAllZero) {
+    OBBCollisionModel model({1.0, 1.0, 1.0});
+    Pose pose = Pose::Identity();
+
+    auto zero_cost = [](const Position3D&) -> int { return 0; };
+    int max_cost = model.checkCost(pose, zero_cost);
+    EXPECT_EQ(max_cost, 0);
+}
+
+// ─── 23. 混合正负代价值 ──────────────────────────────────────────────────
+TEST(OBBCollisionModelTest, CheckCostMixedPositiveNegative) {
+    OBBCollisionModel model({2.0, 2.0, 2.0});
+    Pose pose = Pose::Identity();
+
+    // x < 0 返回负值，x >= 0 返回正值
+    auto mixed_cost = [](const Position3D& pt) -> int {
+        return static_cast<int>(pt.x() * 100);
+    };
+
+    int max_cost = model.checkCost(pose, mixed_cost);
+    EXPECT_EQ(max_cost, 100);  // x 最大值 1.0
+}

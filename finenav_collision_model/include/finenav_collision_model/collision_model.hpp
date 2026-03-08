@@ -31,4 +31,13 @@ concept CollisionRule =
     std::invocable<F, const Position3D&> &&
     std::same_as<std::invoke_result_t<F, const Position3D&>, bool>;
 
+/**
+ * @brief 代价规则 Concept
+ * @details 任何可被调用、接受 const Position3D& 并返回 int 的可调用对象均满足此约束。
+ */
+template <typename F>
+concept CostRule =
+    std::invocable<F, const Position3D&> &&
+    std::same_as<std::invoke_result_t<F, const Position3D&>, int>;
+
 } // namespace finenav

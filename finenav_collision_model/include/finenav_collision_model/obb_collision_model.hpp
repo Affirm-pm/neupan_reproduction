@@ -73,6 +73,27 @@ public:
     template <CollisionRule CR>
     bool checkCollision(const Pose& pose, CR&& rule);
 
+    /**
+     * @brief 高频代价检测（使用缓存采样点）
+     * @details 调用前须先调用 precompute(pose)，遍历所有表面采样点并返回最高代价值。
+     * @tparam CR 满足 CostRule concept 的可调用对象
+     * @param rule 代价计算函数，由调用方提供
+     * @return 所有采样点中的最高代价值
+     */
+    template <CostRule CR>
+    int checkCost(CR&& rule) const;
+
+    /**
+     * @brief 低频代价检测（自动 precompute）
+     * @details 内部自动调用 precompute(pose) 后执行代价计算，无需手动管理缓存。
+     * @tparam CR 满足 CostRule concept 的可调用对象
+     * @param pose 机器人在世界坐标系下的位姿
+     * @param rule 代价计算函数
+     * @return 所有采样点中的最高代价值
+     */
+    template <CostRule CR>
+    int checkCost(const Pose& pose, CR&& rule);
+
 private:
     Vector3D size_;       ///< OBB 尺寸
     Vector3D min_;        ///< OBB 自身坐标系下的最小边界
@@ -101,6 +122,28 @@ template <CollisionRule CR>
 bool OBBCollisionModel::checkCollision(const Pose& pose, CR&& rule) {
     precompute(pose);
     return checkCollision(std::forward<CR>(rule));
+}
+
+template <CostRule CR>
+int OBBCollisionModel::checkCost(CR&& rule) const {
+    if (cached_points_.empty()) {
+        throw std::logic_error(
+            "OBBCollisionModel::checkCost called before precompute");
+    }
+    int max_cost = 0;
+    for (const auto& pt : cached_points_) {
+        int cost = rule(pt);
+        if (cost > max_cost) {
+            max_cost = cost;
+        }
+    }
+    return max_cost;
+}
+
+template <CostRule CR>
+int OBBCollisionModel::checkCost(const Pose& pose, CR&& rule) {
+    precompute(pose);
+    return checkCost(std::forward<CR>(rule));
 }
 
 } // namespace finenav
