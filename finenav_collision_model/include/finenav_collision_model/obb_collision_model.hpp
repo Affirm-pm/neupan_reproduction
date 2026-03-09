@@ -94,12 +94,20 @@ public:
     template <CostRule CR>
     int checkCost(const Pose& pose, CR&& rule);
 
+    /**
+     * @brief 获取 OBB 外径
+     * @details 外径定义为包围该 OBB 的最小球直径，数值等于 OBB 空间对角线长度。
+     * @return OBB 外径
+     */
+    double getOuterDiameter() const;
+
 private:
-    Vector3D size_;       ///< OBB 尺寸
-    Vector3D min_;        ///< OBB 自身坐标系下的最小边界
-    Vector3D max_;        ///< OBB 自身坐标系下的最大边界
-    Pose     local_pose_; ///< OBB 在机器人本体坐标系下的位姿（旋转 + 偏移）
-    Policy   policy_;     ///< 采样策略参数
+    Vector3D size_;           ///< OBB 尺寸
+    double   outer_diameter_; ///< OBB 外径（空间对角线长度）
+    Vector3D min_;            ///< OBB 自身坐标系下的最小边界
+    Vector3D max_;            ///< OBB 自身坐标系下的最大边界
+    Pose     local_pose_;     ///< OBB 在机器人本体坐标系下的位姿（旋转 + 偏移）
+    Policy   policy_;         ///< 采样策略参数
 
     std::vector<Position3D> cached_points_; ///< 缓存的世界系采样点（由 precompute 填充）
 };

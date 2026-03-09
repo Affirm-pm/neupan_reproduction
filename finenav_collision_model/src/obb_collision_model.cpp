@@ -8,13 +8,18 @@
 namespace finenav {
 
 OBBCollisionModel::OBBCollisionModel(const Vector3D& size, const Pose& local_pose, const Policy& policy)
-    : size_(size), local_pose_(local_pose), policy_(policy) {
+    : size_(size), outer_diameter_(0.0), local_pose_(local_pose), policy_(policy) {
     if (policy_.step <= 0.0) {
         throw std::invalid_argument(
             "OBBCollisionModel: policy.step must be greater than 0");
     }
     min_ = -size_ / 2.0;
     max_ =  size_ / 2.0;
+    outer_diameter_ = (max_ - min_).norm();
+}
+
+double OBBCollisionModel::getOuterDiameter() const {
+    return outer_diameter_;
 }
 
 void OBBCollisionModel::precompute(const Pose& pose) {

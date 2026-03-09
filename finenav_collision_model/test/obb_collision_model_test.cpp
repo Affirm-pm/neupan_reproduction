@@ -24,27 +24,33 @@ TEST(OBBCollisionModelTest, InvalidStepThrows) {
                  std::invalid_argument);
 }
 
-// ─── 2. 未调用 precompute 直接 checkCollision 抛出异常 ──────────────
+// ─── 2. 外径等于 OBB 空间对角线长度 ─────────────────────────────────
+TEST(OBBCollisionModelTest, GetOuterDiameterReturnsBoxDiagonalLength) {
+    OBBCollisionModel model({3.0, 4.0, 12.0});
+    EXPECT_DOUBLE_EQ(model.getOuterDiameter(), 13.0);
+}
+
+// ─── 3. 未调用 precompute 直接 checkCollision 抛出异常 ──────────────
 TEST(OBBCollisionModelTest, CheckCollisionBeforePrecomputeThrows) {
     OBBCollisionModel model({1.0, 1.0, 1.0});
     EXPECT_THROW(model.checkCollision(free_rule), std::logic_error);
 }
 
-// ─── 3. 无碰撞：rule 全返回 false ────────────────────────────────────
+// ─── 4. 无碰撞：rule 全返回 false ────────────────────────────────────
 TEST(OBBCollisionModelTest, NoCollisionWhenFree) {
     OBBCollisionModel model({1.0, 1.0, 1.0});
     Pose pose = Pose::Identity();
     EXPECT_FALSE(model.checkCollision(pose, free_rule));
 }
 
-// ─── 4. 有碰撞：rule 全返回 true ─────────────────────────────────────
+// ─── 5. 有碰撞：rule 全返回 true ─────────────────────────────────────
 TEST(OBBCollisionModelTest, CollisionWhenBlocked) {
     OBBCollisionModel model({1.0, 1.0, 1.0});
     Pose pose = Pose::Identity();
     EXPECT_TRUE(model.checkCollision(pose, block_rule));
 }
 
-// ─── 5. 高频接口：precompute 后多次 checkCollision ───────────────────
+// ─── 6. 高频接口：precompute 后多次 checkCollision ───────────────────
 TEST(OBBCollisionModelTest, HighFreqInterfaceReusesCache) {
     OBBCollisionModel model({1.0, 1.0, 1.0});
     Pose pose = Pose::Identity();
@@ -56,7 +62,7 @@ TEST(OBBCollisionModelTest, HighFreqInterfaceReusesCache) {
     EXPECT_TRUE(model.checkCollision(block_rule));
 }
 
-// ─── 6. 障碍在 OBB 范围内才碰撞（位置相关 rule）────────────────────
+// ─── 7. 障碍在 OBB 范围内才碰撞（位置相关 rule）────────────────────
 TEST(OBBCollisionModelTest, CollisionOnlyWhenObstacleIntersectsOBB) {
     // OBB: 1x1x1 m，中心在原点，半轴长 0.5m，X 面表面点 x = ±0.5
     OBBCollisionModel model({1.0, 1.0, 1.0});
@@ -71,7 +77,7 @@ TEST(OBBCollisionModelTest, CollisionOnlyWhenObstacleIntersectsOBB) {
     EXPECT_TRUE(model.checkCollision(pose, surface_rule));
 }
 
-// ─── 7. OBB 带偏移的 local_pose ──────────────────────────────────────
+// ─── 8. OBB 带偏移的 local_pose ──────────────────────────────────────
 TEST(OBBCollisionModelTest, LocalPoseOffset) {
     // OBB 在机器人本体系中偏移 (5, 0, 0)
     Pose local_pose = Pose::Identity();
@@ -90,7 +96,7 @@ TEST(OBBCollisionModelTest, LocalPoseOffset) {
     EXPECT_TRUE(model.checkCollision(robot_pose, near_offset));
 }
 
-// ─── 8. OBB 带旋转的 local_pose（绕 Z 轴旋转 90°）────────────────────
+// ─── 9. OBB 带旋转的 local_pose（绕 Z 轴旋转 90°）────────────────────
 TEST(OBBCollisionModelTest, LocalPoseRotation) {
     // OBB 2x1x1（长轴沿 X），绕 Z 旋转 90° 后长轴变为 Y 方向
     Pose local_pose = Pose::Identity();
@@ -109,7 +115,7 @@ TEST(OBBCollisionModelTest, LocalPoseRotation) {
     EXPECT_FALSE(model.checkCollision(robot_pose, x_far));
 }
 
-// ─── 9. 机器人移动后采样点跟随更新 ──────────────────────────────────
+// ─── 10. 机器人移动后采样点跟随更新 ─────────────────────────────────
 TEST(OBBCollisionModelTest, PrecomputeUpdatesWithPose) {
     OBBCollisionModel model({1.0, 1.0, 1.0});
 
