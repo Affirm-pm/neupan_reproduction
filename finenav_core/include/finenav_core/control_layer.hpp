@@ -20,6 +20,7 @@
 #include "finenav_msgs/action/compute_plan.hpp"
 #include "finenav_util/trajectory_io/conversions.hpp"
 #include "finenav_util/simple_action_server.hpp"
+#include "finenav_util/node_thread.hpp"
 
 namespace finenav {
 
@@ -75,6 +76,7 @@ class ControlLayer {
 
         // --- 1. 创建私有 node
         pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_namespace(), rclcpp::NodeOptions()); // TODO：关于 node 参数，后面需要看看该怎么搞，尤其是进程内通信
+        pnode_thread_ = std::make_unique<NodeThread>(pnode_);
 
         // --- 2. 初始化 ROS 基础设施 ---
         // 从 ROS2 参数服务器加载配置
@@ -131,6 +133,7 @@ class ControlLayer {
   protected:
     rclcpp::Node::SharedPtr node_;
     rclcpp::Node::SharedPtr pnode_;
+    std::unique_ptr<NodeThread> pnode_thread_;
 
     PlannersT::Tuple planners_instance_;
 
