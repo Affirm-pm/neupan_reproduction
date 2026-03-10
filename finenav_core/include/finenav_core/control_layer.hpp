@@ -24,23 +24,16 @@
 
 namespace finenav {
 
-// TODO: OneShot v.s. ServoLoop，看看 Nav2 的 PlannerServer 和 ControllerServer 区别
-
-// template <typename... Ts> struct PlannerSet {}; // 可变参数模板
-// template <typename... Ts> struct FilterSet {};
-
 template <typename... Ts>
 struct PlannerSet {
     using Tuple = std::tuple<Ts...>;
 };
 
-// 1. 提取器：给定 PlannerT，提取 std::shared_ptr<PlannerT::IMapView>
 template <typename PlannerT>
 struct GetMapViewSharedPtr {
     using type = std::shared_ptr<typename PlannerT::IMapView>;
 };
 
-// 2. 转换器：Tuple<P...> -> Variant<shared_ptr<P::View>...>
 template <typename Tuple> struct ToVariant;
 
 template <typename... Planners>
@@ -62,7 +55,7 @@ struct ControlLayerConfig { // TODO： 待删除
     std::string task_action;
     std::string input_topic;
     std::string output_topic;
-    ControlMode mode; // TODO: 考虑是否需要做成编译期常量，这样允许编译期分支控制流；代价，无法通过参数运行时修改
+    ControlMode mode; // TODO: OneShot v.s. ServoLoop, 考虑是否需要做成编译期常量，这样允许编译期分支控制流；代价，无法通过参数运行时修改
 };
 
 template <typename PlannersT>  // TODO: 逐个检查 PlannersT 中的每个规划器是否满足 PlannerConcept; 每个 Planner 只能注册一次
@@ -74,20 +67,14 @@ class ControlLayer {
 
     explicit ControlLayer(rclcpp::Node::SharedPtr node, const std::string& layer_name) : node_(node), layer_name_(layer_name) {
 
-        // --- 1. 创建私有 node
-        pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_namespace(), rclcpp::NodeOptions()); // TODO：关于 node 参数，后面需要看看该怎么搞，尤其是进程内通信
+        pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), rclcpp::NodeOptions()); // TODO：关于 node 参数，后面需要看看该怎么搞，尤其是进程内通信
         pnode_thread_ = std::make_unique<NodeThread>(pnode_);
 
-        // --- 2. 初始化 ROS 基础设施 ---
-        // 从 ROS2 参数服务器加载配置
         pnode_->declare_parameter<std::string>("example_param", "hello, world"); // 示例参数
 
-
-        // --- 3. 初始化成员变量 ---
         tf_buffer_ = std::make_unique<tf2_ros::Buffer>(pnode_->get_clock());
         tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
 
-        // --- 4. 控制流 ---
         std::string task_action = layer_name;
         if (!task_action.empty()) {    // TODO: 如果 layer_name 是空字符串该怎么办，要不要拦下来
             action_server_ = std::make_unique<ActionServer>(
@@ -97,9 +84,7 @@ class ControlLayer {
             );
         }
 
-        // --- 5. 规划数据流 ---
-
-        // 配置加载 tuple 中的每个规划器
+        // 加载 tuple 中的每个规划器
         std::apply([this](auto&... planners) {
             ([this](auto& p) {
                 using T = std::decay_t<decltype(p)>;
@@ -122,11 +107,11 @@ class ControlLayer {
     void setupDataPorts() {  // TODO: 保护这些 public 接口？
 
         if (!input_topic_.empty()) {
-            plan_ref_sub_ = pnode_->template create_subscription<finenav_msgs::msg::Trajectory>(
+            plan_ref_sub_ = pnode_->create_subscription<finenav_msgs::msg::Trajectory>(
                 input_topic_, 10, std::bind(&ControlLayer::PlanRefCallback, this, std::placeholders::_1));
         }
         if (!output_topic_.empty())  {
-            plan_result_pub_ = pnode_->template create_publisher<finenav_msgs::msg::Trajectory>(output_topic_, 10);
+            plan_result_pub_ = pnode_->create_publisher<finenav_msgs::msg::Trajectory>(output_topic_, 10);
         }
     }
 
@@ -171,9 +156,6 @@ class ControlLayer {
 
         auto goal_pose = goal->goal;
 
-        // Pose goal_pose_eigen;
-        // tf2::fromMsg(goal_msg, goal_pose_eigen);
-
         // 创建一个周期调用的定时器，定时器频率为控制周期
         {
             // 检查 ROS 客户端请求是否被取消
@@ -185,16 +167,10 @@ class ControlLayer {
 
 
             // 从 TF 获取当前机器人位姿作为起点, map 系下 base_link 的位置，对应 base_link->map 的变换
-            geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform(
-                "map", "base_link", tf2::TimePointZero); // TODO: TF 时间戳相关细节，可参考 nav2_planner
+            geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform( // TODO: 改成从全局读取 current_state
+                "map", "base_link", tf2::TimePointZero);
 
             geometry_msgs::msg::Pose start_pose;
-            start_pose.position.x = t.transform.translation.x;
-            start_pose.position.y = t.transform.translation.y;
-            start_pose.position.z = t.transform.translation.z;
-            start_pose.orientation = t.transform.rotation;
-
-            // Pose start_pose_eigen = tf2::transformToEigen(t);
 
             // 在 planners_instance_ 中找匹配 active_planner_id_ 的 planner
             bool planner_found_and_run = false;
@@ -254,7 +230,7 @@ class ControlLayer {
             plan_result_pub_->publish(output_traj_msg);
 
 
-            // 检查是否抵达终点，如果抵达，退出循环 (通过获取系统整体状态，这样的话得再开一个线程)
+            // 通过current_state,检查是否抵达终点，如果抵达
         }
 
         // 设置成功结果
@@ -270,7 +246,7 @@ class ControlLayer {
 
     std::unique_ptr<ActionServer> action_server_;
 
-    rclcpp::Subscription<finenav_msgs::msg::Trajectory>::SharedPtr plan_ref_sub_; // 这里是固定的 Trajectory 消息类型
+    rclcpp::Subscription<finenav_msgs::msg::Trajectory>::SharedPtr plan_ref_sub_;
     rclcpp::Publisher<finenav_msgs::msg::Trajectory>::SharedPtr plan_result_pub_;
 
     finenav_msgs::msg::Trajectory plan_ref_msg_; // 最近一次收到的规划参考

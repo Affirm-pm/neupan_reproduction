@@ -35,7 +35,7 @@ public:
         auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
                                             [&](const auto& pair) { return pair.first == name; });
         if (it == map_resources_.end()) {
-            auto new_map = std::make_shared<MapT>(); // 参数管理可以被一个 MapServer 包裹
+            auto new_map = std::make_shared<MapT>(); // TODO: 参数管理可以被一个 MapServer 包裹
             map_resources_.emplace_back(name, new_map);
             return new_map;
         }
@@ -57,16 +57,16 @@ public:
     [[nodiscard("ControlLayer was created but the handle was lost!")]]
     std::shared_ptr<ControlLayer<PlannersT>> createControlLayer(const std::string& name) {
         auto layer = std::make_shared<ControlLayer<PlannersT>>(node_,  name);
-        held_layers_.push_back(layer);
+        held_layers_.push_back(layer);  // TODO: prevent same name
         return layer;
     }
 
     struct PipelineIO {
-        std::string input_topic = "";
-        std::string output_topic = "";
+        std::string input_topic;
+        std::string output_topic;
     };
     template <typename... LayersT>
-    void registerPipeline(const PipelineIO& io, std::shared_ptr<LayersT>... layers) { // TODO: 如果不想要input_topic，接口不太好看
+    void registerPipeline(const PipelineIO& io, std::shared_ptr<LayersT>... layers) {
 
         static_assert(sizeof...(layers) >= 1, "Pipeline must have at least one layer!");
         auto layer_tuple = std::make_tuple(layers...);
@@ -95,9 +95,11 @@ public:
     void wire_layers(std::shared_ptr<FirstT> first,
                           std::shared_ptr<SecondT> second,
                           std::shared_ptr<RestT>... rest) {
-        std::string internal_topic = std::string(node_->get_namespace()) + "/" + first->getName() + "_to_" + second->getName();
+        std::string internal_topic = first->getName() + "_to_" + second->getName();
+        RCLCPP_WARN_STREAM(node_->get_logger(), "Connecting " << first->getName() << " output to " << second->getName() << " input via topic: " << internal_topic);
+
         first->setOutputTopic(internal_topic);
-        second->setInputTopic(internal_topic); // TODO: 处理首尾交互；register时自动通知ControlLayer构建通信管道
+        second->setInputTopic(internal_topic);
 
         wire_layers(second, rest...);
     }
@@ -107,6 +109,8 @@ public:
     std::vector<std::pair<std::string, std::any>> map_resources_; // TODO：map_resources_ 或许也只需要保活，不需要一个名字来标识？？ 感觉不靠谱
     std::vector<std::shared_ptr<void>> held_layers_; // 持有 ControlLayer 实例，防止被销毁
     std::vector<std::shared_ptr<void>> held_param_handles_;
+
+    // TODO: CurrentRobotState = 运动状态 + 导航任务状态； TF 时间戳相关细节，可参考 nav2_planner
 
 };
 }
