@@ -22,8 +22,12 @@ generate_parameter_library(
         src/test_planner.yaml
 )
 
-ament_auto_add_executable(simple_planner_node src/local_layer_node.cpp)
-target_link_libraries(simple_planner_node test_map_params test_planner_params)
+#ament_auto_add_executable(simple_planner_node src/local_layer_node.cpp)
+#target_link_libraries(simple_planner_node test_map_params test_planner_params)
+
+#ament_auto_add_library(finenav_manager src/finenav_manager.cpp)
+ament_auto_add_executable(test_interface_node src/test.cpp)
+target_link_libraries(test_interface_node test_map_params test_planner_params)
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)
