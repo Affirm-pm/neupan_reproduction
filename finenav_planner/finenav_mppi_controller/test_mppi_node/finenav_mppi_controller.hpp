@@ -21,6 +21,7 @@
 
 using namespace mppi;
 
+finenav::OBBCollisionModel collision_model({1.0, 1.0, 1.0});  //在实际使用中，尺寸应根据机器人实际尺寸设置应该有个tf回调函数实时更新位置
 
 // 新增：将轨迹转换为点云的函数
 sensor_msgs::msg::PointCloud2 trajectoryToPointCloud(const finenav_msgs::msg::Trajectory& traj) {
@@ -141,133 +142,65 @@ public:
         return consider_footprint_;
     }
 
-    // bool isCollision(
-    //     float cost,
-    //     float x, float y, float theta,
-    //     bool consider_footprint) const override {
-    //
-    //     float pose_cost = cost;
-    //
-    //     double pose_cost = footprintCostAtPose(x, y, theta, getRobotFootprint());
-    //
-    //     switch (static_cast<unsigned char>(cost)) {
-    //         // 使用具体数值替代 nav2_costmap_2d 宏
-    //         // NO_INFORMATION = 255, LETHAL_OBSTACLE = 254, INSCRIBED_INFLATED_OBSTACLE = 253
-    //         case 254: // LETHAL_OBSTACLE
-    //             return true;
-    //         case 253: // INSCRIBED_INFLATED_OBSTACLE
-    //             return consider_footprint_ ? false : true;
-    //         case 255: // NO_INFORMATION
-    //             return is_tracking_unknown ? false : true;
-    //     }
-    //
-    //     return false;
-    // }
+    /**
+     * @brief 在指定位姿下是否发生碰撞
+     * @param x 机器人位姿的x坐标
+     * @param y 机器人位姿的y坐标
+     * @param theta 机器人位姿的朝向（弧度）
+     * @return 如果在给定位姿下发生碰撞，则返回true；否则返回false
+    */
+    bool isCollision(float x, float y, float theta) const override {
+        int pose_cost = getCost(finenav::Position3D{x, y, 0.0});
+        finenav::Pose pose = createPose2D(x, y, theta);
+        int possible_collision_cost = ComputeCost(collision_model.getRadius() / map_.getResolution());
+        if (pose_cost >= possible_collision_cost) {
+            return collision_model.checkCollision(pose, CollisionRule());
+        }
+        return false;
+    }
     // 根据位置返回代价值（占位实现）
 
     /**
-     * @brief 根据位置返回代价值
+     * @brief 根据位置返回单点代价值
      * @param pos 位置，包含x、y、z坐标
      * @return 在给定位置处的代价值，通常是一个整数，表示该位置的通行成本。
     */
     int getCost(const finenav::Position3D& pos) const override {
         finenav::Index index = map_.getIndex(pos);
-        return getCost(index);
+        return passability_image_.at<uchar>(index.y() + map_.getSize().y() / 2, index.x() + map_.getSize().x() / 2);
+    }
+
+    float getRadius() const override {
+        return collision_model.getOuterDiameter();
     }
     /**
-     * @brief 根据位置返回代价值
-     * @param index 位置索引，包含x和y坐标
-     * @return 在给定位置处的代价值，通常是一个整数，表示该位置的通行成本。
+     * @brief 根据位姿返回位姿涵盖的最大代价值
+     * @param x 机器人位姿的x坐标
+     * @param y 机器人位姿的y坐标
+     * @param theta 机器人位姿的朝向（弧度）
+     * @return 在给定位姿处的代价值，通常是一个整数，表示该位姿涵盖的最大通行成本。该值可能考虑机器人足迹上的所有监测点，并返回其中的最大值，以反映该位姿的整体通行成本。
     */
-    int getCost(const finenav::Index& index) const override {
-        return passability_image_.at<uchar>(index.y() + map_.getSize().y() / 2, index.x() + map_.getSize().x() / 2);  // TODO：将0/1的可通行性值转换为代价值
-    }
-
-
-    // 返回机器人当前足迹（占位实现，返回内部存储的空足迹）
-    const Footprint & getRobotFootprint() const override {
-        return footprint_;
-    }
-
     // 在给定位姿处使用足迹计算代价（占位实现）
-   float footprintCostAtPose(
-       float x, float y, float theta,
-       const Footprint & footprint) const override
-   {
-       double cos_th = cos(theta);
-       double sin_th = sin(theta);
-       Footprint oriented_footprint;
-       oriented_footprint.reserve(footprint.size());
-       std::pair<float, float> new_pt;
-       for (unsigned int i = 0; i < footprint.size(); ++i) {
-           new_pt.first = x + (footprint[i].first * cos_th - footprint[i].second * sin_th);
-           new_pt.second = y + (footprint[i].first * sin_th + footprint[i].second * cos_th);
-           oriented_footprint.push_back(new_pt);
-       }
-       return footprintCost(oriented_footprint);
-   }
-
-   double footprintCost(const Footprint & footprint) const {
-
-       // 将第一个点转换为地图坐标
-       if (map_.isInside(finenav::Position{footprint[0].first, footprint[0].second, 0.0})) {
-           return 254;
-       }
-
-       double footprint_cost = 0.0;
-       // 遍历足迹的每条边（线段）
-       for (unsigned int i = 0; i < footprint.size() - 1; ++i) {
-           // 将下一个点转换为地图坐标
-           if (map_.isInside(finenav::Position{footprint[i+1].first, footprint[i+1].second, 0.0})) {
-               return 254;
-           }
-
-           // 计算这条线段上的最大成本
-           footprint_cost = std::max(lineCost(footprint[i].first, footprint[i+1].first, footprint[i].second, footprint[i+1].second), footprint_cost);
-
-           // 如果已经发现致命障碍，提前返回
-           if (footprint_cost == 254) {
-               return footprint_cost;
-           }
-       }
-
-       // 连接最后一个点到第一个点（闭合多边形）
-       return std::max(lineCost(footprint[3].first, footprint[0].first, footprint[3].second, footprint[0].second), footprint_cost);
-   }
-
-   double lineCost(double x0, double x1, double y0, double y1) const {
-       // 这里可以实现 Bresenham 算法来遍历线段上的点，并返回最大代价
-       // 目前占位实现，直接返回0
-       std::vector<finenav::Index> grid_line_indices;
-       map_.rayCast(finenav::Position{x0, y0, 0.0}, finenav::Position{x1, y1, 0.0}, grid_line_indices);
-       double max_cost = 0.0;
-       for (const auto& index : grid_line_indices) {
-           if (map_.isInside(index)) {
-               double cost = static_cast<double>(getCost(index));
-               max_cost = std::max(max_cost, cost);
-               if (max_cost == 254) {
-                   break; // 提前退出，如果已经达到致命障碍#
-               }
-           }
-       }
-       return max_cost;
-
-   }
-
+    float costAtPose(
+        float x, float y, float theta) const override
+    {
+        finenav::Pose pose = createPose2D(x, y, theta);
+        return collision_model.checkCost(pose,[this](const finenav::Position3D& pos) {
+            return this->getCost(pos);
+        });
+    }
+    /**
+     * @brief 返回地图的基准坐标系ID
+     * @return 地图的基准坐标系ID，通常是一个字符串，例如"map"，表示该地图数据所使用的坐标系。
+    */
     std::string getBaseFrameID() const override {
         return "map";
-    }void printTrajectoryPoints(const finenav_msgs::msg::Trajectory& traj) {
-    std::cout << "=== Trajectory Points ===" << std::endl;
-    std::cout << "Total points: " << traj.poses.size() << std::endl;
-
-    for (size_t i = 0; i < traj.poses.size(); ++i) {
-        const auto& pose = traj.poses[i];
-        std::cout << "Point " << i << ": "
-                  << "(" << pose.position.x
-                  << ", " << pose.position.y
-                  << ", " << pose.position.z << ")" << std::endl;
     }
-}
+
+    /**
+     * @brief 进行地形分析，生成可通行性图
+     * @param robot_pose_z 机器人当前位姿的z坐标，用于确定机器人位置来选择最近的地面高度
+    */
     void TerrainAnalysis(float robot_pose_z) {
         const float ROBOT_HEIGHT = 1.0;  // 根据您的机器人实际高度设置
         const float MAX_GRADIENT = 0.5;  // 根据您的需求设置最大坡度
@@ -344,45 +277,90 @@ public:
             }
         }
     }
-    cv::Mat DistanceTransform() {
-        cv::Mat passability_binary = 255 - passability_image_;  // 可通行区域为255，障碍物区域为0
-        cv::Mat distance_transform;
-        cv::distanceTransform(passability_binary, distance_transform, cv::DIST_L2, 3);
-        return distance_transform;
-    }
 
+    /**
+     * @brief 对地图进行膨胀处理，生成代价图
+    */
     void MapInflation() {
         cv::Mat distance_transform = DistanceTransform();
         for (int x = 0; x < passability_image_.cols; ++x) {
             for (int y = 0; y < passability_image_.rows; ++y) {
                 if (passability_image_.at<uchar>(y, x) == 0) {  // 可通行区域
                     float distance = distance_transform.at<float>(y, x);
-                    float cost;
-                    if (distance * map_.getResolution() <= inscribed_radius_) {
-                        cost = 253;
-                    } else {
-                        // make sure cost falls off by Euclidean distance
-                        double factor =
-                            exp(-1.0 * cost_scaling_factor_ * (distance * map_.getResolution() - inscribed_radius_));
-                        cost = static_cast<unsigned char>((253 - 1) * factor);
-                    }map_.getIndex
+                    int cost;
+                    cost = ComputeCost(distance);
                     passability_image_.at<uchar>(y, x) = static_cast<uchar>(cost);
                 }
             }
         }
     }
+
+
+
+
+private:
+    /**
+     * @brief 对地图中的无源栅格进行距离变换，生成距离图，以便后续进行膨胀处理
+    */
+    cv::Mat DistanceTransform() {
+        cv::Mat passability_binary = 255 - passability_image_;  // 可通行区域为255，障碍物区域为0
+        cv::Mat distance_transform;
+        cv::distanceTransform(passability_binary, distance_transform, cv::DIST_L2, 3);
+        return distance_transform;
+    }
+    /**
+     * @brief 根据距离计算代价值，使用指数衰减函数将距离转换为代价，以反映距离越近代价越高的关系
+     * @param distance 距离值，通常是从距离变换图中获取的距离值，即距离最近障碍物的欧氏距离，单位为栅格数
+    */
+    int ComputeCost(int distance) const{
+        double factor = exp(-1.0 * cost_scaling_factor_ * (distance * map_.getResolution()));
+        return 253 * factor;
+    }
+    /**
+     * @brief 获取(x,y)位置上沿z轴的一串栅格数据，用于地形分析
+     * @return 一个std::span<float>，包含(x,y)位置上沿z轴的一串栅格数据。
+    */
     std::span<float> getVoxelsAlongZ(const int& x , const int& y) const {
-        // 这里可以实现获取(x,y)位置上沿z轴的一串栅格数据，并返回最大代价
-        // 目前占位实现，直接返回0
         std::span<float> voxels_along_z_indices;
         voxels_along_z_indices = map_.getVoxelsAlongZ(static_cast<int>(x), static_cast<int>(y));
         return voxels_along_z_indices;
     }
 
+    /**
+     * @brief 获取(x,y)位置上沿z轴的一串栅格数据，用于地形分析
+     * @return 一个std::span<float>，包含(x,y)位置上沿z轴的一串栅格数据。
+    */
+    std::function<bool(const finenav::Position3D&)> CollisionRule() const {
+        return [this](const finenav::Position3D& pos) {
+            int pose_cost = this->getCost(pos);
+            switch (static_cast<unsigned char>(pose_cost)) {
+                case 254: // LETHAL_OBSTACLE
+                    return true;
+                case 255: // NO_INFORMATION
+                    return is_tracking_unknown_ ? false : true;
+            }
+            return false;
+        };
+    }
 
-private:
+    /**
+     * @brief 根据二维位姿(x,y,theta)创建一个位姿，并将其转换为finenav::Pose格式，以便进行碰撞检测和代价计算
+     * @param x 机器人位姿的x坐标
+     * @param y 机器人位姿的y坐标
+     * @param theta 机器人位姿的朝向（弧度）
+     * @return 一个std::span<float>，包含(x,y)位置上沿z轴的一串栅格数据。
+    */
+    finenav::Pose createPose2D(double x, double y, double theta) const{
+        finenav::Pose pose = finenav::Pose::Identity();
+        // 设置旋转部分：绕Z轴旋转 theta
+        pose.linear() = Eigen::AngleAxisd(theta, Eigen::Vector3d::UnitZ()).toRotationMatrix();
+        // 设置平移部分：x, y (z保持0)
+        pose.translation() = Eigen::Vector3d(x, y, 0.0);
+        return pose;
+    }
+
+
     finenav::GridMap<float>& map_;
-    Footprint footprint_;
     double inscribed_radius_;
     double cost_scaling_factor_;
     bool is_tracking_unknown_{false};
@@ -414,6 +392,7 @@ public:
         // test_controller_.reset(new nav2_mppi_controller::MPPIController<SimpleGridMapView>(/* args... */, grid_view_));
         //
         // 目前保留为占位，不主动实例化以避免构造参数未知导致编译错误。
+        finenav::OBBCollisionModel collision_model({1.0, 1.0, 1.0});  // 示例碰撞模型参数
         if (!test_controller_) {
             test_controller_ = std::make_unique<nav2_mppi_controller::MPPIController>();
         }
@@ -444,7 +423,6 @@ private:
     finenav::GridMap<float> grid_map_;
     SimpleGridMapView grid_view_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr traj_pointcloud_pub_;
-    // 持有 MPPI controller（懒初始化）
     std::unique_ptr<nav2_mppi_controller::MPPIController> test_controller_;
 };
 

@@ -80,20 +80,17 @@ void ObstaclesCritic::initialize()
 //  return circumscribed_cost_;
 //}
 
-//float ObstaclesCritic::distanceToObstacle(const CollisionCost & cost)
-//{
-//  const float scale_factor = inflation_scale_factor_;
-//  const float min_radius = costmap_ros_->getLayeredCostmap()->getInscribedRadius();
-//  float dist_to_obj = (scale_factor * min_radius - log(cost.cost) + log(253.0f)) / scale_factor;
-//
-//  // If not footprint collision checking, the cost is using the center point cost and
-//  // needs the radius subtracted to obtain the closest distance to the object
-//  if (!cost.using_footprint) {
-//    dist_to_obj -= min_radius;
-//  }
-//
-//  return dist_to_obj;
-//}
+float ObstaclesCritic::distanceToObstacle(const float & cost, const IMapView& map_view) const
+{
+  const float scale_factor = inflation_scale_factor_;
+  const float min_radius = map_view.getRadius();
+  float dist_to_obj = (scale_factor * min_radius - log(cost) + log(253.0f)) / scale_factor;
+
+  // If not footprint collision checking, the cost is using the center point cost and
+  // needs the radius subtracted to obtain the closest distance to the object
+
+  return dist_to_obj;
+}
 
 
 void ObstaclesCritic::score(CriticData & data, const IMapView& map_view)
@@ -125,30 +122,30 @@ void ObstaclesCritic::score(CriticData & data, const IMapView& map_view)
     bool trajectory_collide = false;
     float traj_cost = 0.0f;
     const auto & traj = data.trajectories;
-    CollisionCost pose_cost;
+    float pose_cost;
 
     for (size_t j = 0; j < traj_len; j++) {
       pose_cost = costAtPose(traj.x(i, j), traj.y(i, j), traj.yaws(i, j),map_view);
-      if (pose_cost.cost < 1.0f) {continue;}  // In free space
+      if (pose_cost < 1.0f) {continue;}  // In free space
 
-      if (inCollision(pose_cost.cost, map_view)) {
+      if (inCollision(pose_cost, map_view)) {
         trajectory_collide = true;
         break;
       }
 
     //   // Cannot process repulsion if inflation layer does not exist
-    //   if (inflation_radius_ == 0.0f || inflation_scale_factor_ == 0.0f) {
-    //     continue;
-    //   }
-    //
-    //   const float dist_to_obj = distanceToObstacle(pose_cost);
-    //
-    //   // Let near-collision trajectory points be punished severely
-    //   if (dist_to_obj < collision_margin_distance_) {
-    //     traj_cost += (collision_margin_distance_ - dist_to_obj);
-    //   } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
-    //     repulsive_cost[i] += (inflation_radius_ - dist_to_obj);
-    //   }
+    // if (inflation_radius_ == 0.0f || inflation_scale_factor_ == 0.0f) {
+    //   continue;
+    // }
+
+    const float dist_to_obj = distanceToObstacle(pose_cost, map_view);
+
+    // Let near-collision trajectory points be punished severely
+    if (dist_to_obj < collision_margin_distance_) {
+      traj_cost += (collision_margin_distance_ - dist_to_obj);
+    } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
+      repulsive_cost[i] += (inflation_radius_ - dist_to_obj);
+    }
     }
 
     if (!trajectory_collide) {all_trajectories_collide = false;

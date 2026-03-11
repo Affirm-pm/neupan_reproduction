@@ -79,11 +79,10 @@ protected:
     * @param theta theta of pose
     * @return Collision information at pose
     */
-    CollisionCost costAtPose(float x, float y, float theta, const nav2_mppi_controller::IMapView& map_view)
+    float costAtPose(float x, float y, float theta, const nav2_mppi_controller::IMapView& map_view)
     {
-        CollisionCost collision_cost;
-        float & cost = collision_cost.cost;
-        collision_cost.using_footprint = false;
+        float collision_cost;
+        float & cost = collision_cost;
         unsigned int x_i, y_i;
 
         cost = map_view.getCost(finenav::Position3D{static_cast<double>(x_i),
@@ -92,9 +91,8 @@ protected:
 
         if (consider_footprint_ )
         {
-            cost = static_cast<float>(map_view.footprintCostAtPose(
-                x, y, theta, map_view.getRobotFootprint()));
-            collision_cost.using_footprint = true;
+            cost = static_cast<float>(map_view.costAtPose(
+                x, y, theta));
         }
 
         return collision_cost;
@@ -105,7 +103,8 @@ protected:
     * @param cost Costmap cost
     * @return float Distance to the obstacle represented by cost
     */
-//  inline float distanceToObstacle(const CollisionCost & cost);
+  float distanceToObstacle(const float & cost, const IMapView& map_view) const;
+
 
   /**
     * @brief Find the min cost of the inflation decay function for which the robot MAY be
@@ -114,7 +113,7 @@ protected:
     * @return double circumscribed cost, any higher than this and need to do full footprint collision checking
     * since some element of the robot could be in collision
     */
-//  float findCircumscribedCost(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap);  //这个函数仅在哟膨胀层时有效果
+  // float findCircumscribedCost(const IMapView& map_view);//这个函数仅在有膨胀机制时候有作用
 
 protected:
 
@@ -122,6 +121,7 @@ protected:
   float collision_cost_{0};
   float inflation_scale_factor_{0}, inflation_radius_{0};
 
+  float min_radius_{0};
   float possibly_inscribed_cost_;
   float collision_margin_distance_;
   float near_goal_distance_;

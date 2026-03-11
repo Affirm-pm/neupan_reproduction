@@ -76,7 +76,7 @@ void CostCritic::score(CriticData & data,const IMapView& map_view)
       pose_cost = costAtPose(traj.x(i, j), traj.y(i, j), map_view);
       if (pose_cost < 1.0f) {continue;}  // In free space
 
-      if (inCollision(pose_cost, traj.x(i, j), traj.y(i, j), traj.yaws(i, j), map_view)) {
+      if (inCollision(traj.x(i, j), traj.y(i, j), traj.yaws(i, j), map_view)) {
         trajectory_collide = true;
         break;
       }

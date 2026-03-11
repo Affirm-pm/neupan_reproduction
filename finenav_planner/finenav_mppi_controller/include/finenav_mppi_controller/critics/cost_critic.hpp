@@ -57,24 +57,9 @@ protected:
     * @param theta theta of pose
     * @return bool if in collision
     */
-    bool inCollision(float cost, float x, float y, float theta, const nav2_mppi_controller::IMapView& map_view)
+    bool inCollision(float x, float y, float theta, const nav2_mppi_controller::IMapView& map_view)
     {
-        float score_cost = cost;
-        if (map_view.considerFootprint())
-            {
-            score_cost = static_cast<float>(map_view.footprintCostAtPose(
-                static_cast<double>(x), static_cast<double>(y), static_cast<double>(theta),
-                map_view.getRobotFootprint()));
-        }
-
-
-        switch (static_cast<unsigned char>(score_cost)) {
-            case (254): // LETHAL_OBSTACLE
-                return true;
-            case (255): // NO_INFORMATION
-                return map_view.isTrackingUnknown() ? false : true;
-      }
-        return false;
+        return map_view.isCollision(x, y, theta);
     }
 
 
