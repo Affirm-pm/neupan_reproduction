@@ -117,11 +117,14 @@ foreach(lib IN LISTS libraries)
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
 
-include_directories(${OpenCV_INCLUDE_DIRS})
 
 # Test MPPI Node
 add_executable(test_mppi_node test_mppi_node/test_node.cpp)
-target_link_libraries(test_mppi_node mppi_controller mppi_critics ${OpenCV_LIBS})
+target_link_libraries(test_mppi_node mppi_controller mppi_critics ${OpenCV_LIBS} )
+target_include_directories(test_mppi_node PRIVATE
+        ${finenav_collision_model_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS}
+)
 
 
 install(TARGETS mppi_controller mppi_critics
