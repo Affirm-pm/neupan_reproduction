@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include <oneapi/tbb/partitioner.h>
-
 #include <chrono>
 #include <deque>
 #include <functional>
