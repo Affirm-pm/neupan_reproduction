@@ -28,6 +28,8 @@ void ObstaclesCritic::initialize()
   critical_weight_ = 20.0f;
   collision_cost_ = 10000.0f;
   collision_margin_distance_ = 0.10f;
+  inflation_radius_= 2.0f;
+  inflation_scale_factor_ = 10.0f;
   near_goal_distance_ = 0.5f;
   enabled_ = true;
 
