@@ -5,7 +5,7 @@
 #pragma once
 
 #include <rclcpp/rclcpp.hpp>
-#include "finenav_core/control_layer.hpp"
+#include "finenav_core/plan/control_layer.hpp"
 
 namespace finenav {
 

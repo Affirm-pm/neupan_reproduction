@@ -5,7 +5,6 @@
 #pragma once
 
 #include "finenav_core/concepts.hpp" // TODO: 为什么这个文件也必不可少
-#include "finenav_core/math_types.hpp"
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_interface/test_planner_params.hpp"
 
@@ -31,7 +30,7 @@ public:
     class IMapView {
     public:
         virtual ~IMapView() = default;
-        virtual double getCost(const Position3D& pos) const = 0;
+        virtual double getCost(const int x) const = 0;
     };
 
     using Context = PlanningContext<SimpleTestPlanner>;

@@ -6,7 +6,6 @@
 
 #include <any>
 #include <mutex>
-#include <pcl_conversions/pcl_conversions.h>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -14,12 +13,11 @@
 #include <tf2_ros/transform_listener.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
 
-#include "concepts.hpp"
-
-#include "finenav_util/algo_configurator.hpp"
-#include "finenav_msgs/msg/trajectory.hpp"
 #include "finenav_msgs/action/compute_plan.hpp"
-#include "finenav_util/trajectory_io/conversions.hpp"
+#include "finenav_msgs/msg/trajectory.hpp"
+#include "finenav_core/plan/conversions.hpp"
+#include "finenav_core/concepts.hpp"
+#include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/simple_action_server.hpp"
 #include "finenav_util/node_thread.hpp"
 
