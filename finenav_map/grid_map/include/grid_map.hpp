@@ -47,6 +47,48 @@ public:
     bool configure(const ConfigType& params) {
         // TODO: 之后整，主要把 GridMap( Length, double, Poosition ) 的构造函数搬过来
         std::cout << "[GridMap] configure with params" << std::endl;
+
+    // ===== 固定测试参数 =====
+    resolution_ = 0.05;                     // 5cm
+    length_ = Length(5.0, 5.0, 5.0);     // 10m x 10m x 3m
+    origin_ = Position(0.0, 0.0, 0.0);
+
+    // ===== 派生量 =====
+    inv_resolution_ = 1.0 / resolution_;
+
+    size_ = (length_.array() * inv_resolution_).ceil().cast<int>();
+
+    // 保证是奇数（关键）
+    size_ = size_.unaryExpr([](int v) {
+        return (v % 2 == 0) ? v + 1 : v;
+    });
+
+    half_size_ = size_ / 2;
+
+    // ===== 分配内存（核心）=====
+    const size_t total_size =
+        static_cast<size_t>(size_.x()) *
+        static_cast<size_t>(size_.y()) *
+        static_cast<size_t>(size_.z());
+
+    data_.clear();
+    data_.resize(total_size);
+
+    // 初始化每个 voxel
+    for (auto& cell : data_) {
+        cell = T{};   // 你的 Voxel 默认是 NAN / false / 0
+    }
+
+    start_index_ = Index::Zero();
+
+    // ===== debug 输出 =====
+    std::cout << "[GridMap] resolution: " << resolution_ << std::endl;
+    std::cout << "[GridMap] size: "
+              << size_.x() << " x "
+              << size_.y() << " x "
+              << size_.z() << std::endl;
+    std::cout << "[GridMap] total cells: " << total_size << std::endl;
+
         return true;
     }
 
