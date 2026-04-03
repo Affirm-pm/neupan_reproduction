@@ -9,8 +9,6 @@ ament_auto_find_build_dependencies()
 
 rosidl_generate_interfaces(${PROJECT_NAME}
         msg/Trajectory.msg
-        msg/MapCell.msg
-        msg/MapChunk.msg
         action/ComputePlan.action
         action/NavigateToPose.action
         DEPENDENCIES geometry_msgs # Add packages that above messages depend on, in this case geometry_msgs for Sphere.msg
