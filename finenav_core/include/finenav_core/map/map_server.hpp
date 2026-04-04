@@ -55,7 +55,7 @@ class LockedMapRW {
 };
 
 template <typename MapT>
-class MapServer {
+class MapServer { // TODO: 禁止复制、赋值？
   public:
     struct SourceBufferPolicy {
         std::size_t max_buffer_size{32};
@@ -158,7 +158,7 @@ class MapServer {
     std::unique_ptr<NodeThread> pnode_thread_;
 
     // 核心数据与锁
-    MapT map_instance_;
+    MapT map_instance_; // TODO: 地图怎么存在栈上啊？
     std::shared_mutex rw_mutex_;  // C++17 读写锁
 
     // 回调列表与生命周期管理
