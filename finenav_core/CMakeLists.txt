@@ -24,10 +24,6 @@ target_include_directories(${PROJECT_NAME} INTERFACE
 
 target_link_libraries(${PROJECT_NAME} INTERFACE Eigen3::Eigen)
 
-ament_auto_add_library(robot_state_monitor
-        src/robot_state_monitor.cpp
-)
-
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)
 #    ament_find_gtest()
