@@ -17,13 +17,13 @@ include(FetchContent)
 FetchContent_Declare(
         Sophus
         GIT_REPOSITORY https://github.com/strasdat/Sophus.git
-        GIT_TAG 1.24.6
+        GIT_TAG 1.22.10
         GIT_SHALLOW TRUE
 )
 set(BUILD_SOPHUS_TESTS OFF CACHE BOOL "Disable Sophus tests" FORCE) # skipping tests to speed up the build process
 message(STATUS "Fetching Sophus...")
 FetchContent_MakeAvailable(Sophus)
-message(STATUS "Sophus (1.24.6) integrated successfully.")
+message(STATUS "Sophus (1.22.10) integrated successfully.")
 
 include_directories(include)
 
