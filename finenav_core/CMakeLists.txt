@@ -38,10 +38,29 @@ target_include_directories(${PROJECT_NAME} INTERFACE
 
 target_link_libraries(${PROJECT_NAME} INTERFACE Eigen3::Eigen)
 
-ament_auto_add_library(test_localizer src/localizer.cpp)
-target_link_libraries(test_localizer SHARED
+ament_auto_add_library(test_localizer SHARED src/localizer.cpp)
+target_link_libraries(test_localizer
         Sophus::Sophus
         fmt::fmt
+)
+
+# FineNav Localizer (ESKF-based localization module)
+ament_auto_add_library(finenav_localizer SHARED
+        src/localization/finenav_localizer.cpp
+)
+target_link_libraries(finenav_localizer
+        Sophus::Sophus
+        Eigen3::Eigen
+)
+
+# Smoke-test / usage demo for FineNavLocalizer
+ament_auto_add_executable(test_finenav_localizer
+        test/test_finenav_localizer.cpp
+)
+target_link_libraries(test_finenav_localizer
+        finenav_localizer
+        Sophus::Sophus
+        Eigen3::Eigen
 )
 
 #if (BUILD_TESTING)
