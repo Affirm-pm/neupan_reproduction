@@ -111,7 +111,12 @@ public:
 
         // Error-state update and covariance update
         dx_  = K * innovation;
-        cov_ = (FMat::Identity() - K * H) * cov_;
+
+        // Joseph form covariance update: P = (I - KH)P(I - KH)' + KRK'
+        // Ensures positive semi-definiteness and symmetry in floating-point math
+        const Eigen::Matrix<S, kDim, kDim> I_KH = FMat::Identity() - K * H;
+        cov_ = I_KH * cov_ * I_KH.transpose() + K * R_noise * K.transpose();
+        // cov_ = (FMat::Identity() - K * H) * cov_;
 
         const S dx_norm = static_cast<S>(dx_.norm());  // capture before reset
 
