@@ -3,4 +3,5 @@
 // All rights reserved.
 
 #include "finenav_core/localization/eskf.hpp"
+#include "fmt/core.h"
 
