@@ -72,9 +72,7 @@ public:
     using PMat      = Eigen::Matrix<S, kNavStateDim, kNavStateDim>;  ///< state covariance
 
     // ---- Process-noise configuration --------------------------------------
-    struct Options {
-        S pos_noise_std   = static_cast<S>(0.01);  ///< position     random-walk σ  [m/√s]
-        S rot_noise_std   = static_cast<S>(0.01);  ///< rotation     random-walk σ  [rad/√s]
+    struct Options { // Since we use a contant-velocity model, process error comes from variation of velocity
         S vel_noise_std   = static_cast<S>(0.10);  ///< lin-velocity noise σ         [m/s/√s]
         S omega_noise_std = static_cast<S>(0.10);  ///< ang-velocity noise σ         [rad/s/√s]
     };
@@ -125,8 +123,8 @@ public:
             return Mat3T::Identity() * sigma_sq_dt2;
         };
 
-        Q.template block<3, 3>(0, 0) = diag3(opts.pos_noise_std   * opts.pos_noise_std   * dt2);
-        Q.template block<3, 3>(3, 3) = diag3(opts.rot_noise_std   * opts.rot_noise_std   * dt2);
+        Q.template block<3, 3>(0, 0) = Mat3T::Zero(); // no direct position noise in constant-velocity model
+        Q.template block<3, 3>(3, 3) = Mat3T::Zero(); // no direct rotation noise in constant-velocity model
         Q.template block<3, 3>(6, 6) = diag3(opts.vel_noise_std   * opts.vel_noise_std   * dt2);
         Q.template block<3, 3>(9, 9) = diag3(opts.omega_noise_std * opts.omega_noise_std * dt2);
 
