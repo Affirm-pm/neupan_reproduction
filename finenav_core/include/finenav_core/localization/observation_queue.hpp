@@ -1,103 +1,84 @@
 // Copyright (c) 2026.
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
-
 #pragma once
-
 #include <algorithm>
 #include <deque>
 #include <mutex>
+#include <variant>
 #include <vector>
-
 #include <rclcpp/rclcpp.hpp>
-
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
+#include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 namespace finenav {
-
 // ============================================================================
-//  ObservationQueue<MsgT>
+//  ObservationQueue  —  single chronological buffer for all localizer inputs
 //
-//  Thread-safe timestamped observation buffer.
+//  Stores both PoseWithCovarianceStamped and TwistWithCovarianceStamped in
+//  one deque via std::variant.  drainAll() returns entries sorted ascending
+//  by stamp so FineNavLocalizer::timerCallback() can feed them directly into
+//  the sequential retrocorrection loop — no separate merge step needed.
 //
-//  MsgT must expose a `header.stamp` field (builtin_interfaces::msg::Time),
-//  which is standard for all stamped ROS 2 messages.
-//
-//  smoothing_steps is stored here as a parameter, but consumed externally by
-//  FineNavLocalizer when applying observations:
-//      R_eff = R_obs * smoothing_steps
-//  N=1 → standard ESKF; larger N → filter output changes more slowly.
+//  Thread-safety: all public methods are guarded by an internal mutex.
+//  push* calls are non-blocking relative to the filter (the queue has its
+//  own separate mutex so feedPose/feedTwist never contend with timerCallback).
 // ============================================================================
-template <typename MsgT>
 class ObservationQueue {
 public:
+    using PoseMsg  = geometry_msgs::msg::PoseWithCovarianceStamped;
+    using TwistMsg = geometry_msgs::msg::TwistWithCovarianceStamped;
     struct Entry {
-        rclcpp::Time stamp;
-        MsgT         msg;
+        rclcpp::Time                    stamp;
+        std::variant<PoseMsg, TwistMsg> data;
     };
-
-    explicit ObservationQueue(std::size_t max_queue_size = 32, // TODO: 不应该用 queue_size 而应该用数据容忍过期时间
-                              int         smoothing_steps = 1)
-        : max_queue_size_(max_queue_size)
-        , smoothing_steps_(smoothing_steps)
+    explicit ObservationQueue(std::size_t max_size = 64)
+        : max_size_(max_size)
     {}
-
-    /// Push a message; timestamp is extracted from msg.header.stamp.
-    /// TODO: 允许非Stamped Message，从外部输入timestamp
-    void push(const MsgT & msg)
+    // ── Push ────────────────────────────────────────────────────────────────
+    void pushPose(const PoseMsg & msg)
     {
-        rclcpp::Time stamp{msg.header.stamp};
-        std::lock_guard<std::mutex> lk(mutex_);
-        if (queue_.size() >= max_queue_size_) {
-            RCLCPP_WARN(
-                rclcpp::get_logger("ObservationQueue"),
-                "[ObservationQueue] Capacity (%zu) exceeded — dropping oldest entry.",
-                max_queue_size_);
-            queue_.pop_front();
-        }
-        queue_.push_back({stamp, msg});
+        push({rclcpp::Time(msg.header.stamp), msg});
     }
-
-    /// Atomically drain all entries; the returned vector is sorted by stamp
-    /// (ascending) so FineNavLocalizer can apply them in chronological order.
-    std::vector<Entry> drainAll() // TODO: 返回一个vector？拷贝的性能？
+    void pushTwist(const TwistMsg & msg)
+    {
+        push({rclcpp::Time(msg.header.stamp), msg});
+    }
+    // ── Drain ───────────────────────────────────────────────────────────────
+    /// Atomically move all entries out of the queue.
+    /// Returns a vector sorted ascending by stamp.
+    /// stable_sort preserves push order for equal-stamp entries
+    /// (a pose pushed before a twist at the same stamp stays first).
+    std::vector<Entry> drainAll()
     {
         std::vector<Entry> out;
         {
             std::lock_guard<std::mutex> lk(mutex_);
-            out.assign(queue_.begin(), queue_.end());
+            out.assign(std::make_move_iterator(queue_.begin()),
+                       std::make_move_iterator(queue_.end()));
             queue_.clear();
         }
-        std::sort(out.begin(), out.end(),
-                  [](const Entry & a, const Entry & b) { return a.stamp < b.stamp; });
+        std::stable_sort(out.begin(), out.end(),
+            [](const Entry & a, const Entry & b) { return a.stamp < b.stamp; });
         return out;
     }
-
-    std::size_t size() const
-    {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return queue_.size();
-    }
-
-    bool empty() const
-    {
-        std::lock_guard<std::mutex> lk(mutex_);
-        return queue_.empty();
-    }
-
-    void clear()
-    {
-        std::lock_guard<std::mutex> lk(mutex_);
-        queue_.clear();
-    }
-
-    int  smoothingSteps()      const noexcept { return smoothing_steps_; }
-    void setSmoothingSteps(int n) noexcept   { smoothing_steps_ = n; }
-
+    // ── Introspection ───────────────────────────────────────────────────────
+    std::size_t size()  const { std::lock_guard<std::mutex> lk(mutex_); return queue_.size(); }
+    bool        empty() const { std::lock_guard<std::mutex> lk(mutex_); return queue_.empty(); }
+    void        clear()       { std::lock_guard<std::mutex> lk(mutex_); queue_.clear(); }
 private:
-    std::size_t        max_queue_size_;
-    int                smoothing_steps_;
+    void push(Entry e)
+    {
+        std::lock_guard<std::mutex> lk(mutex_);
+        if (queue_.size() >= max_size_) {
+            RCLCPP_WARN(rclcpp::get_logger("ObservationQueue"),
+                "[ObservationQueue] Capacity (%zu) exceeded — dropping oldest entry.",
+                max_size_);
+            queue_.pop_front();
+        }
+        queue_.push_back(std::move(e));
+    }
+    std::size_t        max_size_;
     mutable std::mutex mutex_;
     std::deque<Entry>  queue_;
 };
-
 }  // namespace finenav
-

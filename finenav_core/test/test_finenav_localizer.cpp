@@ -150,7 +150,7 @@ int main(int argc, char ** argv)
         localizer.feedPose(msg);
         RCLCPP_INFO(node->get_logger(),
             "[5] feedPose (delayed)  p=[1.18, 2.03, 0.00]  delay=150 ms  "
-            "→ Approach-B retrocorrection will be applied");
+            "→ sequential retrocorrection will be applied");
     }
 
     // ── 6. Feed a pose that should be REJECTED by the Mahalanobis gate ───────

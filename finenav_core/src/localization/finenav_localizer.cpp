@@ -22,8 +22,7 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     : parent_node_(std::move(parent_node))
     , opts_(opts)
     , eskf_(opts.model_opts)
-    , pose_queue_(opts.max_pose_queue_size,  opts.pose_smoothing_steps)
-    , twist_queue_(opts.max_twist_queue_size, opts.twist_smoothing_steps)
+    , obs_queue_(opts.max_obs_queue_size)
     , logger_(rclcpp::get_logger("finenav.FineNavLocalizer"))
 {
     // Private sub-node — mirrors the MapServer pattern so the timer lives on
@@ -106,18 +105,16 @@ void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
 // ============================================================================
 void FineNavLocalizer::feedPose(const PoseMsg & msg)
 {
-    // TODO: checke frame_id
-    pose_queue_.push(msg);
+    obs_queue_.pushPose(msg);
     RCLCPP_DEBUG(logger_,
-        "[FineNavLocalizer] feedPose queued  (queue=%zu)", pose_queue_.size());
+        "[FineNavLocalizer] feedPose queued  (queue=%zu)", obs_queue_.size());
 }
 
 void FineNavLocalizer::feedTwist(const TwistMsg & msg)
 {
-    // TODO: check frame_id
-    twist_queue_.push(msg);
+    obs_queue_.pushTwist(msg);
     RCLCPP_DEBUG(logger_,
-        "[FineNavLocalizer] feedTwist queued  (queue=%zu)", twist_queue_.size());
+        "[FineNavLocalizer] feedTwist queued  (queue=%zu)", obs_queue_.size());
 }
 
 // ============================================================================
@@ -144,6 +141,13 @@ rclcpp::Time FineNavLocalizer::getLastUpdateTime() const
 // ============================================================================
 //  timerCallback  — sole modifier of eskf_ and state_history_
 // ============================================================================
+
+// Observations stamped via now() on another thread can arrive with a stamp
+// that is marginally newer than timerCallback's now due to scheduler jitter.
+// Delays in [-kFutureToleranceSec, 0) are clamped to 0.0; anything more
+// negative is treated as a genuinely out-of-order message and discarded.
+static constexpr double kFutureToleranceSec = 0.003;  // 3 ms
+
 void FineNavLocalizer::timerCallback()
 {
     // Acquire-load: guarantees we see everything written before
@@ -190,7 +194,7 @@ void FineNavLocalizer::timerCallback()
     // ── 3. Save post-predict snapshot ──────────────────────────────────────
     state_history_.push_back({now, eskf_.getState(), eskf_.getCovariance()});
 
-    // Prune snapshots older than max_delay + 1 s margin
+    // Prune snapshots older than + 1 s margin
     const double horizon = opts_.max_delay_sec + 1.0; // TODO:这个+1是在干嘛
     while (!state_history_.empty() &&
            (now - state_history_.front().stamp).seconds() > horizon)
@@ -198,26 +202,75 @@ void FineNavLocalizer::timerCallback()
         state_history_.pop_front();
     }
 
-    // ── 4. Pose measurement updates ────────────────────────────────────────
+    // ── 4+5. Drain unified queue; process observations sequentially ─────────
     {
-        auto entries = pose_queue_.drainAll();
+        auto entries = obs_queue_.drainAll();  // already sorted ascending by stamp
+        // Validate: reject genuinely-future obs; clamp jitter-future to 'now'.
+        std::vector<ObservationQueue::Entry> valid;
+        valid.reserve(entries.size());
+        for (auto & e : entries) {
+            const double delay = (now - e.stamp).seconds();
+            if (delay < -kFutureToleranceSec) {
+                RCLCPP_WARN(logger_,
+                    "[FineNavLocalizer] Obs from future (delay=%.4f s) — skipping.", delay);
+                continue;
+            }
+            if (delay > opts_.max_delay_sec) {
+                RCLCPP_WARN(logger_,
+                    "[FineNavLocalizer] Obs too old (delay=%.4f s > max %.4f s) — discarding.",
+                    delay, opts_.max_delay_sec);
+                continue;
+            }
+            if (delay < 0.0) {
+                RCLCPP_DEBUG(logger_,
+                    "[FineNavLocalizer] Obs marginally in future (%.4f s) — clamped.", delay);
+                e.stamp = now;
+            }
+            valid.push_back(std::move(e));
+        }
+        // Re-sort after clamping: near-future entries may have moved to 'now'.
+        std::stable_sort(valid.begin(), valid.end(),
+            [](const auto & a, const auto & b) { return a.stamp < b.stamp; });
         RCLCPP_DEBUG(logger_,
-            "[FineNavLocalizer] %zu pose observations to process.", entries.size());
-        for (const auto & e : entries) {
-            applyPoseObservation(e, now);
+            "[FineNavLocalizer] %zu valid observations to process.", valid.size());
+        if (!valid.empty()) {
+            rclcpp::Time cursor = now;
+            const auto snap_opt = findSnapshot(valid.front().stamp);
+            if (snap_opt.has_value() && snap_opt->stamp <= valid.front().stamp) {
+                eskf_.setState(snap_opt->state);
+                eskf_.setCovariance(snap_opt->covariance);
+                cursor = snap_opt->stamp;
+                RCLCPP_DEBUG(logger_,
+                    "[FineNavLocalizer] Rolled back to snapshot at %.6f s.",
+                    snap_opt->stamp.seconds());
+            } else {
+                RCLCPP_DEBUG(logger_,
+                    "[FineNavLocalizer] No prior snapshot — updates on post-predict state.");
+            }
+            for (const auto & e : valid) {
+                const double micro_dt = (e.stamp - cursor).seconds();
+                if (micro_dt > 1e-6) {
+                    RCLCPP_DEBUG(logger_,
+                        "[FineNavLocalizer] micro-predict %.5f s → obs stamp", micro_dt);
+                    eskf_.predict(micro_dt);
+                    cursor = e.stamp;
+                }
+                std::visit([this](const auto & msg) {
+                    using T = std::decay_t<decltype(msg)>;
+                    if constexpr (std::is_same_v<T, ObservationQueue::PoseMsg>)
+                        applyPoseUpdate(msg);
+                    else
+                        applyTwistUpdate(msg);
+                }, e.data);
+            }
+            const double replay_dt = (now - cursor).seconds();
+            if (replay_dt > 1e-6) {
+                RCLCPP_DEBUG(logger_,
+                    "[FineNavLocalizer] replay-predict %.5f s → now", replay_dt);
+                eskf_.predict(replay_dt);
+            }
         }
     }
-
-    // ── 5. Twist measurement updates ───────────────────────────────────────
-    {
-        auto entries = twist_queue_.drainAll();
-        RCLCPP_DEBUG(logger_,
-            "[FineNavLocalizer] %zu twist observations to process.", entries.size());
-        for (const auto & e : entries) {
-            applyTwistObservation(e, now);
-        }
-    }
-
     // ── 6. Update output cache ─────────────────────────────────────────────
     {
         std::unique_lock<std::shared_mutex> cache_lk(cached_state_mutex_);
@@ -251,67 +304,24 @@ void FineNavLocalizer::timerCallback()
         s.p.norm(), s.v.norm(), s.omega.norm());
 }
 
-// Observations stamped via now() on another thread can arrive with a stamp
-// that is marginally newer than timerCallback's now due to scheduler jitter.
-// Delays in [-kFutureToleranceSec, 0) are clamped to 0.0; anything more
-// negative is treated as a genuinely out-of-order message and discarded.
-static constexpr double kFutureToleranceSec = 0.003;  // 3 ms
-
+// TODO: 做重载
 // ============================================================================
-//  applyPoseObservation  (Approach B retrocorrection)
-//  PRECONDITION: filter_mutex_ is held by the caller (timerCallback).
+//  applyPoseUpdate
+//  Apply a pose Kalman update directly to eskf_.
+//  Precondition: eskf_ has already been micro-predicted to the observation's
+//  effective timestamp by the sequential loop in timerCallback().
 // ============================================================================
-void FineNavLocalizer::applyPoseObservation(
-    const ObservationQueue<PoseMsg>::Entry & entry,
-    const rclcpp::Time & now)
+void FineNavLocalizer::applyPoseUpdate(const PoseMsg & msg)
 {
-    double delay = (now - entry.stamp).seconds();
-
-    if (delay < 0.0) {
-        if (delay >= -kFutureToleranceSec) {
-            RCLCPP_DEBUG(logger_,
-                "[FineNavLocalizer] Pose obs marginally in future (delay=%.4f s) — clamped to 0.",
-                delay);
-            delay = 0.0;
-        } else {
-            RCLCPP_WARN(logger_,
-                "[FineNavLocalizer] Pose obs from future (delay=%.4f s) — skipping.", delay);
-            return;
-        }
-    }
-    if (delay > opts_.max_delay_sec) {
-        RCLCPP_WARN(logger_,
-            "[FineNavLocalizer] Pose obs too old (delay=%.4f s > max %.4f s) — discarding.",
-            delay, opts_.max_delay_sec);
-        return;
-    }
-
-    auto [pos_obs, rot_obs, R_raw] = extractPoseObservation(entry.msg);
+    auto [pos_obs, rot_obs, R_raw] = extractPoseObservation(msg);
     const Eigen::Matrix<double, 6, 6> R_eff =
         R_raw * static_cast<double>(opts_.pose_smoothing_steps);
 
-    // ── Build temp ESKF starting from the closest historical snapshot ───────
-    const auto snap_opt    = findSnapshot(entry.stamp);
-    const bool has_snap    = snap_opt.has_value();
-    const PMat  base_cov   = has_snap ? snap_opt->covariance : eskf_.getCovariance();
-    const NavStateD base_s = has_snap ? snap_opt->state      : eskf_.getState();
-    const rclcpp::Time base_stamp = has_snap ? snap_opt->stamp : now;
-
-    ESKFd temp(opts_.model_opts, base_cov);
-    temp.setState(base_s);
-
-    // Micro-predict from snapshot stamp to observation stamp
-    const double micro_dt = (entry.stamp - base_stamp).seconds();
-    if (micro_dt > 1e-6) {
-        RCLCPP_DEBUG(logger_,
-            "[FineNavLocalizer] Pose micro-predict dt=%.5f s", micro_dt);
-        temp.predict(micro_dt);
-    }
+    const auto obs = NavigationModelD::observePose(eskf_.getState(), pos_obs, rot_obs);
 
     // ── Mahalanobis gate ────────────────────────────────────────────────────
-    const auto obs = NavigationModelD::observePose(temp.getState(), pos_obs, rot_obs);
     const Eigen::Matrix<double, 6, 6> S =
-        obs.H * temp.getCovariance() * obs.H.transpose() + R_eff;
+        obs.H * eskf_.getCovariance() * obs.H.transpose() + R_eff;
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S.inverse() * obs.innovation);
 
@@ -322,81 +332,29 @@ void FineNavLocalizer::applyPoseObservation(
         return;
     }
 
-    // ── Kalman update then replay-predict to now ────────────────────────────
-    temp.update<6>(obs.innovation, obs.H, R_eff);
-
-    const double replay_dt = (now - entry.stamp).seconds();
-    if (replay_dt > 1e-6) {
-        RCLCPP_DEBUG(logger_,
-            "[FineNavLocalizer] Pose replay-predict dt=%.5f s", replay_dt);
-        temp.predict(replay_dt);
-    }
-
-    eskf_.setState(temp.getState());
-    eskf_.setCovariance(temp.getCovariance());
+    eskf_.update<6>(obs.innovation, obs.H, R_eff);
 
     RCLCPP_DEBUG(logger_,
-        "[FineNavLocalizer] Pose update applied  delay=%.3f s  d²=%.4f  "
-        "|δp|=%.4f  |δR|=%.4f",
-        delay, d2,
-        obs.innovation.head<3>().norm(),
-        obs.innovation.tail<3>().norm());
+        "[FineNavLocalizer] Pose update applied  d²=%.4f  |δp|=%.4f  |δR|=%.4f",
+        d2, obs.innovation.head<3>().norm(), obs.innovation.tail<3>().norm());
 }
 
 // ============================================================================
-//  applyTwistObservation  (Approach B retrocorrection)
-//  PRECONDITION: filter_mutex_ is held by the caller (timerCallback).
+//  applyTwistUpdate
+//  Apply a twist Kalman update directly to eskf_.
+//  Same precondition as applyPoseUpdate.
 // ============================================================================
-void FineNavLocalizer::applyTwistObservation(
-    const ObservationQueue<TwistMsg>::Entry & entry,
-    const rclcpp::Time & now)
+void FineNavLocalizer::applyTwistUpdate(const TwistMsg & msg)
 {
-    double delay = (now - entry.stamp).seconds();
-
-    if (delay < 0.0) {
-        if (delay >= -kFutureToleranceSec) {
-            RCLCPP_DEBUG(logger_,
-                "[FineNavLocalizer] Twist obs marginally in future (delay=%.4f s) — clamped to 0.",
-                delay);
-            delay = 0.0;
-        } else {
-            RCLCPP_WARN(logger_,
-                "[FineNavLocalizer] Twist obs from future (delay=%.4f s) — skipping.", delay);
-            return;
-        }
-    }
-    if (delay > opts_.max_delay_sec) {
-        RCLCPP_WARN(logger_,
-            "[FineNavLocalizer] Twist obs too old (delay=%.4f s > max %.4f s) — discarding.",
-            delay, opts_.max_delay_sec);
-        return;
-    }
-
-    auto [lin_vel, ang_vel, R_raw] = extractTwistObservation(entry.msg);
+    auto [lin_vel, ang_vel, R_raw] = extractTwistObservation(msg);
     const Eigen::Matrix<double, 6, 6> R_eff =
         R_raw * static_cast<double>(opts_.twist_smoothing_steps);
 
-    // ── Build temp ESKF ─────────────────────────────────────────────────────
-    const auto snap_opt    = findSnapshot(entry.stamp);
-    const bool has_snap    = snap_opt.has_value();
-    const PMat  base_cov   = has_snap ? snap_opt->covariance : eskf_.getCovariance();
-    const NavStateD base_s = has_snap ? snap_opt->state      : eskf_.getState();
-    const rclcpp::Time base_stamp = has_snap ? snap_opt->stamp : now;
-
-    ESKFd temp(opts_.model_opts, base_cov);
-    temp.setState(base_s);
-
-    const double micro_dt = (entry.stamp - base_stamp).seconds();
-    if (micro_dt > 1e-6) {
-        RCLCPP_DEBUG(logger_,
-            "[FineNavLocalizer] Twist micro-predict dt=%.5f s", micro_dt);
-        temp.predict(micro_dt);
-    }
+    const auto obs = NavigationModelD::observeVelocity(eskf_.getState(), lin_vel, ang_vel);
 
     // ── Mahalanobis gate ────────────────────────────────────────────────────
-    const auto obs = NavigationModelD::observeVelocity(temp.getState(), lin_vel, ang_vel);
     const Eigen::Matrix<double, 6, 6> S =
-        obs.H * temp.getCovariance() * obs.H.transpose() + R_eff;
+        obs.H * eskf_.getCovariance() * obs.H.transpose() + R_eff;
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S.inverse() * obs.innovation);
 
@@ -407,25 +365,11 @@ void FineNavLocalizer::applyTwistObservation(
         return;
     }
 
-    // ── Kalman update then replay-predict to now ────────────────────────────
-    temp.update<6>(obs.innovation, obs.H, R_eff);
-
-    const double replay_dt = (now - entry.stamp).seconds();
-    if (replay_dt > 1e-6) {
-        RCLCPP_DEBUG(logger_,
-            "[FineNavLocalizer] Twist replay-predict dt=%.5f s", replay_dt);
-        temp.predict(replay_dt);
-    }
-
-    eskf_.setState(temp.getState());
-    eskf_.setCovariance(temp.getCovariance());
+    eskf_.update<6>(obs.innovation, obs.H, R_eff);
 
     RCLCPP_DEBUG(logger_,
-        "[FineNavLocalizer] Twist update applied  delay=%.3f s  d²=%.4f  "
-        "|δv|=%.4f  |δω|=%.4f",
-        delay, d2,
-        obs.innovation.head<3>().norm(),
-        obs.innovation.tail<3>().norm());
+        "[FineNavLocalizer] Twist update applied  d²=%.4f  |δv|=%.4f  |δω|=%.4f",
+        d2, obs.innovation.head<3>().norm(), obs.innovation.tail<3>().norm());
 }
 
 // ============================================================================
