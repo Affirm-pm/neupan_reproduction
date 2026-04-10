@@ -251,6 +251,12 @@ void FineNavLocalizer::timerCallback()
         s.p.norm(), s.v.norm(), s.omega.norm());
 }
 
+// Observations stamped via now() on another thread can arrive with a stamp
+// that is marginally newer than timerCallback's now due to scheduler jitter.
+// Delays in [-kFutureToleranceSec, 0) are clamped to 0.0; anything more
+// negative is treated as a genuinely out-of-order message and discarded.
+static constexpr double kFutureToleranceSec = 0.003;  // 3 ms
+
 // ============================================================================
 //  applyPoseObservation  (Approach B retrocorrection)
 //  PRECONDITION: filter_mutex_ is held by the caller (timerCallback).
@@ -259,12 +265,19 @@ void FineNavLocalizer::applyPoseObservation(
     const ObservationQueue<PoseMsg>::Entry & entry,
     const rclcpp::Time & now)
 {
-    const double delay = (now - entry.stamp).seconds();
+    double delay = (now - entry.stamp).seconds();
 
     if (delay < 0.0) {
-        RCLCPP_WARN(logger_,
-            "[FineNavLocalizer] Pose obs from future (delay=%.4f s) — skipping.", delay);
-        return;
+        if (delay >= -kFutureToleranceSec) {
+            RCLCPP_DEBUG(logger_,
+                "[FineNavLocalizer] Pose obs marginally in future (delay=%.4f s) — clamped to 0.",
+                delay);
+            delay = 0.0;
+        } else {
+            RCLCPP_WARN(logger_,
+                "[FineNavLocalizer] Pose obs from future (delay=%.4f s) — skipping.", delay);
+            return;
+        }
     }
     if (delay > opts_.max_delay_sec) {
         RCLCPP_WARN(logger_,
@@ -338,12 +351,19 @@ void FineNavLocalizer::applyTwistObservation(
     const ObservationQueue<TwistMsg>::Entry & entry,
     const rclcpp::Time & now)
 {
-    const double delay = (now - entry.stamp).seconds();
+    double delay = (now - entry.stamp).seconds();
 
     if (delay < 0.0) {
-        RCLCPP_WARN(logger_,
-            "[FineNavLocalizer] Twist obs from future (delay=%.4f s) — skipping.", delay);
-        return;
+        if (delay >= -kFutureToleranceSec) {
+            RCLCPP_DEBUG(logger_,
+                "[FineNavLocalizer] Twist obs marginally in future (delay=%.4f s) — clamped to 0.",
+                delay);
+            delay = 0.0;
+        } else {
+            RCLCPP_WARN(logger_,
+                "[FineNavLocalizer] Twist obs from future (delay=%.4f s) — skipping.", delay);
+            return;
+        }
     }
     if (delay > opts_.max_delay_sec) {
         RCLCPP_WARN(logger_,
