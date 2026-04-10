@@ -57,7 +57,7 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
 // ============================================================================
 void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
 {
-    auto [pos, rot, R_obs] = extractPoseObservation(msg);
+    auto [pos, rot, R_obs] = extractObservation(msg);
 
     NavStateD init_state;
     init_state.p     = pos;
@@ -70,7 +70,7 @@ void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
     PMat P = PMat::Zero();
     P.block<3, 3>(0, 0) = R_obs.block<3, 3>(0, 0);             // position
     P.block<3, 3>(3, 3) = R_obs.block<3, 3>(3, 3);             // rotation
-    P.block<3, 3>(6, 6) = Eigen::Matrix3d::Identity() * 100.0; // linear vel
+    P.block<3, 3>(6, 6) = Eigen::Matrix3d::Identity() * 100.0; // linear vel // TODO:一般是静止初始化，初始协方差如何设置？
     P.block<3, 3>(9, 9) = Eigen::Matrix3d::Identity() * 100.0; // angular vel
 
     {
@@ -100,26 +100,20 @@ void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
         pos.x(), pos.y(), pos.z());
 }
 
-// ============================================================================
-//  feedPose / feedTwist  (lock-free relative to the filter)
-// ============================================================================
-void FineNavLocalizer::feedPose(const PoseMsg & msg)
+void FineNavLocalizer::feedObservation(const PoseMsg & msg)
 {
     obs_queue_.pushPose(msg);
     RCLCPP_DEBUG(logger_,
-        "[FineNavLocalizer] feedPose queued  (queue=%zu)", obs_queue_.size());
+        "[FineNavLocalizer] feedObservation<Pose> queued  (queue=%zu)", obs_queue_.size());
 }
 
-void FineNavLocalizer::feedTwist(const TwistMsg & msg)
+void FineNavLocalizer::feedObservation(const TwistMsg & msg)
 {
     obs_queue_.pushTwist(msg);
     RCLCPP_DEBUG(logger_,
-        "[FineNavLocalizer] feedTwist queued  (queue=%zu)", obs_queue_.size());
+        "[FineNavLocalizer] feedObservation<Twist> queued (queue=%zu)", obs_queue_.size());
 }
 
-// ============================================================================
-//  Getters  (shared_mutex — multiple readers never block each other)
-// ============================================================================
 NavStateD FineNavLocalizer::getState() const
 {
     std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);
@@ -137,16 +131,6 @@ rclcpp::Time FineNavLocalizer::getLastUpdateTime() const
     std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);
     return cached_time_;
 }
-
-// ============================================================================
-//  timerCallback  — sole modifier of eskf_ and state_history_
-// ============================================================================
-
-// Observations stamped via now() on another thread can arrive with a stamp
-// that is marginally newer than timerCallback's now due to scheduler jitter.
-// Delays in [-kFutureToleranceSec, 0) are clamped to 0.0; anything more
-// negative is treated as a genuinely out-of-order message and discarded.
-static constexpr double kFutureToleranceSec = 0.003;  // 3 ms
 
 void FineNavLocalizer::timerCallback()
 {
@@ -204,13 +188,14 @@ void FineNavLocalizer::timerCallback()
 
     // ── 4+5. Drain unified queue; process observations sequentially ─────────
     {
-        auto entries = obs_queue_.drainAll();  // already sorted ascending by stamp
+        auto entries = obs_queue_.drainAll();
+
         // Validate: reject genuinely-future obs; clamp jitter-future to 'now'.
         std::vector<ObservationQueue::Entry> valid;
         valid.reserve(entries.size());
         for (auto & e : entries) {
             const double delay = (now - e.stamp).seconds();
-            if (delay < -kFutureToleranceSec) {
+            if (delay < -0.003) { // 3ms, tolerance for scheduler jitter
                 RCLCPP_WARN(logger_,
                     "[FineNavLocalizer] Obs from future (delay=%.4f s) — skipping.", delay);
                 continue;
@@ -228,11 +213,14 @@ void FineNavLocalizer::timerCallback()
             }
             valid.push_back(std::move(e));
         }
-        // Re-sort after clamping: near-future entries may have moved to 'now'.
+
+        // Sorted ascending by stamp
         std::stable_sort(valid.begin(), valid.end(),
             [](const auto & a, const auto & b) { return a.stamp < b.stamp; });
         RCLCPP_DEBUG(logger_,
             "[FineNavLocalizer] %zu valid observations to process.", valid.size());
+
+        // Replay the filter from the earliest timestamp of observation
         if (!valid.empty()) {
             rclcpp::Time cursor = now;
             const auto snap_opt = findSnapshot(valid.front().stamp);
@@ -247,22 +235,20 @@ void FineNavLocalizer::timerCallback()
                 RCLCPP_DEBUG(logger_,
                     "[FineNavLocalizer] No prior snapshot — updates on post-predict state.");
             }
+
             for (const auto & e : valid) {
                 const double micro_dt = (e.stamp - cursor).seconds();
-                if (micro_dt > 1e-6) {
+                if (micro_dt > 1e-6) { // If time interval is small, skip predict process
                     RCLCPP_DEBUG(logger_,
                         "[FineNavLocalizer] micro-predict %.5f s → obs stamp", micro_dt);
                     eskf_.predict(micro_dt);
                     cursor = e.stamp;
                 }
-                std::visit([this](const auto & msg) {
-                    using T = std::decay_t<decltype(msg)>;
-                    if constexpr (std::is_same_v<T, ObservationQueue::PoseMsg>)
-                        applyPoseUpdate(msg);
-                    else
-                        applyTwistUpdate(msg);
+                std::visit([this](const auto & msg) { // update process
+                    applyUpdate(msg);
                 }, e.data);
             }
+
             const double replay_dt = (now - cursor).seconds();
             if (replay_dt > 1e-6) {
                 RCLCPP_DEBUG(logger_,
@@ -304,16 +290,9 @@ void FineNavLocalizer::timerCallback()
         s.p.norm(), s.v.norm(), s.omega.norm());
 }
 
-// TODO: 做重载
-// ============================================================================
-//  applyPoseUpdate
-//  Apply a pose Kalman update directly to eskf_.
-//  Precondition: eskf_ has already been micro-predicted to the observation's
-//  effective timestamp by the sequential loop in timerCallback().
-// ============================================================================
-void FineNavLocalizer::applyPoseUpdate(const PoseMsg & msg)
+void FineNavLocalizer::applyUpdate(const PoseMsg & msg)
 {
-    auto [pos_obs, rot_obs, R_raw] = extractPoseObservation(msg);
+    auto [pos_obs, rot_obs, R_raw] = extractObservation(msg);
     const Eigen::Matrix<double, 6, 6> R_eff =
         R_raw * static_cast<double>(opts_.pose_smoothing_steps);
 
@@ -327,7 +306,7 @@ void FineNavLocalizer::applyPoseUpdate(const PoseMsg & msg)
 
     if (d2 > opts_.pose_gate_dist) {
         RCLCPP_WARN(logger_,
-            "[FineNavLocalizer] Pose obs rejected by Mahalanobis gate "
+            "[FineNavLocalizer] applyUpdate<Pose> rejected by Mahalanobis gate "
             "(d²=%.4f > threshold=%.4f).", d2, opts_.pose_gate_dist);
         return;
     }
@@ -335,18 +314,13 @@ void FineNavLocalizer::applyPoseUpdate(const PoseMsg & msg)
     eskf_.update<6>(obs.innovation, obs.H, R_eff);
 
     RCLCPP_DEBUG(logger_,
-        "[FineNavLocalizer] Pose update applied  d²=%.4f  |δp|=%.4f  |δR|=%.4f",
+        "[FineNavLocalizer] applyUpdate<Pose>   d²=%.4f  |δp|=%.4f  |δR|=%.4f",
         d2, obs.innovation.head<3>().norm(), obs.innovation.tail<3>().norm());
 }
 
-// ============================================================================
-//  applyTwistUpdate
-//  Apply a twist Kalman update directly to eskf_.
-//  Same precondition as applyPoseUpdate.
-// ============================================================================
-void FineNavLocalizer::applyTwistUpdate(const TwistMsg & msg)
+void FineNavLocalizer::applyUpdate(const TwistMsg & msg)
 {
-    auto [lin_vel, ang_vel, R_raw] = extractTwistObservation(msg);
+    auto [lin_vel, ang_vel, R_raw] = extractObservation(msg);
     const Eigen::Matrix<double, 6, 6> R_eff =
         R_raw * static_cast<double>(opts_.twist_smoothing_steps);
 
@@ -360,7 +334,7 @@ void FineNavLocalizer::applyTwistUpdate(const TwistMsg & msg)
 
     if (d2 > opts_.twist_gate_dist) {
         RCLCPP_WARN(logger_,
-            "[FineNavLocalizer] Twist obs rejected by Mahalanobis gate "
+            "[FineNavLocalizer] applyUpdate<Twist> rejected by Mahalanobis gate "
             "(d²=%.4f > threshold=%.4f).", d2, opts_.twist_gate_dist);
         return;
     }
@@ -368,16 +342,10 @@ void FineNavLocalizer::applyTwistUpdate(const TwistMsg & msg)
     eskf_.update<6>(obs.innovation, obs.H, R_eff);
 
     RCLCPP_DEBUG(logger_,
-        "[FineNavLocalizer] Twist update applied  d²=%.4f  |δv|=%.4f  |δω|=%.4f",
+        "[FineNavLocalizer] applyUpdate<Twist>  d²=%.4f  |δv|=%.4f  |δω|=%.4f",
         d2, obs.innovation.head<3>().norm(), obs.innovation.tail<3>().norm());
 }
 
-// ============================================================================
-//  findSnapshot
-//  Returns the snapshot with the largest stamp ≤ target.
-//  Uses std::upper_bound on the chronologically-ordered deque.
-//  NOTE: must be called while filter_mutex_ is held.
-// ============================================================================
 std::optional<FineNavLocalizer::StateSnapshot>
 FineNavLocalizer::findSnapshot(const rclcpp::Time & target) const
 {
@@ -403,13 +371,10 @@ FineNavLocalizer::findSnapshot(const rclcpp::Time & target) const
     return *it;
 }
 
-// ============================================================================
-//  extractPoseObservation
-// ============================================================================
 std::tuple<FineNavLocalizer::Vec3d,
            FineNavLocalizer::SO3d,
            Eigen::Matrix<double, 6, 6>>
-FineNavLocalizer::extractPoseObservation(const PoseMsg & msg)
+FineNavLocalizer::extractObservation(const PoseMsg & msg)
 {
     // Position
     Vec3d pos{
@@ -440,13 +405,13 @@ FineNavLocalizer::extractPoseObservation(const PoseMsg & msg)
 }
 
 // ============================================================================
-//  extractTwistObservation
+//  extractObservation  (TwistMsg overload)
 //  Twist is expected in body frame (base_link), matching observeVelocity().
 // ============================================================================
 std::tuple<FineNavLocalizer::Vec3d,
            FineNavLocalizer::Vec3d,
            Eigen::Matrix<double, 6, 6>>
-FineNavLocalizer::extractTwistObservation(const TwistMsg & msg)
+FineNavLocalizer::extractObservation(const TwistMsg & msg)
 {
     Vec3d lin{
         msg.twist.twist.linear.x,

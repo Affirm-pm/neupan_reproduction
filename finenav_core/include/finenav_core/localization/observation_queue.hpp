@@ -57,8 +57,6 @@ public:
                        std::make_move_iterator(queue_.end()));
             queue_.clear();
         }
-        std::stable_sort(out.begin(), out.end(),
-            [](const Entry & a, const Entry & b) { return a.stamp < b.stamp; });
         return out;
     }
     // ── Introspection ───────────────────────────────────────────────────────

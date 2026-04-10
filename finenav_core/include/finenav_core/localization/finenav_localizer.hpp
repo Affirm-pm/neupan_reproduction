@@ -87,75 +87,72 @@ public:
     FineNavLocalizer & operator=(const FineNavLocalizer &) = delete;
     ~FineNavLocalizer() = default;
 
-    // ── Public API ─────────────────────────────────────────────────────────
-
-    /// Reset the filter to a known pose; clears all history.
-    /// Must be called at least once before timerCallback() produces output.
-    /// Thread-safe: may be called from any thread.
+    /**
+     * @brief Set the initial pose of the localizer. This will reset the filter state and clear all history.
+     * @note thread-safe
+     */
     void setInitialPose(const PoseMsg & msg);
 
-    /// Push a pose observation (thread-safe, non-blocking).
-    void feedPose(const PoseMsg & msg);
+    /**
+     * @brief Feed a pose or twist observation into the localizer.
+     * @note thread-safe
+     */
+    void feedObservation(const PoseMsg  & msg);
+    void feedObservation(const TwistMsg & msg);
 
-    /// Push a twist observation (thread-safe, non-blocking).
-    void feedTwist(const TwistMsg & msg);
-
-    /// Read the latest estimated state  (thread-safe).
+    /**
+     * @brief Get the current state
+     * @note thread-safe
+     */
     NavStateD    getState()          const;
     PMat         getCovariance()     const;
     rclcpp::Time getLastUpdateTime() const;
 
 private:
-    // ── Snapshot saved after predict(), before measurement updates ──────────
+
     struct StateSnapshot {
         rclcpp::Time stamp;
         NavStateD    state;
         PMat         covariance;
     };
 
-    // ── Core update loop ────────────────────────────────────────────────────
     void timerCallback();
 
-    // ── Per-observation Kalman update helpers ────────────────────────────────
-    //  Precondition: filter_mutex_ held; eskf_ is already micro-predicted to
-    //  the observation's effective timestamp by the sequential retrocorrection
-    //  loop in timerCallback(). These helpers only apply the Kalman update.
-    void applyPoseUpdate (const PoseMsg  & msg);
-    void applyTwistUpdate(const TwistMsg & msg);
+    // Apply a observation update direclty to the filter
+    void applyUpdate(const PoseMsg  & msg);
+    void applyUpdate(const TwistMsg & msg);
 
-    /// Find the snapshot with the largest stamp ≤ target.
-    /// Falls back to the oldest snapshot if none precedes target.
-    /// NOTE: must be called while filter_mutex_ is held.
+    // Find the snapshot with the largest stamp ≤ target. Falls back to the oldest snapshot if none precedes target.
     std::optional<StateSnapshot> findSnapshot(const rclcpp::Time & target) const;
 
-    // ── Message → ESKF observation conversion ───────────────────────────────
+    // Convert message to ESKF observation
     static std::tuple<Vec3d, SO3d, Eigen::Matrix<double, 6, 6>>
-    extractPoseObservation(const PoseMsg & msg);
+    extractObservation(const PoseMsg & msg);
 
     static std::tuple<Vec3d, Vec3d, Eigen::Matrix<double, 6, 6>>
-    extractTwistObservation(const TwistMsg & msg);
+    extractObservation(const TwistMsg & msg);
 
-    // ── ROS infrastructure ───────────────────────────────────────────────────
+    //  ROS infrastructure
     rclcpp::Node::SharedPtr                    parent_node_;
     rclcpp::Node::SharedPtr                    pnode_;
     std::unique_ptr<NodeThread>                pnode_thread_;
     rclcpp::TimerBase::SharedPtr               update_timer_;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_;
 
-    // ── Filter state  (protected by filter_mutex_) ──────────────────────────
+    // Filter state (protected by filter_mutex_)
     mutable std::mutex          filter_mutex_;
     LocalizerOptions            opts_;
     ESKFd                       eskf_;
     std::deque<StateSnapshot>   state_history_;
     std::optional<rclcpp::Time> last_predict_time_;
 
-    // ── Observation queue (unified — holds both Pose and Twist entries) ──────
+    // Observation queue
     ObservationQueue            obs_queue_;
 
-    // ── Initialisation guard ─────────────────────────────────────────────────
+    // Initialisation guard
     std::atomic<bool> is_initialized_{false};
 
-    // ── Output cache  (protected by cached_state_mutex_) ────────────────────
+    // Output cache (protected by cached_state_mutex_)
     mutable std::shared_mutex cached_state_mutex_;
     NavStateD    cached_state_{};
     PMat         cached_covariance_ = PMat::Identity() * 1e-2;

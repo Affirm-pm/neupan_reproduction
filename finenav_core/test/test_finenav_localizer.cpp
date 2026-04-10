@@ -105,7 +105,7 @@ int main(int argc, char ** argv)
         const auto cov = diag6(0.05, 0.05, 0.01, 0.005, 0.005, 0.02);
         std::copy(cov.begin(), cov.end(), msg.pose.covariance.begin());
 
-        localizer.feedPose(msg);
+        localizer.feedObservation(msg);
         RCLCPP_INFO(node->get_logger(),
             "[3] feedPose (current)  p=[1.30, 2.08, 0.00]  delay≈0 ms");
     }
@@ -127,7 +127,7 @@ int main(int argc, char ** argv)
         const auto cov = diag6(0.01, 0.01, 0.001, 0.001, 0.001, 0.005);
         std::copy(cov.begin(), cov.end(), msg.twist.covariance.begin());
 
-        localizer.feedTwist(msg);
+        localizer.feedObservation(msg);
         RCLCPP_INFO(node->get_logger(),
             "[4] feedTwist (current)  vx=0.50 m/s  wz=0.05 rad/s");
     }
@@ -147,7 +147,7 @@ int main(int argc, char ** argv)
         const auto cov = diag6(0.08, 0.08, 0.01, 0.005, 0.005, 0.03);
         std::copy(cov.begin(), cov.end(), msg.pose.covariance.begin());
 
-        localizer.feedPose(msg);
+        localizer.feedObservation(msg);
         RCLCPP_INFO(node->get_logger(),
             "[5] feedPose (delayed)  p=[1.18, 2.03, 0.00]  delay=150 ms  "
             "→ sequential retrocorrection will be applied");
@@ -168,7 +168,7 @@ int main(int argc, char ** argv)
         const auto cov = diag6(0.001, 0.001, 0.001, 0.001, 0.001, 0.001);
         std::copy(cov.begin(), cov.end(), msg.pose.covariance.begin());
 
-        localizer.feedPose(msg);
+        localizer.feedObservation(msg);
         RCLCPP_INFO(node->get_logger(),
             "[6] feedPose (outlier)  p=[100, 200, 0]  "
             "→ expected WARN: rejected by Mahalanobis gate");
