@@ -106,6 +106,7 @@ void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
 // ============================================================================
 void FineNavLocalizer::feedPose(const PoseMsg & msg)
 {
+    // TODO: checke frame_id
     pose_queue_.push(msg);
     RCLCPP_DEBUG(logger_,
         "[FineNavLocalizer] feedPose queued  (queue=%zu)", pose_queue_.size());
@@ -113,6 +114,7 @@ void FineNavLocalizer::feedPose(const PoseMsg & msg)
 
 void FineNavLocalizer::feedTwist(const TwistMsg & msg)
 {
+    // TODO: check frame_id
     twist_queue_.push(msg);
     RCLCPP_DEBUG(logger_,
         "[FineNavLocalizer] feedTwist queued  (queue=%zu)", twist_queue_.size());
@@ -146,7 +148,7 @@ void FineNavLocalizer::timerCallback()
 {
     // Acquire-load: guarantees we see everything written before
     // setInitialPose()'s release-store.
-    if (!is_initialized_.load(std::memory_order_acquire)) {
+    if (!is_initialized_.load(std::memory_order_acquire)) { // TODO: 既然 initialized 允许重复发动，应该默认从 0 初始化
         RCLCPP_WARN_THROTTLE(
             logger_, *pnode_->get_clock(), 2000,
             "[FineNavLocalizer] Not initialised — call setInitialPose() first.");
@@ -189,7 +191,7 @@ void FineNavLocalizer::timerCallback()
     state_history_.push_back({now, eskf_.getState(), eskf_.getCovariance()});
 
     // Prune snapshots older than max_delay + 1 s margin
-    const double horizon = opts_.max_delay_sec + 1.0;
+    const double horizon = opts_.max_delay_sec + 1.0; // TODO:这个+1是在干嘛
     while (!state_history_.empty() &&
            (now - state_history_.front().stamp).seconds() > horizon)
     {

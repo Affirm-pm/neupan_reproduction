@@ -34,13 +34,14 @@ public:
         MsgT         msg;
     };
 
-    explicit ObservationQueue(std::size_t max_queue_size = 32,
+    explicit ObservationQueue(std::size_t max_queue_size = 32, // TODO: 不应该用 queue_size 而应该用数据容忍过期时间
                               int         smoothing_steps = 1)
         : max_queue_size_(max_queue_size)
         , smoothing_steps_(smoothing_steps)
     {}
 
     /// Push a message; timestamp is extracted from msg.header.stamp.
+    /// TODO: 允许非Stamped Message，从外部输入timestamp
     void push(const MsgT & msg)
     {
         rclcpp::Time stamp{msg.header.stamp};
@@ -57,7 +58,7 @@ public:
 
     /// Atomically drain all entries; the returned vector is sorted by stamp
     /// (ascending) so FineNavLocalizer can apply them in chronological order.
-    std::vector<Entry> drainAll()
+    std::vector<Entry> drainAll() // TODO: 返回一个vector？拷贝的性能？
     {
         std::vector<Entry> out;
         {
