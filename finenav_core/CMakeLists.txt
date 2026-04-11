@@ -53,9 +53,12 @@ target_link_libraries(finenav_localizer
         Eigen3::Eigen
 )
 
-# Smoke-test / usage demo for FineNavLocalizer
+# Scenario-based integration test (executable — produces CSV for plot_localizer.py)
 ament_auto_add_executable(test_finenav_localizer
         test/test_finenav_localizer.cpp
+)
+target_include_directories(test_finenav_localizer PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/test   # localizer_test_config.hpp
 )
 target_link_libraries(test_finenav_localizer
         finenav_localizer
@@ -63,11 +66,19 @@ target_link_libraries(test_finenav_localizer
         Eigen3::Eigen
 )
 
-#if (BUILD_TESTING)
-#    find_package(ament_cmake_gtest REQUIRED)
-#    ament_find_gtest()
-#    add_subdirectory(test)
-#endif ()
+# Unit tests (GTest)
+if (BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+    ament_add_gtest(test_localizer_units
+            test/test_localizer_units.cpp
+    )
+    target_link_libraries(test_localizer_units
+            finenav_localizer
+            Sophus::Sophus
+            Eigen3::Eigen
+    )
+    target_include_directories(test_localizer_units PRIVATE include)
+endif ()
 
 ament_export_dependencies( # TODO: 以后查一下编译的问题，是否提供了过多或过少的 denpendency
         eigen3_cmake_module
