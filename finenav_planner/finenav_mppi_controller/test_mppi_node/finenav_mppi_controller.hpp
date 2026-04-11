@@ -25,6 +25,12 @@
 
 #include <vector>
 
+// Add include so we can inherit LocalLayer with the project's LocalLayerConfig
+#include "finenav_control_layers/local_layer.hpp"
+
+#include <cmath>
+#include <limits>
+
 
 using namespace mppi;
 using std::chrono_literals::operator"" ms;
@@ -37,7 +43,7 @@ bool numisfinite(float x) {
 }
 
 // 新增：将轨迹转换为点云的函数
-sensor_msgs::msg::PointCloud2 trajectoryToPointCloud(const finenav_msgs::msg::Trajectory& traj) {
+inline sensor_msgs::msg::PointCloud2 trajectoryToPointCloud(const finenav_msgs::msg::Trajectory& traj) {
     sensor_msgs::msg::PointCloud2 pointcloud;
     if (traj.poses.empty()) {
         RCLCPP_WARN(rclcpp::get_logger("traj"),
@@ -87,7 +93,7 @@ sensor_msgs::msg::PointCloud2 trajectoryToPointCloud(const finenav_msgs::msg::Tr
     pointcloud.data.resize(pointcloud.row_step * pointcloud.height);
 
     // 复制轨迹点到点云数据
-    float* data_ptr = reinterpret_cast<float*>(&pointcloud.data[0]);
+    auto* data_ptr = reinterpret_cast<float*>(&pointcloud.data[0]);
 
     for (size_t i = 0; i < traj.poses.size(); ++i) {
         const auto& pose = traj.poses[i];
@@ -106,7 +112,7 @@ sensor_msgs::msg::PointCloud2 trajectoryToPointCloud(const finenav_msgs::msg::Tr
 }
 
 //输出轨迹的函数
-nav_msgs::msg::Path createStraightPath(
+inline nav_msgs::msg::Path createStraightPath(
     double x0, double y0,
     double x1, double y1,
     int num_points = 51)
@@ -128,7 +134,7 @@ nav_msgs::msg::Path createStraightPath(
         pose_stamped.pose.position.y = y0 + t * (y1 - y0);
         pose_stamped.pose.position.z = 0.0;
 
-        // ⭐ 自动计算朝向（沿路径方向）
+        // ⭐ 自动计算朝向（沿路径方向)
         double yaw = std::atan2(y1 - y0, x1 - x0);
 
         tf2::Quaternion q;
@@ -146,15 +152,20 @@ nav_msgs::msg::Path createStraightPath(
 }
 // 设置path的函数
 
+struct LocalLayerConfig {
+    // using Map = SimpleTestMap;
+    using Map = finenav::GridMap<float>;
+    using Planners = finenav::PlannerSet<nav2_mppi_controller::MPPIController>;
+};
 
 // 新增：一个持有 MPPIController 的 ROS2 节点
-class TestMPPINode : public rclcpp::Node {
+class TestMPPILayer : public finenav::LocalLayer<LocalLayerConfig> {
 public:
-    TestMPPINode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
-    : Node("test_mppi_node", options),
-    grid_map_(std::make_shared<finenav::GridMap<float>>(
-    finenav::Length{7.0, 7.0, 7.0}, 0.05)),
-    grid_view_(*grid_map_,this)
+    explicit TestMPPILayer(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
+        : LocalLayer<LocalLayerConfig>(options),
+          grid_map_(std::make_shared<finenav::GridMap<float>>(
+              finenav::Length{7.0, 7.0, 7.0}, 0.05)),
+          grid_view_(*grid_map_, static_cast<rclcpp::Node*>(this))
     {
         tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
         tf2_buffer_->setCreateTimerInterface(
@@ -180,7 +191,7 @@ public:
         );
 
         // 注册回调
-        goal_tf_filter_->registerCallback(&TestMPPINode::goalPoseCallback, this);
+        goal_tf_filter_->registerCallback(&TestMPPILayer::goalPoseCallback, this);
         traj_pointcloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
     "mppi_trajectory",   // 话题名（你可以改）
     10
@@ -194,7 +205,7 @@ public:
         tf2_filter_ = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::PointCloud2>>(
             point_sub_, *tf2_buffer_, "/odom", 10,
             this->get_node_logging_interface(), this->get_node_clock_interface(), 100ms);
-        tf2_filter_->registerCallback(&TestMPPINode::pointcloudCallback, this);
+        tf2_filter_->registerCallback(&TestMPPILayer::pointcloudCallback, this);
 
         initController();
     }
@@ -299,6 +310,7 @@ public:
         }
 
 
+
         finenav::PlanningContext<nav2_mppi_controller::MPPIController> ctx;
         ctx.start_pose.position.x = base_to_world_transform_stamped.transform.translation.x;
         ctx.start_pose.position.y = base_to_world_transform_stamped.transform.translation.y;
@@ -312,6 +324,16 @@ public:
         test_controller_->plan(grid_view_, ctx, output_traj);
         sensor_msgs::msg::PointCloud2 pcd = trajectoryToPointCloud(output_traj);
         traj_pointcloud_pub_->publish(pcd);
+    }
+
+    MapViewsVariant get_planning_map_view(const std::string& planner_id) override {
+        // 因为你的 Planners 只有 MPPIController，直接返回它的地图视图
+        if (planner_id == "MPPIController") {  // 根据实际的 planner_id 调整
+            return std::shared_ptr<nav2_mppi_controller::IMapView>(&grid_view_);
+        }
+        RCLCPP_ERROR(this->get_logger(),
+                     "Unknown planner_id: %s", planner_id.c_str());
+        return std::shared_ptr<nav2_mppi_controller::IMapView>(nullptr);
     }
 
 private:
