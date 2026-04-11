@@ -5,13 +5,11 @@
 #pragma once
 
 #include <atomic>
-#include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <tuple>
-#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
@@ -31,44 +29,49 @@ namespace finenav {
 struct LocalizerOptions {
     double      update_rate_hz        = 100.0;  ///< Timer frequency [Hz]
     double      max_delay_sec         = 0.5;    ///< Max tolerable observation delay [s]
-    int         pose_smoothing_steps  = 1;      ///< Pose R scale factor (≥ 1)
-    int         twist_smoothing_steps = 1;      ///< Twist R scale factor (≥ 1)
+    int         pose_smoothing_steps  = 1;      ///< Pose processed N times, R scaled ×N
+    int         twist_smoothing_steps = 1;      ///< Twist processed N times, R scaled ×N
     double      pose_gate_dist        = 12.59;  ///< Mahalanobis gate  χ²(6) 95 %
     double      twist_gate_dist       = 12.59;  ///< Mahalanobis gate  χ²(6) 95 %
     double      max_dt_sec            = 0.5;    ///< dt clamp upper-bound [s]
-    std::size_t max_obs_queue_size    = 64;  ///< Combined observation queue capacity
+    std::size_t max_obs_queue_size    = 64;     ///< Per-type queue capacity
     NavigationModelD::Options model_opts{};     ///< ESKF process-noise parameters
 };
 
 // ============================================================================
-//  FineNavLocalizer  —  timer-driven ESKF localizer (pure C++ API)
+//  FineNavLocalizer  —  timer-driven ESKF localizer with time-delay compensation
 //
 //  Internal threading model
 //  ─────────────────────────────────────────────────────────────────────────
 //  A private sub-node (pnode_) runs inside a dedicated NodeThread.
-//  timerCallback() is the *sole* owner of eskf_ and state_history_.
+//  timerCallback() is the sole writer of eskf_.
 //
 //  setInitialPose() may be called from any external thread; it uses
 //  filter_mutex_ to serialise access with timerCallback().
 //
-//  feedPose() / feedTwist() are fully lock-free relative to the filter —
-//  they only touch the ObservationQueue's internal mutex.
+//  feedObservation() pushes into pose_queue_ / twist_queue_, which are each
+//  mutex-protected internally; the call never contends with timerCallback().
 //
-//  getState() / getCovariance() / getLastUpdateTime() read from a separate
-//  output cache protected by cached_state_mutex_ (shared_mutex), so
-//  multiple readers never block each other.
+//  getState() / getCovariance() / getLastUpdateTime() read from an output
+//  cache protected by cached_state_mutex_ (shared_mutex).
 //
-    //  Sequential Retrocorrection
-    //  ─────────────────────────────────────────────────────────────────────
-    //  All pose and twist observations drained in one timer tick are merged
-    //  and sorted by effective timestamp, then processed in a single pass:
-    //    1. Roll eskf_ back to the snapshot just before the earliest obs.
-    //    2. For each obs in chronological order:
-    //         a. Micro-predict from cursor to obs.stamp (if positive).
-    //         b. Apply the Kalman update (with Mahalanobis gate) to eskf_.
-    //         c. Advance cursor to obs.stamp.
-    //    3. Replay-predict from cursor to now.
-    //  This guarantees that no observation overwrites a prior one's correction.
+//  Time-delay handling
+//  ─────────────────────────────────────────────────────────────────────────
+//  Delayed observations are handled by the ESKF's TimeDelayKalmanFilter
+//  (state-expansion approach, following autoware EKFModule).
+//  Every timerCallback():
+//    1. predict(dt)  — slides delay slots, accumulates elapsed time
+//    2. For each observation popped from the queue:
+//         a. Compute delay_time = now − stamp (clamped to ≥ 0)
+//         b. delay_step = eskf_.findDelayStep(delay_time)
+//         c. Reject if delay_step ≥ maxDelayStep (too old)
+//         d. applyUpdate(msg, delay_step)  →  eskf_.update<6>(..., delay_step)
+//
+//  Smoothing (AgedObservationQueue)
+//  ─────────────────────────────────────────────────────────────────────────
+//  Each observation is processed smoothing_steps times (via pop_increment_age).
+//  Each processing uses R_eff = R_msg * smoothing_steps, distributing the
+//  correction gradually and preventing sharp jumps.
 // ============================================================================
 class FineNavLocalizer {
 public:
@@ -88,21 +91,21 @@ public:
     ~FineNavLocalizer() = default;
 
     /**
-     * @brief Set the initial pose of the localizer. This will reset the filter state and clear all history.
-     * @note thread-safe
+     * @brief Reset the filter to the given pose.  Clears all delay-slot history.
+     * @note  Thread-safe.
      */
     void setInitialPose(const PoseMsg & msg);
 
     /**
-     * @brief Feed a pose or twist observation into the localizer.
-     * @note thread-safe
+     * @brief Enqueue a pose or twist observation for the next timer tick.
+     * @note  Thread-safe.
      */
     void feedObservation(const PoseMsg  & msg);
     void feedObservation(const TwistMsg & msg);
 
     /**
-     * @brief Get the current state
-     * @note thread-safe
+     * @brief Read-only access to the latest filter output.
+     * @note  Thread-safe.
      */
     NavStateD    getState()          const;
     PMat         getCovariance()     const;
@@ -110,49 +113,41 @@ public:
 
 private:
 
-    struct StateSnapshot {
-        rclcpp::Time stamp;
-        NavStateD    state;
-        PMat         covariance;
-    };
-
+    // ── Timer callback ───────────────────────────────────────────────────────
     void timerCallback();
 
-    // Apply a observation update direclty to the filter
-    void applyUpdate(const PoseMsg  & msg);
-    void applyUpdate(const TwistMsg & msg);
+    // ── Observation update (called inside timerCallback, single-threaded) ────
+    void applyUpdate(const PoseMsg  & msg, int delay_step);
+    void applyUpdate(const TwistMsg & msg, int delay_step);
 
-    // Find the snapshot with the largest stamp ≤ target. Falls back to the oldest snapshot if none precedes target.
-    std::optional<StateSnapshot> findSnapshot(const rclcpp::Time & target) const;
-
-    // Convert message to ESKF observation
+    // ── Message extraction helpers ───────────────────────────────────────────
     static std::tuple<Vec3d, SO3d, Eigen::Matrix<double, 6, 6>>
     extractObservation(const PoseMsg & msg);
 
     static std::tuple<Vec3d, Vec3d, Eigen::Matrix<double, 6, 6>>
     extractObservation(const TwistMsg & msg);
 
-    //  ROS infrastructure
-    rclcpp::Node::SharedPtr                    parent_node_;
-    rclcpp::Node::SharedPtr                    pnode_;
-    std::unique_ptr<NodeThread>                pnode_thread_;
-    rclcpp::TimerBase::SharedPtr               update_timer_;
+    // ── ROS infrastructure ───────────────────────────────────────────────────
+    rclcpp::Node::SharedPtr                        parent_node_;
+    rclcpp::Node::SharedPtr                        pnode_;
+    std::unique_ptr<NodeThread>                    pnode_thread_;
+    rclcpp::TimerBase::SharedPtr                   update_timer_;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_;
 
-    // Filter state (protected by filter_mutex_)
+    // ── Filter state  (protected by filter_mutex_) ───────────────────────────
     mutable std::mutex          filter_mutex_;
     LocalizerOptions            opts_;
     ESKFd                       eskf_;
-    std::deque<StateSnapshot>   state_history_;
     std::optional<rclcpp::Time> last_predict_time_;
 
-    // Observation queue
-    ObservationQueue            obs_queue_;
+    // ── Observation queues (each internally mutex-protected) ─────────────────
+    PoseObsQueue  pose_queue_;
+    TwistObsQueue twist_queue_;
 
-    // Initialisation guard
+    // ── Initialisation guard ─────────────────────────────────────────────────
     std::atomic<bool> is_initialized_{false};
 
-    // Output cache (protected by cached_state_mutex_)
+    // ── Output cache  (protected by cached_state_mutex_) ────────────────────
     mutable std::shared_mutex cached_state_mutex_;
     NavStateD    cached_state_{};
     PMat         cached_covariance_ = PMat::Identity() * 1e-2;
