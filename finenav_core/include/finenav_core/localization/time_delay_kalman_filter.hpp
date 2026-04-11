@@ -99,6 +99,13 @@ public:
         P_.block(0, 0, dim_x_, dim_x_) = P_new;
     }
 
+    /// Read the error-state vector at a specific delay slot.
+    /// slot 0 = current time (same as getLatestX()), slot d = d ticks ago.
+    [[nodiscard]] Eigen::MatrixXd getXAtSlot(int slot) const
+    {
+        return x_.block(slot * dim_x_, 0, dim_x_, 1);
+    }
+
     // ---- Time-delay predict ----------------------------------------------
 
     /// Slide all slots one step forward in time, then update covariance.

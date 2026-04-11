@@ -5,6 +5,7 @@
 #pragma once
 
 #include <algorithm>
+#include <deque>
 #include <vector>
 
 #include <Eigen/Core>
@@ -43,16 +44,31 @@ namespace finenav {
 //    Model::projectCovariance(P, dx)  —  ESKF covariance reset projection
 //
 //  ── Delay-handling design ──────────────────────────────────────────────────
-//  • Every predict(dt) call slides all delay slots and accumulates elapsed
-//    time in accumulated_delay_times_ (same mechanism as autoware EKFModule).
+//  • Every predict(dt) call:
+//      1. Saves the PRE-propagation nominal into nominal_history_ (pushed to front).
+//         nominal_history_[0] = nominal one tick ago  (delay_step 1)
+//         nominal_history_[d-1] = nominal d ticks ago (delay_step d)
+//      2. Propagates the nominal state forward.
+//      3. Slides the TimeDelayKF extended covariance and accumulates delay times.
+//
 //  • findDelayStep(delay_sec) converts a wall-clock delay to the closest
 //    integer delay slot index to pass to update(..., delay_step).
+//
+//  • getStateAtDelay(d) returns nominal_history_[d-1], which is the nominal
+//    state at the time of capture of a delay_step=d observation.
+//    This is critical for computing correct innovations and Jacobians.
+//
 //  • update<ObsDim>(..., delay_step) calls updateWithDelay internally.
 //    After the KF update:
-//      1. dx   ← getLatestX() (the leading error-state block, block 0)
-//      2. nominal ← applyErrorState(nominal, dx)
-//      3. P(0,0) ← projectCovariance(P(0,0), dx)   [leading block only]
-//      4. resetState() — zero all error-state slots in tdkf_
+//      1. dx_0 ← getLatestX()  (block 0 = current-time error correction)
+//      2. nominal ← applyErrorState(nominal, dx_0)
+//      3. For each historical slot i ≥ 1:
+//           dx_i ← getXAtSlot(i)  (past error correction from cross-covariance)
+//           nominal_history_[i−1] ← applyErrorState(history[i−1], dx_i)
+//         This keeps the nominal history consistent with the TDKF posterior,
+//         so future delayed observations compute correct innovations.
+//      4. P(0,0) ← projectCovariance(P(0,0), dx_0)   [leading block only]
+//      5. resetState() — zero all error-state slots in tdkf_
 //
 //  ── Thread safety ──────────────────────────────────────────────────────────
 //  Not thread-safe.  All calls must be serialized by the owner
@@ -113,6 +129,14 @@ public:
         const FMat F = Model::computeF(nominal_, static_cast<S>(dt));
         const QMat Q = Model::buildQ(model_opts_, static_cast<S>(dt));
 
+        // ── Save nominal into history BEFORE propagation ────────────────────
+        //  nominal_history_[0] will become delay_step=1 (one tick ago).
+        //  The oldest slot beyond max_delay_step is discarded.
+        nominal_history_.push_front(nominal_);
+        if (static_cast<int>(nominal_history_.size()) >= tdkf_.maxDelayStep()) {
+            nominal_history_.pop_back();
+        }
+
         // Propagate nominal state.
         nominal_ = Model::predictNominal(nominal_, static_cast<S>(dt));
 
@@ -164,8 +188,33 @@ public:
         const ErrorVec dx = tdkf_.getLatestX().template cast<S>();
         const S dx_norm   = dx.norm();  // capture for debug log
 
-        // ── 3. Apply error-state correction to the nominal state ────────────
+        // ── 3. Apply error corrections to ALL nominal states ────────────────
+        //
+        //  dx_0  (slot 0): correction for current nominal.
+        //  dx_i  (slot i, i ≥ 1): correction for nominal_history_[i−1].
+        //    These arise from the cross-covariance blocks that propagate the
+        //    measurement's information back through the delay.  Applying them
+        //    keeps the history consistent with the TDKF posterior, so that a
+        //    future observation at the same delay slot sees the correct
+        //    innovation (z − h(corrected_historical_nominal)) and does not
+        //    receive an inflated correction from a stale linearisation point.
         nominal_ = Model::applyErrorState(nominal_, dx);
+
+        const int n_hist = std::min(
+            tdkf_.maxDelayStep() - 1,
+            static_cast<int>(nominal_history_.size()));
+        for (int i = 0; i < n_hist; ++i) {
+            // TDKF slot index (i+1) ↔ nominal_history_[i]
+            const ErrorVec dx_i =
+                tdkf_.getXAtSlot(i + 1).template cast<S>();
+            // Only bother if the correction is non-trivial (avoids unnecessary
+            // SO3 exponentials when the cross-covariance contribution is zero).
+            if (dx_i.squaredNorm() > static_cast<S>(1e-20)) {
+                nominal_history_[static_cast<std::size_t>(i)] =
+                    Model::applyErrorState(nominal_history_[static_cast<std::size_t>(i)],
+                                          dx_i);
+            }
+        }
 
         // ── 4. ESKF covariance projection on the leading block ──────────────
         //  P(0,0) ← G · P(0,0) · Gᵀ   where G = I − 0.5·[δθ]×  (SO3 block)
@@ -229,7 +278,27 @@ public:
     }
 
     // ---- Accessors --------------------------------------------------------
-    [[nodiscard]] const NavStateT & getState()      const { return nominal_; }
+    [[nodiscard]] const NavStateT & getState() const { return nominal_; }
+
+    /// Get the nominal state at a specific delay step.
+    ///   delay_step = 0  →  current nominal (same as getState())
+    ///   delay_step = d  →  nominal from d ticks ago (= nominal_history_[d−1])
+    ///
+    /// Use this to compute the innovation for a delayed observation:
+    ///   innov = z − h(getStateAtDelay(delay_step))
+    ///
+    /// Falls back to the oldest available entry if d exceeds history depth.
+    [[nodiscard]] const NavStateT & getStateAtDelay(int delay_step) const
+    {
+        if (delay_step <= 0 || nominal_history_.empty()) {
+            return nominal_;
+        }
+        const auto idx = static_cast<std::size_t>(delay_step - 1);
+        if (idx < nominal_history_.size()) {
+            return nominal_history_[idx];
+        }
+        return nominal_history_.back();  // oldest available
+    }
 
     /// Returns the leading block of the extended covariance — i.e. the
     /// covariance of the CURRENT (latest) error-state estimate.
@@ -244,7 +313,7 @@ public:
     void setState(NavStateT       && state) { nominal_ = std::move(state); }
 
     /// Overwrites the full extended covariance (all delay slots) with P.
-    /// Also resets accumulated_delay_times_ to 1e15 (all slots "unknown").
+    /// Also resets accumulated_delay_times_ to 1e15 and clears nominal history.
     /// Use this for a full initialisation / reinit after setInitialPose.
     void setCovariance(const PMat & P)
     {
@@ -252,13 +321,14 @@ public:
         tdkf_.init(x0, P.template cast<double>(), tdkf_.maxDelayStep());
         accumulated_delay_times_.assign(
             static_cast<std::size_t>(tdkf_.maxDelayStep()), 1.0e15);
+        nominal_history_.clear();
     }
 
     /// Convenience: reset nominal state AND full extended covariance atomically.
     void reinitialize(const NavStateT & state, const PMat & P)
     {
         nominal_ = state;
-        setCovariance(P);
+        setCovariance(P);  // also clears nominal_history_
     }
 
     [[nodiscard]] const typename Model::Options & getModelOptions() const { return model_opts_; }
@@ -287,6 +357,11 @@ private:
 
     // ---- Data members -----------------------------------------------------
     NavStateT               nominal_{};        ///< nominal (best-estimate) state
+    /// Circular history of pre-propagation nominal states.
+    /// nominal_history_[0] = nominal one tick ago  (delay_step = 1)
+    /// nominal_history_[d-1] = nominal d ticks ago (delay_step = d)
+    /// Size is bounded to maxDelayStep()-1 by predict().
+    std::deque<NavStateT>   nominal_history_;
     TimeDelayKalmanFilter   tdkf_;             ///< extended error-state covariance
     typename Model::Options model_opts_;       ///< process-noise parameters
     std::vector<double>     accumulated_delay_times_;  ///< slot → elapsed time [s]

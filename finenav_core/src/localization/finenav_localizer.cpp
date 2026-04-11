@@ -296,7 +296,11 @@ void FineNavLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
     const Eigen::Matrix<double, 6, 6> R_eff =
         R_raw * static_cast<double>(opts_.pose_smoothing_steps);
 
-    const auto obs = NavigationModelD::observePose(eskf_.getState(), pos_obs, rot_obs);
+    // Linearise at the nominal state from the time of capture, not the
+    // current nominal.  This gives the correct innovation z − h(x̂_{k−d})
+    // and the correct H Jacobian for the delayed KF update.
+    const auto obs = NavigationModelD::observePose(
+        eskf_.getStateAtDelay(delay_step), pos_obs, rot_obs);
 
     // ── Mahalanobis gate ────────────────────────────────────────────────────
     // Gate uses the CURRENT covariance (leading block of extended P).
@@ -328,7 +332,9 @@ void FineNavLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
     const Eigen::Matrix<double, 6, 6> R_eff =
         R_raw * static_cast<double>(opts_.twist_smoothing_steps);
 
-    const auto obs = NavigationModelD::observeVelocity(eskf_.getState(), lin_vel, ang_vel);
+    // Same as pose: linearise at the historical nominal from delay_step ticks ago.
+    const auto obs = NavigationModelD::observeVelocity(
+        eskf_.getStateAtDelay(delay_step), lin_vel, ang_vel);
 
     // ── Mahalanobis gate ────────────────────────────────────────────────────
     const Eigen::Matrix<double, 6, 6> S_mat =
