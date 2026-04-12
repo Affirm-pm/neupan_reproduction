@@ -2,13 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 //
-// Scenario-based integration test for FineNavLocalizer.
-//
-// ► CONFIGURE  : edit  test/localizer_test_config.hpp  (no other file needed)
-// ► BUILD      : colcon build --packages-select finenav_core
-// ► RUN        : ros2 run finenav_core test_finenav_localizer
-// ► VISUALISE  : python3 finenav_core/scripts/plot_localizer.py <cfg::kCsvPath>
-//
+
 // Scenarios (select via cfg::kScenario):
 //   1 — Uniform circular motion, all ideal            [implemented]
 //   2 — Uniform circular, Session-B stress events     [stub]
@@ -19,7 +13,7 @@
 //   est_{z,vz,wx,wy} | cov_{pz,rx,ry,vz,wx,wy} |
 //   obs_{x,y,yaw,vx_body,wz_body} | has_pose_obs | has_twist_obs | scenario
 
-#include "localizer_test_config.hpp"   // ← all user options live here
+#include "eval_config.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -32,7 +26,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <Eigen/Geometry>
 
-#include "finenav_core/localization/finenav_localizer.hpp"
+#include "finenav_localizer/finenav_localizer.hpp"
 
 using namespace std::chrono_literals;
 namespace fn = finenav;
@@ -712,7 +706,7 @@ int main(int argc, char** argv)
 
     RCLCPP_INFO(node->get_logger(),
         "\n[Done]  Visualise with:\n"
-        "  python3 finenav_core/scripts/plot_localizer.py %s",
+        "  python3 finenav_localizer/eval/plot.py %s",
         cfg::kCsvPath);
 
     rclcpp::shutdown();

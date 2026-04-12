@@ -2,7 +2,7 @@
 """Visualise FineNavLocalizer scenario-test output.
 
 Usage:
-    python3 scripts/plot_localizer.py [CSV_PATH]
+    python3 eval/plot.py [CSV_PATH]
 
 Default: /tmp/finenav_localizer_test.csv   (mirrors cfg::kCsvPath)
 

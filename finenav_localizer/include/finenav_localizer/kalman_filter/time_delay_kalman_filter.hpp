@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "finenav_core/localization/kalman_filter.hpp"
+#include "finenav_localizer/kalman_filter/kalman_filter.hpp"
 
 #include <iostream>
 #include <utility>

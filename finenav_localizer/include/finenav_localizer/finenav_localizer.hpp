@@ -16,10 +16,10 @@
 #include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 
+#include "eskf.hpp"
+#include "finenav_localizer/filter_model.hpp"
+#include "finenav_localizer/observation_queue.hpp"
 #include "finenav_util/node_thread.hpp"
-#include "finenav_core/localization/eskf.hpp"
-#include "finenav_core/localization/filter_model.hpp"
-#include "finenav_core/localization/observation_queue.hpp"
 
 namespace finenav {
 

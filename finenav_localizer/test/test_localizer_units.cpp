@@ -10,8 +10,8 @@
 #include <Eigen/Geometry>
 #include <sophus/so3.hpp>
 
-#include "finenav_core/localization/filter_model.hpp"
-#include "finenav_core/localization/finenav_localizer.hpp"
+#include "finenav_localizer/filter_model.hpp"
+#include "finenav_localizer/finenav_localizer.hpp"
 
 using namespace std::chrono_literals;
 namespace fn = finenav;

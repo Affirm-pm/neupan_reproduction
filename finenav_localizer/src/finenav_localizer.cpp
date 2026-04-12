@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_core/localization/finenav_localizer.hpp"
+#include "finenav_localizer/finenav_localizer.hpp"
 
 #include <algorithm>
 #include <chrono>
