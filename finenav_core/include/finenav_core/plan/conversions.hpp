@@ -5,7 +5,7 @@
 #pragma once
 
 #include <cstdint>
-#include "data_packet.hpp"
+#include "finenav_core/plan/data_packet.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
 
 namespace finenav {

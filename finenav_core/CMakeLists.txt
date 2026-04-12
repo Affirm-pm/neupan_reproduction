@@ -8,8 +8,22 @@ if (NOT CMAKE_BUILD_TYPE)
 endif ()
 
 find_package(ament_cmake_auto REQUIRED)
-find_package(Eigen3 REQUIRED)
+find_package(Eigen3 REQUIRED) # TODO: Eigen 应该放在 package.xml 中，方便 rosdep 统一管理
 find_package(eigen3_cmake_module REQUIRED) # TODO: 能不能删
+find_package(fmt REQUIRED)
+
+# Sophus
+include(FetchContent)
+FetchContent_Declare(
+        Sophus
+        GIT_REPOSITORY https://github.com/strasdat/Sophus.git
+        GIT_TAG 1.22.10
+        GIT_SHALLOW TRUE
+)
+set(BUILD_SOPHUS_TESTS OFF CACHE BOOL "Disable Sophus tests" FORCE) # skipping tests to speed up the build process
+message(STATUS "Fetching Sophus...")
+FetchContent_MakeAvailable(Sophus)
+message(STATUS "Sophus (1.22.10) integrated successfully.")
 
 include_directories(include)
 
@@ -24,11 +38,47 @@ target_include_directories(${PROJECT_NAME} INTERFACE
 
 target_link_libraries(${PROJECT_NAME} INTERFACE Eigen3::Eigen)
 
-#if (BUILD_TESTING)
-#    find_package(ament_cmake_gtest REQUIRED)
-#    ament_find_gtest()
-#    add_subdirectory(test)
-#endif ()
+ament_auto_add_library(test_localizer SHARED src/localizer.cpp)
+target_link_libraries(test_localizer
+        Sophus::Sophus
+        fmt::fmt
+)
+
+# FineNav Localizer (ESKF-based localization module)
+ament_auto_add_library(finenav_localizer SHARED
+        src/localization/finenav_localizer.cpp
+)
+target_link_libraries(finenav_localizer
+        Sophus::Sophus
+        Eigen3::Eigen
+)
+
+# Scenario-based integration test (executable — produces CSV for plot_localizer.py)
+ament_auto_add_executable(test_finenav_localizer
+        test/test_finenav_localizer.cpp
+)
+target_include_directories(test_finenav_localizer PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/test   # localizer_test_config.hpp
+)
+target_link_libraries(test_finenav_localizer
+        finenav_localizer
+        Sophus::Sophus
+        Eigen3::Eigen
+)
+
+# Unit tests (GTest)
+if (BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+    ament_add_gtest(test_localizer_units
+            test/test_localizer_units.cpp
+    )
+    target_link_libraries(test_localizer_units
+            finenav_localizer
+            Sophus::Sophus
+            Eigen3::Eigen
+    )
+    target_include_directories(test_localizer_units PRIVATE include)
+endif ()
 
 ament_export_dependencies( # TODO: 以后查一下编译的问题，是否提供了过多或过少的 denpendency
         eigen3_cmake_module

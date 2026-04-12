@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(finenav_control_layers)
+project(finenav_motion_decorator)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -13,20 +13,16 @@ include_directories(include)
 
 ament_auto_find_build_dependencies()
 
-add_library(${PROJECT_NAME} INTERFACE)
-
-target_include_directories(${PROJECT_NAME} INTERFACE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+ament_auto_add_library(${PROJECT_NAME} SHARED
+    src/trim_by_count.cpp
+    src/trim_by_duration.cpp
+    src/trim_by_distance.cpp
 )
-
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)
 #    ament_find_gtest()
 #    add_subdirectory(test)
 #endif ()
-
-ament_export_dependencies()
 
 ament_auto_package()

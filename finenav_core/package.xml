@@ -18,8 +18,15 @@
     <depend>tf2_ros</depend>
     <depend>tf2_eigen</depend>
 
+    <depend>eigen</depend>
+    <depend>fmt</depend>
+
     <depend>finenav_msgs</depend>
     <depend>sensor_msgs</depend>
+    <depend>geometry_msgs</depend>
+    <depend>finenav_util</depend>
+
+    <test_depend>ament_cmake_gtest</test_depend>
 
     <export>
         <build_type>ament_cmake</build_type>

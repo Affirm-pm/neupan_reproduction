@@ -13,12 +13,22 @@ include_directories(include)
 
 ament_auto_find_build_dependencies()
 
-add_library(${PROJECT_NAME} INTERFACE)
+#add_library(${PROJECT_NAME} INTERFACE)
+#
+#target_include_directories(${PROJECT_NAME} INTERFACE
+#        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+#        $<INSTALL_INTERFACE:include>
+#)
 
-target_include_directories(${PROJECT_NAME} INTERFACE
+ament_auto_add_library(${PROJECT_NAME} SHARED
+        src/node_thread.cpp
+)
+
+target_include_directories(${PROJECT_NAME} PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
+
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)
