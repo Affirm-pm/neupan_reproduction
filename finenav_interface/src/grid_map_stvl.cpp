@@ -7,8 +7,8 @@
 //
 #include "grid_map.hpp"
 #include "simpleTestPlanner.hpp"
-#include "finenav_manager.hpp"
-#include "map_server.hpp"
+#include "finenav_core/finenav_manager.hpp"
+#include "finenav_core/map/map_server.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "frustum3d.hpp"
 #include <sensor_msgs/msg/point_cloud2.hpp>
