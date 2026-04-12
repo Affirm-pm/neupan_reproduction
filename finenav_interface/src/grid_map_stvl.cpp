@@ -10,10 +10,17 @@
 #include "finenav_manager.hpp"
 #include "map_server.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "frustum3d.hpp"
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include <cmath>
 #include <vector>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_eigen/tf2_eigen.hpp>
+#include <message_filters/subscriber.h>
+#include <tf2_ros/message_filter.h>
+#include <tf2_ros/create_timer_ros.h>
 
 using namespace finenav;
 
@@ -68,14 +75,16 @@ using DynamicPosSet = std::unordered_set<Position, PositionHash, PositionEqual>;
 
 // 全局（本文件作用域）动态栅格集合与超时时间，仅用于 demo
 static DynamicPosSet g_dynamic_cells;          // 存储动态栅格的中心 Position
-static double        g_decay_time_sec = 10.0;   // 超时阈值，单位：秒
+// 基础超时阈值（视野外或普通情况下）：单位：秒
+static double        g_decay_time_sec = 10.0;
+static double        g_decay_time_fov_sec = 1.0;           //TODO：：只是简单的调整生命时间，是否有需要是加速衰减速度
 
 static const rclcpp::Logger LOGGER = rclcpp::get_logger("finenav_demo");
 
 using GlobalPlanners = PlannerSet<SimpleTestPlanner>;
 using LocalLayers = PlannerSet<SimpleTestPlanner>;
 using ReactivePlanners = PlannerSet<SimpleTestPlanner>;
-
+using std::chrono_literals::operator"" ms;
 
 bool numisfinite(float x) {
     if(x==std::numeric_limits<float>::infinity() || x==-std::numeric_limits<float>::infinity() || std::isnan(x)) {
@@ -97,18 +106,59 @@ int main(int argc, char** argv) {
 
     finenav_ptr->registerPipeline(FineNavManager::PipelineIO{}, global_layer, local_layer, reactive_layer);
     auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
+    auto frustum_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/frustum_voxels", 10);
     // ==============================================================================
     // 测试 MapServer 的完整功能 (Hook机制 + 数据源Push模式)
     // ==============================================================================
 
-    // 1. 初始化一个地图服务器，指定更新频率 1.0Hz
+    // 1. 初始化一个地图服务器，指定更新频率
     MapServer<GridMap<Voxel>> map_server(node, "test_map_server", 10.0);
 
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+    tf_buffer->setCreateTimerInterface(
+        std::make_shared<tf2_ros::CreateTimerROS>(node->get_node_base_interface(),
+                                                  node->get_node_timers_interface()));
+
+    auto tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
+
     // 2. 注册预处理 Hook (在应用融合数据前执行)
-    map_server.registerPreUpdateHook([node](GridMap<Voxel>& map) {
+    map_server.registerPreUpdateHook([node, tf_buffer, frustum_cloud_pub](GridMap<Voxel>& map) {
+        using finenav::geometry::Frustum3D;
+        using finenav::geometry::FrustumParams3D;
+        using finenav::geometry::FrustumSensorPose;
+        using finenav::geometry::FrustumRange;
+        using finenav::geometry::FrustumAngles;
+
         rclcpp::Time now = node->get_clock()->now();
 
-        // 遍历所有当前记录为“动态”的栅格中心 Position，根据时间戳判断是否需要清除
+        // 1. 获取 base_lidar 在 map 下的变换
+        Eigen::Matrix4d T_ws = Eigen::Matrix4d::Identity();
+        try {
+            geometry_msgs::msg::TransformStamped tf_stamped =
+                tf_buffer->lookupTransform("map", "base_lidar", tf2::TimePointZero);
+            Eigen::Isometry3d iso = tf2::transformToEigen(tf_stamped.transform);
+            T_ws = iso.matrix();
+        } catch (const tf2::TransformException &ex) {
+            RCLCPP_WARN(node->get_logger(), "TF lookup failed: %s", ex.what());
+            // 保持 T_ws = Identity
+        }
+
+        FrustumSensorPose sensor_pose;
+        sensor_pose.T_ws = T_ws;
+
+        // 视锥参数
+        FrustumRange  range;
+        range.min_range = 0.0;
+        range.max_range = 50.0;
+
+        FrustumAngles fov;
+        fov.min_angle   = 0.0;
+        fov.max_angle = M_PI / 3.0;
+
+        FrustumParams3D params{sensor_pose, range, fov};
+        Frustum3D frustum(params);
+
+        // 遍历所有当前记录为“动态”的栅格中心 Position，根据时间戳 + 是否在视锥内判断是否需要清除
         for (auto it = g_dynamic_cells.begin(); it != g_dynamic_cells.end(); ) {
             const Position & pos = *it;
 
@@ -122,8 +172,20 @@ int main(int argc, char** argv) {
 
             // 使用 ROS2 时间计算持续时间
             rclcpp::Duration age = now - cell.timestamp;
-            if (age.seconds() > g_decay_time_sec) {
-                // 超时：清除该体素的动态信息，这里简单重置为默认值
+            const double age_sec = age.seconds();
+
+            // 首先：若年龄已经超过基础阈值，直接删除，无需再做视锥判断
+            if (age_sec > g_decay_time_sec) {
+                cell = Voxel{NAN, false, rclcpp::Time{}};
+                it   = g_dynamic_cells.erase(it);
+                continue;
+            }
+
+            // 基于视锥判断，若在视锥内，则使用更短的寿命（加速清除）
+            bool in_fov = frustum.contains(pos.x(), pos.y(), pos.z());
+            double active_decay = in_fov ? g_decay_time_fov_sec : g_decay_time_sec;
+
+            if (age_sec > active_decay) {
                 cell = Voxel{NAN, false, rclcpp::Time{}};
                 it   = g_dynamic_cells.erase(it);
             } else {
@@ -131,7 +193,6 @@ int main(int argc, char** argv) {
             }
         }
 
-        RCLCPP_INFO(LOGGER, ">> [Hook] PreUpdateHook: dynamic cells = %zu", g_dynamic_cells.size());
     });
 
     // 3. 注册后处理 Hook (在应用融合数据后执行)
@@ -148,7 +209,7 @@ int main(int argc, char** argv) {
 
             sensor_msgs::msg::PointCloud2 cloud;
             cloud.header.stamp = now;
-            cloud.header.frame_id = "odom";
+            cloud.header.frame_id = "map";
             cloud.height = 1;
             cloud.width = valid_indices.size();
 
@@ -205,7 +266,6 @@ int main(int argc, char** argv) {
                 // 使用 Position 作为 key 记录为动态栅格（哈希表自动去重）
                 Position center_pos = map.getPosition(idx);
                 g_dynamic_cells.insert(center_pos);
-                std::cout<<"Injected dynamic cell at ("<<center_pos.x()<<", "<<center_pos.y()<<", "<<center_pos.z()<<") with z_height = "<<cell.z_height<<std::endl;
             }
         }
     );
@@ -213,11 +273,23 @@ int main(int argc, char** argv) {
     // 新增：地图点云可视化发布器（手动触发发布）
 
 
-    auto sub = node->create_subscription<sensor_msgs::msg::PointCloud2>(
-        "/cloud_for_lio",
-        rclcpp::SensorDataQoS(),
-        [node, laser_injector, &map_server, map_cloud_pub](const sensor_msgs::msg::PointCloud2::SharedPtr msg)
-        {
+    // 订阅点云并用 TF 过滤，保证 TF 可用时才处理点云
+    auto cloud_sub = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::PointCloud2>>(node, "/cloud_for_lio");
+    auto tf_filter = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::PointCloud2>>(
+        *cloud_sub, *tf_buffer, "map", 10,
+        node->get_node_logging_interface(), node->get_node_clock_interface(), 10ms);
+
+    tf_filter->registerCallback(
+        [node, laser_injector, tf_buffer](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
+            geometry_msgs::msg::TransformStamped tf_stamped;
+            try {
+                tf_stamped = tf_buffer->lookupTransform("map", msg->header.frame_id, msg->header.stamp);
+            } catch (const tf2::TransformException &ex) {
+                RCLCPP_WARN(node->get_logger(), "TF lookup failed: %s", ex.what());
+                return;
+            }
+            Eigen::Isometry3d T_map_lidar = tf2::transformToEigen(tf_stamped.transform);
+
             sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
             sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
             sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
@@ -225,17 +297,15 @@ int main(int argc, char** argv) {
 
             for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
                 if(numisfinite(*iter_x) && numisfinite(*iter_y) && numisfinite(*iter_z)) {
+                    Eigen::Vector3d p_lidar(*iter_x, *iter_y, *iter_z);
+                    Eigen::Vector3d p_map = T_map_lidar * p_lidar;
                     Pointcloud p;
-                    p.x = *iter_x;
-                    p.y = *iter_y;
-                    p.z = *iter_z;
+                    p.x = static_cast<float>(p_map.x());
+                    p.y = static_cast<float>(p_map.y());
+                    p.z = static_cast<float>(p_map.z());
                     laser_injector(std::move(p), now);
                 }
             }
-
-            // // 在 main 的回调里手动调用（非周期）
-            // auto locked_map = map_server.getLockedReadView();
-            // publishMapAsPointCloud(locked_map, map_cloud_pub, "map", now);
         }
     );
 

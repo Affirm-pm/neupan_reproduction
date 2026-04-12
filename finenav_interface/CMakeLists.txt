@@ -8,6 +8,9 @@ if (NOT CMAKE_BUILD_TYPE)
 endif ()
 
 find_package(ament_cmake_auto REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_eigen REQUIRED)
+
 
 include_directories(include)
 
@@ -28,12 +31,8 @@ generate_parameter_library(
 #ament_auto_add_library(finenav_manager src/finenav_manager.cpp)
 ament_auto_add_executable(test_interface_node src/test.cpp)
 ament_auto_add_executable(grid_map_stvl_node src/grid_map_stvl.cpp)
-target_link_libraries(test_interface_node test_map_params test_planner_params)
-target_link_libraries(grid_map_stvl_node test_map_params test_planner_params)
-#if (BUILD_TESTING)
-#    find_package(ament_cmake_gtest REQUIRED)
-#    ament_find_gtest()
-#    add_subdirectory(test)
-#endif ()
+target_link_libraries(test_interface_node test_map_param test_planner_params)
+target_link_libraries(grid_map_stvl_node test_map_params test_planner_params tf2::tf2 tf2_ros::tf2_ros tf2_eigen::tf2_eigen)
+
 
 ament_auto_package()
