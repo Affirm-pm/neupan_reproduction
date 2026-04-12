@@ -4,10 +4,24 @@
 
 #pragma once
 
-#include "finenav_core/math_types.hpp"
+#include <Eigen/Core>
+#include <Eigen/Dense>
 
 namespace finenav {
 
+using Vector3D   = Eigen::Vector3d;
+using Position3D = Eigen::Vector3d;
+using Orientation = Eigen::Quaterniond;
+using Region3D = Eigen::AlignedBox3d;
+using Pose = Eigen::Isometry3d;
+
+
+// TMP
+using Vector   = Eigen::Vector3d;
+using Position = Eigen::Vector3d;
+using Index = Eigen::Vector3i;
+using Size = Eigen::Vector3i;
+using Length = Eigen::Vector3d;
 /**
  * @brief 将索引向量的每个元素取模，确保索引在指定的范围内
  * @param index 输入的索引
