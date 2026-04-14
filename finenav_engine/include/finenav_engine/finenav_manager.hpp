@@ -6,6 +6,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include "finenav_core/plan/control_layer.hpp"
+#include "finenav_localizer/finenav_localizer.hpp"
 
 namespace finenav {
 
@@ -83,6 +84,13 @@ public:
         (layers->setupDataPorts(), ...);
     }
 
+    FineNavLocalizer& getLocalizer(LocalizerOptions opts = {}) { // TODO: 后续应当改为通过generate_parameter_library生成参数，而非构造函数传入
+        if (!localizer_) {
+            localizer_ = std::make_unique<FineNavLocalizer>(node_, opts);
+        }
+        return *localizer_;
+    }
+
 
 
   private:
@@ -110,7 +118,7 @@ public:
     std::vector<std::shared_ptr<void>> held_layers_; // 持有 ControlLayer 实例，防止被销毁
     std::vector<std::shared_ptr<void>> held_param_handles_;
 
-    // TODO: CurrentRobotState = 运动状态 + 导航任务状态； TF 时间戳相关细节，可参考 nav2_planner
+    std::unique_ptr<FineNavLocalizer> localizer_;
 
 };
 }
