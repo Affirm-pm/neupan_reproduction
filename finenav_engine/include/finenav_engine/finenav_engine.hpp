@@ -31,15 +31,31 @@ public:
         return node_;
     }
 
+    FineNavLocalizer& getLocalizer(LocalizerOptions opts = {}) { // TODO: 后续应当改为通过generate_parameter_library生成参数，而非构造函数传入
+        if (!localizer_) {
+            localizer_ = std::make_unique<FineNavLocalizer>(node_, opts);
+        }
+        return *localizer_;
+    }
+
     template <typename MapT> // TODO: MapConcept
     [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<MapServer<MapT>> createMapResource(const std::string& name, double update_rate_hz = 10.0) { // TODO: 后续整理下参数
+    std::shared_ptr<MapServer<MapT>> createMapResource(const std::string& name, double update_rate_hz = 10.0,
+                                                        bool enable_shift_window = false, double shift_rate_hz = 50.0) { // TODO: 后续整理下参数
+
         auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
                                             [&](const auto& pair) { return pair.first == name; });
         if (it == map_resources_.end()) {
-            auto new_map = std::make_shared<MapServer<MapT>>(node_, name, update_rate_hz);
-            map_resources_.emplace_back(name, new_map);
-            return new_map;
+            if (enable_shift_window) {
+                auto new_map = std::make_shared<MapServer<MapT>>(node_, name, update_rate_hz, &(this->getLocalizer()), shift_rate_hz); // TODO: 不应该这样做，这样会导致用户传入的滤波器配置失效，本质是要更改参数输入方式
+                map_resources_.emplace_back(name, new_map);
+                return new_map;
+            } else {
+                auto new_map = std::make_shared<MapServer<MapT>>(node_, name, update_rate_hz);
+                map_resources_.emplace_back(name, new_map);
+                return new_map;
+            }
+
         }
         return std::any_cast<std::shared_ptr<MapServer<MapT>>>(it->second);
     }
@@ -84,15 +100,6 @@ public:
 
         (layers->setupDataPorts(), ...);
     }
-
-    FineNavLocalizer& getLocalizer(LocalizerOptions opts = {}) { // TODO: 后续应当改为通过generate_parameter_library生成参数，而非构造函数传入
-        if (!localizer_) {
-            localizer_ = std::make_unique<FineNavLocalizer>(node_, opts);
-        }
-        return *localizer_;
-    }
-
-
 
   private:
 

@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
     // ==============================================================================
     // 测试 FineNavLocalizer
     // ==============================================================================
-    finenav_ptr->getLocalizer();
+    finenav_ptr->getLocalizer(); // 【注意：目前存在小bug，必须将这个api在createMapResource前调用一次】
 
 
     // ==============================================================================
@@ -44,7 +44,12 @@ int main(int argc, char** argv) {
     // ==============================================================================
 
     // 1. 初始化一个地图服务器，指定更新频率 1.0Hz
-    auto map_server_ptr = finenav_ptr->createMapResource<SimpleTestMap>("test_map_server", 1.0);
+    auto map_server_ptr = finenav_ptr->createMapResource<SimpleTestMap>(
+        "test_map_server",
+        1.0,   // update_rate_hz
+        true,  // enable_shift_window
+        50.0   // shift_rate_hz
+    );
 
     // 2. 注册预处理 Hook (在应用融合数据前执行)
     map_server_ptr->registerPreUpdateHook([](SimpleTestMap& map) {

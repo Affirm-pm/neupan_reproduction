@@ -17,6 +17,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/node_thread.hpp"
+#include "finenav_localizer/finenav_localizer.hpp"
 
 namespace finenav {
 
@@ -74,8 +75,12 @@ class MapServer { // TODO: 禁止复制、赋值？
      * @param node ROS 2 节点的指针
      * @param server_name MapServer 的名称
      * @param update_rate_hz 地图更新周期的频率 (Hz)
+     * @param localizer 可选的 FineNavLocalizer 指针，允许 MapServer 直接访问定位信息以进行地图更新
+     * @param shift_rate_hz 可选的地图位移更新频率 (Hz)，在每次地图更新周期内以该频率从 localizer 获取位移信息并更新地图
      */
-    explicit MapServer(rclcpp::Node::SharedPtr node, const std::string& server_name, double update_rate_hz = 10.0);
+    explicit MapServer(rclcpp::Node::SharedPtr node, const std::string& server_name, double update_rate_hz = 10.0,
+                        FineNavLocalizer* localizer = nullptr, double shift_rate_hz = 50.0);
+
 
     /**
      * @brief 注册在每次地图更新周期前执行的回调函数。
@@ -115,6 +120,8 @@ class MapServer { // TODO: 禁止复制、赋值？
 
   private:
     void runUpdateCycle(const rclcpp::Time& now);
+
+    void runShiftCycle(const rclcpp::Time& now);
 
     class IUpdateSource {
       public:
@@ -161,6 +168,10 @@ class MapServer { // TODO: 禁止复制、赋值？
     std::unique_ptr<MapT> map_instance_;
     std::shared_mutex rw_mutex_;  // C++17 读写锁
 
+    // 地图移动相关
+    FineNavLocalizer* localizer_{nullptr};
+    rclcpp::TimerBase::SharedPtr shift_timer_;
+
     // 回调列表与生命周期管理
     std::vector<std::function<void(MapT&)>> pre_update_hooks_;
     std::vector<std::function<void(MapT&)>> post_update_hooks_;
@@ -174,19 +185,30 @@ class MapServer { // TODO: 禁止复制、赋值？
 // ==============================================================================
 
 template <typename MapT>
-MapServer<MapT>::MapServer(rclcpp::Node::SharedPtr node, const std::string& server_name, double update_rate_hz)
-    : node_(node), server_name_(server_name) {
+MapServer<MapT>::MapServer(rclcpp::Node::SharedPtr node, const std::string& server_name, double update_rate_hz,
+                            FineNavLocalizer* localizer, double shift_rate_hz)
+    : node_(node), server_name_(server_name), localizer_(localizer) {
     pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), rclcpp::NodeOptions());
     pnode_thread_ = std::make_unique<NodeThread>(pnode_);
 
     map_instance_ = std::make_unique<MapT>();
     keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
 
+    // update from sensor observation
     auto period =
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / update_rate_hz));
 
     update_timer_ = rclcpp::create_timer(pnode_, node_->get_clock(), period,
                                          [this]() { this->runUpdateCycle(this->node_->now()); });
+
+    // update from robot moved
+    if (localizer_ != nullptr) {
+        auto shift_period =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / shift_rate_hz));
+        shift_timer_ = rclcpp::create_timer(pnode_, node_->get_clock(), shift_period,
+                                            [this]() { this->runShiftCycle(this->node_->now()); });
+    }
+
 }
 
 template <typename MapT>
@@ -242,6 +264,17 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     for (auto& hook : post_update_hooks_) {
         hook(*map_instance_);
     }
+}
+
+template<typename MapT>
+void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
+    auto latest_pose = localizer_->getState().p;
+    auto latest_time = localizer_->getLastUpdateTime(); // TODO: 必须有一个原子性获取时间+状态的接口，否则坑你用数据竞争
+
+    std::unique_lock<std::shared_mutex> lock(rw_mutex_);
+    map_instance_->shift_window_to(latest_pose);
+
+    RCLCPP_DEBUG_STREAM(pnode_->get_logger(), "MapServer shifted with pose delayed by " << (now - latest_time).seconds() << " seconds");
 }
 
 template <typename MapT>
