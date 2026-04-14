@@ -158,7 +158,7 @@ class MapServer { // TODO: 禁止复制、赋值？
     std::unique_ptr<NodeThread> pnode_thread_;
 
     // 核心数据与锁
-    MapT map_instance_; // TODO: 地图怎么存在栈上啊？
+    std::unique_ptr<MapT> map_instance_;
     std::shared_mutex rw_mutex_;  // C++17 读写锁
 
     // 回调列表与生命周期管理
@@ -179,7 +179,8 @@ MapServer<MapT>::MapServer(rclcpp::Node::SharedPtr node, const std::string& serv
     pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), rclcpp::NodeOptions());
     pnode_thread_ = std::make_unique<NodeThread>(pnode_);
 
-    keep_alive(AlgoConfigurator<MapT>::load(pnode_, map_instance_));
+    map_instance_ = std::make_unique<MapT>();
+    keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
 
     auto period =
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / update_rate_hz));
@@ -200,12 +201,12 @@ void MapServer<MapT>::registerPostUpdateHook(std::function<void(MapT& map)> hook
 
 template <typename MapT>
 LockedMapRO<MapT> MapServer<MapT>::getLockedReadView() {
-    return LockedMapRO<MapT>(map_instance_, rw_mutex_);
+    return LockedMapRO<MapT>(*map_instance_, rw_mutex_);
 }
 
 template <typename MapT>
 LockedMapRW<MapT> MapServer<MapT>::getLockedWriteView() {
-    return LockedMapRW<MapT>(map_instance_, rw_mutex_);
+    return LockedMapRW<MapT>(*map_instance_, rw_mutex_);
 }
 
 template <typename MapT>
@@ -231,15 +232,15 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
     for (auto& hook : pre_update_hooks_) {
-        hook(map_instance_);
+        hook(*map_instance_);
     }
 
     for (auto& source : update_sources_) {
-        source->applyBuffered(map_instance_, now);
+        source->applyBuffered(*map_instance_, now);
     }
 
     for (auto& hook : post_update_hooks_) {
-        hook(map_instance_);
+        hook(*map_instance_);
     }
 }
 
