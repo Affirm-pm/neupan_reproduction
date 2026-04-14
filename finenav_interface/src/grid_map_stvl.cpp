@@ -7,7 +7,7 @@
 //
 #include "grid_map.hpp"
 #include "simpleTestPlanner.hpp"
-#include "finenav_core/finenav_manager.hpp"
+#include "finenav_engine/finenav_engine.hpp"
 #include "finenav_core/map/map_server.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "frustum3d.hpp"
@@ -34,7 +34,7 @@ struct Pointcloud {
 struct Voxel {
     float        z_height  = NAN;
     bool         is_static = false;
-    rclcpp::Time timestamp{};   // 使用 node->get_clock()->now() 赋值
+    rclcpp::Time timestamp{};   // 使用 node->get_clock()->now() 赋值 //TODO:改成位数更小的数据结构
 };
 // ============================ 动态栅格管理相关 ============================
 
@@ -98,13 +98,13 @@ int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
     auto node = rclcpp::Node::make_shared("finenav_demo");
 
-    auto finenav_ptr = std::make_shared<FineNavManager>(node);
+    auto finenav_ptr = std::make_shared<FineNavEngine>(node);
 
     auto global_layer = finenav_ptr->createControlLayer<GlobalPlanners>("global_layer");
     auto local_layer = finenav_ptr->createControlLayer<LocalLayers>("local_layer");
     auto reactive_layer = finenav_ptr->createControlLayer<ReactivePlanners>("reactive_layer");
 
-    finenav_ptr->registerPipeline(FineNavManager::PipelineIO{}, global_layer, local_layer, reactive_layer);
+    finenav_ptr->registerPipeline(FineNavEngine::PipelineIO{}, global_layer, local_layer, reactive_layer);
     auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
     auto frustum_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/frustum_voxels", 10);
     // ==============================================================================
