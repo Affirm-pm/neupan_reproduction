@@ -44,15 +44,15 @@ int main(int argc, char** argv) {
     // ==============================================================================
 
     // 1. 初始化一个地图服务器，指定更新频率 1.0Hz
-    MapServer<SimpleTestMap> map_server(node, "test_map_server", 1.0);
+    auto map_server_ptr = finenav_ptr->createMapResource<SimpleTestMap>("test_map_server", 1.0);
 
     // 2. 注册预处理 Hook (在应用融合数据前执行)
-    map_server.registerPreUpdateHook([](SimpleTestMap& map) {
+    map_server_ptr->registerPreUpdateHook([](SimpleTestMap& map) {
         RCLCPP_INFO(LOGGER, ">> [Hook] PreUpdateHook triggered. Preparing map...");
     });
 
     // 3. 注册后处理 Hook (在应用融合数据后执行)
-    map_server.registerPostUpdateHook([](const SimpleTestMap& map) {
+    map_server_ptr->registerPostUpdateHook([](const SimpleTestMap& map) {
         RCLCPP_INFO(LOGGER, "<< [Hook] PostUpdateHook triggered. Map updating complete.");
     });
 
@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
     policy.max_buffer_size = 10;
     policy.observation_keep_time_sec = 2.0;
 
-    auto laser_injector = map_server.addUpdateSource<DummyLaserScan>(
+    auto laser_injector = map_server_ptr->addUpdateSource<DummyLaserScan>(
         "front_laser",
         policy,
         [](const DummyLaserScan& msg, SimpleTestMap& map) {
@@ -83,9 +83,9 @@ int main(int argc, char** argv) {
     });
 
     // 6. 添加一个定时器，模拟用户主动去访问 Map
-    auto mock_user_timer = node->create_wall_timer(std::chrono::milliseconds(500), [&map_server]() {
+    auto mock_user_timer = node->create_wall_timer(std::chrono::milliseconds(500), [&map_server_ptr]() {
         // 用户获取带有读锁的视图，极度丝滑
-        auto map_view = map_server.getLockedReadView();
+        auto map_view = map_server_ptr->getLockedReadView();
         // 因为操作符重载，等价于操作 const SimpleTestMap 对象本身的方法，自动线程安全
         RCLCPP_INFO(LOGGER, "   [User] Map accessed safely. LockedReadView protects the thread.");
     });

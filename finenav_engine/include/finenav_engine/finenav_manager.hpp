@@ -6,6 +6,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include "finenav_core/plan/control_layer.hpp"
+#include "finenav_core/map/map_server.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 
 namespace finenav {
@@ -32,24 +33,24 @@ public:
 
     template <typename MapT> // TODO: MapConcept
     [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<MapT> createMapResource(const std::string& name) {
+    std::shared_ptr<MapServer<MapT>> createMapResource(const std::string& name, double update_rate_hz = 10.0) { // TODO: 后续整理下参数
         auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
                                             [&](const auto& pair) { return pair.first == name; });
         if (it == map_resources_.end()) {
-            auto new_map = std::make_shared<MapT>(); // TODO: 参数管理可以被一个 MapServer 包裹
+            auto new_map = std::make_shared<MapServer<MapT>>(node_, name, update_rate_hz);
             map_resources_.emplace_back(name, new_map);
             return new_map;
         }
-        return std::any_cast<std::shared_ptr<MapT>>(it->second);
+        return std::any_cast<std::shared_ptr<MapServer<MapT>>>(it->second);
     }
 
     template <typename MapT>
     [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<MapT> getMapResource(const std::string& name) {
+    std::shared_ptr<MapServer<MapT>> getMapResource(const std::string& name) {
         auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
                                             [&](const auto& pair) { return pair.first == name; });
         if (it != map_resources_.end()) {
-            return std::any_cast<std::shared_ptr<MapT>>(it->second);
+            return std::any_cast<std::shared_ptr<MapServer<MapT>>>(it->second);
         }
         return nullptr;
     }
@@ -114,7 +115,7 @@ public:
 
 
     rclcpp::Node::SharedPtr node_;
-    std::vector<std::pair<std::string, std::any>> map_resources_; // TODO：map_resources_ 或许也只需要保活，不需要一个名字来标识？？ 感觉不靠谱
+    std::vector<std::pair<std::string, std::any>> map_resources_;
     std::vector<std::shared_ptr<void>> held_layers_; // 持有 ControlLayer 实例，防止被销毁
     std::vector<std::shared_ptr<void>> held_param_handles_;
 
