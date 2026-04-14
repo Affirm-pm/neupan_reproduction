@@ -44,7 +44,7 @@ public:
     GridMap(const Length& length, const double& resolution, const Position& origin = Position::Zero());
 
 
-    bool configure(const ConfigType& params) {
+    void configure(const ConfigType& params) {
         // TODO: 之后整，主要把 GridMap( Length, double, Poosition ) 的构造函数搬过来
         std::cout << "[GridMap] configure with params" << std::endl;
 
@@ -87,9 +87,7 @@ public:
               << size_.x() << " x "
               << size_.y() << " x "
               << size_.z() << std::endl;
-    std::cout << "[GridMap] total cells: " << total_size << std::endl;
-
-        return true;
+        std::cout << "[GridMap] total cells: " << total_size << std::endl;
     }
 
     /**
@@ -204,6 +202,12 @@ public:
      * @return 如果地图实际发生移动返回true，否则返回false
      */
     bool moveTo(const Position& position, const bool keep_removed, std::vector<std::pair<Position, T>>& removed_region);
+
+    /**
+     * @brief 将地图视窗平移到新的中心位置（MapConcept 要求）
+     * @param position 新的视窗中心位置（世界坐标）
+     */
+    void shiftWindowTo(const Position& position);
 
     /**
      * @brief 光线投射
