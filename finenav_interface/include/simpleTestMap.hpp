@@ -28,6 +28,22 @@ public:
         RCLCPP_INFO(rclcpp::get_logger("SimpleTestMap"), "SimpleTestMap debug_print called");
     }
 
+    bool isInside(const Position3D& pos) const {
+        return true;
+    }
+
+    Region3D getWindowBounds() const {
+        return Eigen::AlignedBox3d();
+    }
+
+    Position3D getWindowCenter() const {
+        return Eigen::Vector3d();
+    }
+
+    void shiftWindowTo(const Position3D& pos) {
+
+    }
+
 };
 }
 

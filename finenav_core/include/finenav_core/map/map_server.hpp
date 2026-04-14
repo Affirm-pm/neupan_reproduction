@@ -21,7 +21,7 @@
 
 namespace finenav {
 
-template <typename MapT>
+template <MapConcept MapT>
 class LockedMapRO {
   public:
     // 构造时自动加读锁 (Shared Lock)
@@ -38,7 +38,7 @@ class LockedMapRO {
     std::shared_lock<std::shared_mutex> lock_;
 };
 
-template <typename MapT>
+template <MapConcept MapT>
 class LockedMapRW {
   public:
     // 构造时自动加写锁 (Unique Lock)
@@ -55,7 +55,7 @@ class LockedMapRW {
     std::unique_lock<std::shared_mutex> lock_;
 };
 
-template <typename MapT>
+template <MapConcept MapT>
 class MapServer { // TODO: 禁止复制、赋值？
   public:
     struct SourceBufferPolicy {
@@ -184,7 +184,7 @@ class MapServer { // TODO: 禁止复制、赋值？
 // Implementation
 // ==============================================================================
 
-template <typename MapT>
+template <MapConcept MapT>
 MapServer<MapT>::MapServer(rclcpp::Node::SharedPtr node, const std::string& server_name, double update_rate_hz,
                             FineNavLocalizer* localizer, double shift_rate_hz)
     : node_(node), server_name_(server_name), localizer_(localizer) {
@@ -211,27 +211,27 @@ MapServer<MapT>::MapServer(rclcpp::Node::SharedPtr node, const std::string& serv
 
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 void MapServer<MapT>::registerPreUpdateHook(std::function<void(MapT& map)> hook) {
     pre_update_hooks_.push_back(std::move(hook));
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 void MapServer<MapT>::registerPostUpdateHook(std::function<void(MapT& map)> hook) {
     post_update_hooks_.push_back(std::move(hook));
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 LockedMapRO<MapT> MapServer<MapT>::getLockedReadView() {
     return LockedMapRO<MapT>(*map_instance_, rw_mutex_);
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 LockedMapRW<MapT> MapServer<MapT>::getLockedWriteView() {
     return LockedMapRW<MapT>(*map_instance_, rw_mutex_);
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 template <typename MsgT>
 std::function<void(MsgT&&, const rclcpp::Time&)> MapServer<MapT>::addUpdateSource(
     const std::string& source_name, SourceBufferPolicy policy, Fuser<MsgT> fuser) {
@@ -249,7 +249,7 @@ std::function<void(MsgT&&, const rclcpp::Time&)> MapServer<MapT>::addUpdateSourc
     };
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
@@ -266,18 +266,18 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     }
 }
 
-template<typename MapT>
+template<MapConcept MapT>
 void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     auto latest_pose = localizer_->getState().p;
     auto latest_time = localizer_->getLastUpdateTime(); // TODO: 必须有一个原子性获取时间+状态的接口，否则坑你用数据竞争
 
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
-    map_instance_->shift_window_to(latest_pose);
+    map_instance_->shiftWindowTo(latest_pose);
 
     RCLCPP_DEBUG_STREAM(pnode_->get_logger(), "MapServer shifted with pose delayed by " << (now - latest_time).seconds() << " seconds");
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 template <typename T>
 void MapServer<MapT>::keep_alive(std::shared_ptr<T> handle) {
     if (handle)
@@ -288,13 +288,13 @@ void MapServer<MapT>::keep_alive(std::shared_ptr<T> handle) {
 // 4. UpdateSource 成员定义
 // ==============================================================================
 
-template <typename MapT>
+template <MapConcept MapT>
 template <typename MsgT>
 MapServer<MapT>::UpdateSource<MsgT>::UpdateSource(const std::string& source_name, SourceBufferPolicy policy,
                                                   Fuser<MsgT> fuser)
     : source_name_(source_name), policy_(policy), fuser_(std::move(fuser)) {}
 
-template <typename MapT>
+template <MapConcept MapT>
 template <typename MsgT>
 void MapServer<MapT>::UpdateSource<MsgT>::enqueueThreadSafe(MsgT&& msg,
                                                             const rclcpp::Time& stamp) {
@@ -302,7 +302,7 @@ void MapServer<MapT>::UpdateSource<MsgT>::enqueueThreadSafe(MsgT&& msg,
     enqueue(std::move(msg), stamp);
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 template <typename MsgT>
 void MapServer<MapT>::UpdateSource<MsgT>::applyBuffered(MapT& map, const rclcpp::Time& now) {
     std::deque<BufferedMessage> pending;
@@ -340,7 +340,7 @@ void MapServer<MapT>::UpdateSource<MsgT>::applyBuffered(MapT& map, const rclcpp:
     }
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 template <typename MsgT>
 void MapServer<MapT>::UpdateSource<MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
     if (policy_.max_buffer_size > 0 && buffer_.size() >= policy_.max_buffer_size) {
@@ -351,7 +351,7 @@ void MapServer<MapT>::UpdateSource<MsgT>::enqueue(MsgT&& msg, const rclcpp::Time
     has_seen_message_ = true;
 }
 
-template <typename MapT>
+template <MapConcept MapT>
 template <typename MsgT>
 void MapServer<MapT>::UpdateSource<MsgT>::pruneExpired(const rclcpp::Time& now) {
     if (policy_.observation_keep_time_sec <= 0.0) {

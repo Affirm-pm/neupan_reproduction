@@ -17,7 +17,6 @@ namespace finenav {
 
 
 using Position3D = Eigen::Vector3d;
-using Orientation = Eigen::Quaterniond;
 using Region3D = Eigen::AlignedBox3d;
 
 /**
@@ -35,13 +34,13 @@ concept MapConcept =
     // --- 基本配置 ---
     typename T::ConfigType;
     typename T::DataType;
-    { map.configure(config) } -> std::same_as<bool>; // 配置地图参数
+    { map.configure(config) } -> std::same_as<void>; // 配置地图参数
 
     // --- 视窗操作 ---
     { std::as_const(map).isInside(pos) } -> std::same_as<bool>; // 检查是否在当前视窗内
     { std::as_const(map).getWindowBounds() } -> std::convertible_to<Region3D>; // 获取当前视窗范围
     { std::as_const(map).getWindowCenter() } -> std::convertible_to<Position3D>; // 获取当前视窗中心
-    // map.shift_window(pos, cb); // TODO：之后再整，不要用回调了，直接用把 MapChunk 拿出来
+    { map.shiftWindowTo(pos) } -> std::same_as<void>;
     };
 
 /**
