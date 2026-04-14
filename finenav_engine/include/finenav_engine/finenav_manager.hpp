@@ -9,21 +9,21 @@
 
 namespace finenav {
 
-class FineNavManager {
+class FineNavEngine {
 public:
 
-    FineNavManager(const rclcpp::Node::SharedPtr& node) : node_(node) {
+    FineNavEngine(const rclcpp::Node::SharedPtr& node) : node_(node) {
         RCLCPP_INFO(node_->get_logger(), "FinenavManager initialized"); // TODO：搞一个基于ROS2 child logger 机制的日志系统
     }
 
     // 禁止复制，允许移动
-    FineNavManager(const FineNavManager&) = delete;
-    FineNavManager& operator=(const FineNavManager&) = delete;
+    FineNavEngine(const FineNavEngine&) = delete;
+    FineNavEngine& operator=(const FineNavEngine&) = delete;
 
-    FineNavManager(FineNavManager&& other) = default;
-    FineNavManager& operator=(FineNavManager&& other) = default;
+    FineNavEngine(FineNavEngine&& other) = default;
+    FineNavEngine& operator=(FineNavEngine&& other) = default;
 
-    ~FineNavManager() {}
+    ~FineNavEngine() {}
 
     const rclcpp::Node::SharedPtr& getNode() const {
         return node_;

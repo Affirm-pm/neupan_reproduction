@@ -25,13 +25,13 @@ int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
     auto node = rclcpp::Node::make_shared("finenav_demo");
 
-    auto finenav_ptr = std::make_shared<FineNavManager>(node);
+    auto finenav_ptr = std::make_shared<FineNavEngine>(node);
 
     auto global_layer = finenav_ptr->createControlLayer<GlobalPlanners>("global_layer");
     auto local_layer = finenav_ptr->createControlLayer<LocalLayers>("local_layer");
     auto reactive_layer = finenav_ptr->createControlLayer<ReactivePlanners>("reactive_layer");
 
-    finenav_ptr->registerPipeline(FineNavManager::PipelineIO{}, global_layer, local_layer, reactive_layer);
+    finenav_ptr->registerPipeline(FineNavEngine::PipelineIO{}, global_layer, local_layer, reactive_layer);
 
     // ==============================================================================
     // 测试 MapServer 的完整功能 (Hook机制 + 数据源Push模式)
