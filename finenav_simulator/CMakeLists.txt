@@ -32,4 +32,5 @@ ament_auto_package(
         launch
         resource
         config
+        scripts
 )

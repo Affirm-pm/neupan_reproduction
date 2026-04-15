@@ -1,24 +1,16 @@
+#  Copyright (c) 2026.
+#  IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+#  All rights reserved.
+
 import os
 import sys
 import math
 import copy
 import xml.etree.ElementTree as ET
 
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_PACKAGE_ROOT_CANDIDATES = [
-    os.path.abspath(os.path.join(_THIS_DIR, "..", "..")),
-    os.path.abspath(os.path.join(_THIS_DIR, "..", "..", "..")),
-]
-for _package_root in _PACKAGE_ROOT_CANDIDATES:
-    _third_party_root = os.path.join(_package_root, "third_party")
-    for _vendor in ("xmacro", "sdformat_tools"):
-        _vendor_path = os.path.join(_third_party_root, _vendor)
-        if os.path.isdir(_vendor_path) and _vendor_path not in sys.path:
-            sys.path.insert(0, _vendor_path)
-
 import xacro
-from urdf_generator import UrdfGenerator
-from xmacro.xmacro4sdf import XMLMacro4sdf
+from thirdparty.sdformat_tools.urdf_generator import UrdfGenerator
+from thirdparty.xmacro.xmacro4sdf import XMLMacro4sdf
 
 
 def _identity_pose():

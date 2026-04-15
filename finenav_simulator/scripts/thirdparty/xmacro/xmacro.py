@@ -4,7 +4,6 @@ import os
 import sys
 import re
 import xml.dom.minidom
-import xmacro.xml_format
 from math import *
 
 def try2number(str):
