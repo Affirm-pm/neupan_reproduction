@@ -121,46 +121,44 @@ void ObstaclesCritic::score(CriticData & data, const IMapView& map_view)
   const size_t traj_len = data.trajectories.x.shape(1);
   bool all_trajectories_collide = true;
   for (size_t i = 0; i < data.trajectories.x.shape(0); ++i) {
-    bool trajectory_collide = false;
-    float traj_cost = 0.0f;
-    const auto & traj = data.trajectories;
-    float pose_cost;
+      bool trajectory_collide = false;
+      float traj_cost = 0.0f;
+      const auto & traj = data.trajectories;
+      float pose_cost;
 
-    for (size_t j = 0; j < traj_len; j++) {
-      pose_cost = costAtPose(traj.x(i, j), traj.y(i, j), traj.yaws(i, j),map_view);
-      if (pose_cost < 1.0f) {continue;}  // In free space
+      for (size_t j = 0; j < traj_len; j++) {
+          pose_cost = costAtPose(traj.x(i, j), traj.y(i, j), traj.yaws(i, j),map_view);
+          if (pose_cost < 1.0f) {continue;}  // In free space
 
-      if (inCollision(pose_cost, map_view)) {
-        trajectory_collide = true;
-        break;
+          if (inCollision(pose_cost, map_view)) {
+              trajectory_collide = true;
+              break;
+          }
+
+          //   // Cannot process repulsion if inflation layer does not exist
+          // if (inflation_radius_ == 0.0f || inflation_scale_factor_ == 0.0f) {
+          //   continue;
+          // }
+          const float dist_to_obj = distanceToObstacle(pose_cost, map_view);
+
+          // Let near-collision trajectory points be punished severely
+          if (dist_to_obj < collision_margin_distance_) {
+              traj_cost += (collision_margin_distance_ - dist_to_obj);
+          } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
+              repulsive_cost[i] += (inflation_radius_ - dist_to_obj);
+          }
       }
 
-    //   // Cannot process repulsion if inflation layer does not exist
-    // if (inflation_radius_ == 0.0f || inflation_scale_factor_ == 0.0f) {
-    //   continue;
-    // }
-
-    const float dist_to_obj = distanceToObstacle(pose_cost, map_view);
-
-    // Let near-collision trajectory points be punished severely
-    if (dist_to_obj < collision_margin_distance_) {
-      traj_cost += (collision_margin_distance_ - dist_to_obj);
-    } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
-      repulsive_cost[i] += (inflation_radius_ - dist_to_obj);
-    }
-    }
-
-    if (!trajectory_collide) {all_trajectories_collide = false;
-    raw_cost[i] = trajectory_collide ? collision_cost_ : traj_cost;   //在膨胀层不存在的时候多余的逻辑
-    }
-
+      if (!trajectory_collide) {
+          all_trajectories_collide = false;
+      }
+      raw_cost[i] = trajectory_collide ? collision_cost_ : traj_cost;
+  }
   data.costs += xt::pow(
     (critical_weight_ * raw_cost) +
     (repulsion_weight_ * repulsive_cost / traj_len),
     power_);
   data.fail_flag = all_trajectories_collide;
-  }
-    std::cout<<"[ObstaclesCritic]: Scored"<<std::endl;
 }
 /**
   * @brief Checks if cost represents a collision

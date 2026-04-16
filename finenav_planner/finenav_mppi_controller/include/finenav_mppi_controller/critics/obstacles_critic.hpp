@@ -82,16 +82,13 @@ protected:
     float costAtPose(float x, float y, float theta, const nav2_mppi_controller::IMapView& map_view)
     {
         float collision_cost;
-        float & cost = collision_cost;
-        unsigned int x_i, y_i;
-
-        cost = map_view.getCost(Position3D{static_cast<double>(x_i),
-                                                  static_cast<double>(y_i),
+        collision_cost = map_view.getCost(Position3D{static_cast<double>(x),
+                                                  static_cast<double>(y),
                                                   0.0});
 
         if (consider_footprint_ )
         {
-            cost = static_cast<float>(map_view.costAtPose(
+            collision_cost = static_cast<float>(map_view.costAtPose(
                 x, y, theta));
         }
 
