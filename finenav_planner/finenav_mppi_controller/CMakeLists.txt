@@ -31,7 +31,6 @@ set(dependencies_pkgs
   angles
   OpenCV
         finenav_collision_model
-        finenav_control_layers
         finenav_interface
         finenav_util
         finenav_core
@@ -54,7 +53,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ↓ 生成参数
 generate_parameter_library(
-        finenav_mppi_controller_params111
+        finenav_mppi_controller_params
         src/finenav_mppi_controller.yaml
 )
 # ↑ 生成参数
@@ -114,13 +113,12 @@ set(libraries mppi_controller mppi_critics)
 foreach(lib IN LISTS libraries)
   target_compile_options(${lib} PUBLIC -fconcepts)
   target_include_directories(${lib} PUBLIC ${xsimd_INCLUDE_DIRS})  #  ${OpenMP_INCLUDE_DIRS}
-  target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd finenav_mppi_controller_params111 )
+  target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd finenav_mppi_controller_params )
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
 
 
-# Test MPPI Node
-add_executable(test_mppi_node test_mppi_node/test_node.cpp)
+
 
 find_package(pcl_conversions REQUIRED)
 find_package(pcl_msgs REQUIRED)
@@ -133,25 +131,10 @@ set(test_dependencies
         pcl_msgs
 )
 
-target_link_libraries(test_mppi_node
-        mppi_controller
-        mppi_critics
-        ${OpenCV_LIBS}
-        ${PCL_LIBRARIES}  # PCL库链接
-)
-
-target_include_directories(test_mppi_node PRIVATE
-        ${finenav_collision_model_INCLUDE_DIRS}
-        ${OpenCV_INCLUDE_DIRS}
-        ${PCL_INCLUDE_DIRS}  # PCL头文件路径
-)
 
 
-install(TARGETS mppi_controller mppi_critics test_mppi_node
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
-)
+
+
 
 install(DIRECTORY include/
   DESTINATION include/

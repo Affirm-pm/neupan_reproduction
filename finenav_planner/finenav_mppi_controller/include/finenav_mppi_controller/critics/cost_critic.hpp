@@ -72,7 +72,7 @@ protected:
     float costAtPose(float x, float y, const nav2_mppi_controller::IMapView& map_view)
     {
         // 使用 Position3D 作为参数传入 map_view
-        return map_view.getCost(finenav::Position3D{static_cast<double>(x),
+        return map_view.getCost(Position3D{static_cast<double>(x),
                                                     static_cast<double>(y),
                                                     0.0});
     }

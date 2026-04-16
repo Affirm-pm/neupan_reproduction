@@ -85,7 +85,7 @@ protected:
         float & cost = collision_cost;
         unsigned int x_i, y_i;
 
-        cost = map_view.getCost(finenav::Position3D{static_cast<double>(x_i),
+        cost = map_view.getCost(Position3D{static_cast<double>(x_i),
                                                   static_cast<double>(y_i),
                                                   0.0});
 

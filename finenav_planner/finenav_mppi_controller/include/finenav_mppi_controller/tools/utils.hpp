@@ -46,8 +46,9 @@
 #include "finenav_mppi_controller/models/path.hpp"
 #include "builtin_interfaces/msg/time.hpp"
 #include "finenav_mppi_controller/critic_data.hpp"
-#include "finenav_core/math_types.hpp"
+#include <Eigen/Core>
 
+using Position3D = Eigen::Vector3d;
 namespace mppi::utils
 {
 using xt::evaluation_strategy::immediate;
@@ -389,7 +390,7 @@ inline void findPathCosts(
 //      continue;
 //    }
 
-    switch (map_view.getCost(finenav::Position3D{static_cast<double>(map_x),
+    switch (map_view.getCost(Position3D{static_cast<double>(map_x),
                                                     static_cast<double>(map_y),
                                                     0.0})) {
       // 使用具体数值替代 nav2_costmap_2d 宏常量：

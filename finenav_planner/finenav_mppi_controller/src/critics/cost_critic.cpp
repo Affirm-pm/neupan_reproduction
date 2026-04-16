@@ -74,6 +74,7 @@ void CostCritic::score(CriticData & data,const IMapView& map_view)
       // The footprintCostAtPose will always return "INSCRIBED" if footprint is over it
       // So the center point has more information than the footprint
       pose_cost = costAtPose(traj.x(i, j), traj.y(i, j), map_view);
+        std::cout<<"[CostCritic]: Pose cost at ("<<traj.x(i, j)<<", "<<traj.y(i, j)<<") is "<<pose_cost<<std::endl;
       if (pose_cost < 1.0f) {continue;}  // In free space
 
       if (inCollision(traj.x(i, j), traj.y(i, j), traj.yaws(i, j), map_view)) {
@@ -89,6 +90,7 @@ void CostCritic::score(CriticData & data,const IMapView& map_view)
       } else if (!near_goal) {  // Generally prefer trajectories further from obstacles
         repulsive_cost[i] += pose_cost;
       }
+        std::cout<<"this grid finished"<<std::endl;
     }
 
     if (!trajectory_collide) {
