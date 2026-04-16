@@ -355,6 +355,9 @@ private:
     */
     std::function<bool(const finenav::Position3D&)> CollisionRule() const {
         return [this](const finenav::Position3D& pos) {
+            if(this->map_.isInside(pos)) {
+                return false;  // 内部默认不碰撞，具体逻辑有待完善
+            }
             int pose_cost = this->getCost(pos);
             switch (static_cast<unsigned char>(pose_cost)) {
                 case 254: // LETHAL_OBSTACLE
