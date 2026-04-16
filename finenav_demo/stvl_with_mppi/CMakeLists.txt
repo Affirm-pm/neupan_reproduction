@@ -1,0 +1,1 @@
+ament_auto_add_executable(stvl_with_mppi_node src/hello_finenav.cpp)
