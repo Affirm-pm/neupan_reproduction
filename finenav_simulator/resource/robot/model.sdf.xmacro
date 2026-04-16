@@ -186,7 +186,7 @@
             <pose>${wheel_rear_x} ${wheel_right_y} ${wheel_radius} -1.57 0 0</pose>
         </frame>
         <frame name="right_rear_wheel" attached_to="right_rear_frame"/>
-        <link name="base_link_sensors">
+        <link name="imu">
             <inertial>
                 <mass>0.001</mass>
                 <inertia>
@@ -199,16 +199,16 @@
                 </inertia>
             </inertial>
             <sensor name="imu_sensor" type="imu">
-                <pose relative_to="base_link_sensors">0 0 0 0 0 0</pose>
+                <pose relative_to="imu">0 0 0 0 0 0</pose>
                 <always_on>1</always_on>
                 <update_rate>200</update_rate>
                 <visualize>true</visualize>
                 <topic>imu</topic>
             </sensor>
         </link>
-        <joint name="base_link_to_sensors" type="fixed">
+        <joint name="base_link_to_imu" type="fixed">
             <parent>base_link</parent>
-            <child>base_link_sensors</child>
+            <child>imu</child>
             <pose>0 0 0 0 0 0</pose>
         </joint>
         <link name="lidar_frame">
@@ -531,6 +531,18 @@
         </plugin>
         <plugin filename="libignition-gazebo-joint-state-publisher-system.so" name="ignition::gazebo::systems::JointStatePublisher">
             <topic>/joint_states</topic>
+        </plugin>
+        <plugin filename="libignition-gazebo-pose-publisher-system.so" name="ignition::gazebo::systems::PosePublisher">
+            <publish_link_pose>false</publish_link_pose>
+            <publish_visual_pose>false</publish_visual_pose>
+            <publish_collision_pose>false</publish_collision_pose>
+            <publish_sensor_pose>false</publish_sensor_pose>
+            <publish_model_pose>true</publish_model_pose>
+            <publish_nested_model_pose>true</publish_nested_model_pose>
+            <use_pose_vector_msg>false</use_pose_vector_msg>
+            <static_publisher>false</static_publisher>
+            <update_frequency>50</update_frequency>
+            <topic>/ground_truth_pose</topic>
         </plugin>
     </model>
 </sdf>

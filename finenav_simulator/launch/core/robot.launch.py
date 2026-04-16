@@ -97,14 +97,6 @@ def _launch_setup(context):
         }],
     )
 
-    base_link_to_imu = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="base_link_to_imu",
-        arguments=build_tf_args("base_link", "imu", sdf_config["base_link_to_imu"]),
-        parameters=[{"use_sim_time": True}],
-    )
-
     imu_sensor_alias = Node(
         package="tf2_ros",
         executable="static_transform_publisher",
@@ -150,7 +142,6 @@ def _launch_setup(context):
         spawn_robot,
         robot_ign_bridge,
         robot_state_publisher,
-        base_link_to_imu,
         imu_sensor_alias,
         simulator_helper,
     ]

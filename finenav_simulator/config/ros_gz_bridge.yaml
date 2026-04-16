@@ -40,6 +40,13 @@
   gz_type_name: "gz.msgs.Pose_V"
   direction: "GZ_TO_ROS"
 
+# Gazebo ground-truth pose from model PosePublisher
+- ros_topic_name: "/ground_truth_pose"
+  gz_topic_name: "/model/fine_robot/pose"
+  ros_type_name: "geometry_msgs/msg/PoseStamped"
+  gz_type_name: "gz.msgs.Pose"
+  direction: "GZ_TO_ROS"
+
 # Gazebo odometry TF for visualization map localization
 - ros_topic_name: "/ground_truth_odom_tf"
   gz_topic_name: "/model/fine_robot/tf"
