@@ -166,8 +166,7 @@ PointCloudConverter::PointCloudConverter(const rclcpp::NodeOptions & options)
     pcd_topic_, rclcpp::SensorDataQoS(),
     std::bind(&PointCloudConverter::lidarHandle, this, std::placeholders::_1));
 
-  auto qos = rclcpp::SensorDataQoS();
-  qos.best_effort();
+  auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
   pcd_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, qos);
 
   RCLCPP_INFO(

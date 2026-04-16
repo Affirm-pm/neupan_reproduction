@@ -138,28 +138,6 @@ def generate_launch_description():
         ),
     )
 
-    ground_truth_map_localizer = Node(
-        package='finenav_simulator',
-        executable='simulator_helper_node',
-        name='ground_truth_map_localizer',
-        parameters=[{
-            'use_sim_time': LaunchConfiguration('use_sim_time'),
-            'enable_ground_truth_localizer': True,
-            'ground_truth_topic': '/ground_truth_tf',
-            'odom_tf_topic': '/ground_truth_odom_tf',
-            'robot_frame': 'fine_robot',
-            'map_frame': PythonExpression(["'map' if '", LaunchConfiguration('publish_map_tf'), "' == 'true' else ''"]),
-            'base_frame': 'base_link',
-            'publish_tf': False,  # Disable path TF publishing to avoid conflict
-            'max_path_points': 0, # Disable path publishing
-        }],
-        condition=IfCondition(
-            PythonExpression([
-                "'", LaunchConfiguration('lio_type'), "' != 'fast_lio'"
-            ])
-        ),
-    )
-
     ld = LaunchDescription()
     ld.add_action(declare_use_sim_time)
     ld.add_action(declare_lio_type)
@@ -169,7 +147,6 @@ def generate_launch_description():
     ld.add_action(declare_publish_map_tf)
     ld.add_action(declare_nav_mode)
     ld.add_action(map_to_odom_static_node)
-    ld.add_action(ground_truth_map_localizer)
     ld.add_action(fast_lio_node)
     ld.add_action(octomap_server_node)
 

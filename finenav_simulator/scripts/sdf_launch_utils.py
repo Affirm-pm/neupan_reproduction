@@ -2,8 +2,6 @@
 #  IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 #  All rights reserved.
 
-import os
-import sys
 import math
 import copy
 import xml.etree.ElementTree as ET

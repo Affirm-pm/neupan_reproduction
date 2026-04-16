@@ -9,7 +9,11 @@ from launch.conditions import IfCondition
 from launch.substitutions import PythonExpression
 from launch_ros.actions import Node
 
-sys.path.append(os.path.dirname(__file__))
+pkg_share_dir = get_package_share_directory("finenav_simulator")
+scripts_dir = os.path.join(pkg_share_dir, "scripts")
+if scripts_dir not in sys.path:
+    sys.path.insert(0, scripts_dir)
+
 from sdf_launch_utils import (
     build_tf_args,
     generate_robot_sdf_from_xmacro,
@@ -134,7 +138,11 @@ def _launch_setup(context):
             "max_linear_speed": 2.0,
             "min_angular_speed": 0.0,
             "max_angular_speed": 3.0,
-            "enable_ground_truth_localizer": False,
+            "enable_keyboard_teleop": True,
+            "enable_path_publisher": True,
+            "enable_ground_truth_localizer": PythonExpression([
+                "'False' if '", LaunchConfiguration("lio_type"), "' == 'fast_lio' else 'True'"
+            ]),
         }],
     )
 

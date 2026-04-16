@@ -8,12 +8,10 @@ if (NOT CMAKE_BUILD_TYPE)
 endif ()
 
 find_package(ament_cmake_auto REQUIRED)
-find_package(ament_cmake_python REQUIRED)
 
 include_directories(include)
 
 ament_auto_find_build_dependencies()
-ament_get_python_install_dir(PYTHON_INSTALL_DIR)
 
 ament_auto_add_executable(point_cloud_converter_node
         src/point_cloud_converter.cpp

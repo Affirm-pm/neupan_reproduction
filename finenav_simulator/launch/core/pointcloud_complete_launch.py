@@ -8,8 +8,16 @@ from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
-sys.path.append(os.path.dirname(__file__))
-from sdf_launch_utils import build_tf_args, generate_robot_sdf_from_xmacro, load_robot_sdf_config_from_string
+pkg_share_dir = get_package_share_directory("finenav_simulator")
+scripts_dir = os.path.join(pkg_share_dir, "scripts")
+if scripts_dir not in sys.path:
+    sys.path.insert(0, scripts_dir)
+
+from sdf_launch_utils import (
+    build_tf_args,
+    generate_robot_sdf_from_xmacro,
+    load_robot_sdf_config_from_string,
+)
 
 
 def generate_launch_description():
