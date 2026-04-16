@@ -43,7 +43,7 @@ void PathFollowCritic::score(CriticData & data, const IMapView& map_view)
   const size_t path_size = data.path.x.shape(0) - 1;
 
   auto offseted_idx = std::min(
-    *data.furthest_reached_path_point + offset_from_furthest_, path_size);
+    *data.furthest_reached_path_point + offset_from_furthest_, path_size-1);
   // Drive to the first valid path point, in case of dynamic obstacles on path
   // we want to drive past it, not through it
   bool valid = false;

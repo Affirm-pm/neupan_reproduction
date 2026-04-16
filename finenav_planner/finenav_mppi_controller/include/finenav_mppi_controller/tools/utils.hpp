@@ -379,7 +379,6 @@ inline void findPathCosts(
   CriticData & data,
   const MapView& map_view)
 {
-  unsigned int map_x, map_y;
   const size_t path_segments_count = data.path.x.shape(0) - 1;
   data.path_pts_valid = std::vector<bool>(path_segments_count, false);
   for (unsigned int idx = 0; idx < path_segments_count; idx++) {
@@ -390,8 +389,8 @@ inline void findPathCosts(
 //      continue;
 //    }
 
-    switch (map_view.getCost(Position3D{static_cast<double>(map_x),
-                                                    static_cast<double>(map_y),
+    switch (map_view.getCost(Position3D{static_cast<double>(path_x),                //根据finenav—engine的要求，坐标均为全局坐标，即fixed frame坐标系下的坐标
+                                                    static_cast<double>(path_y),
                                                     0.0})) {
       // 使用具体数值替代 nav2_costmap_2d 宏常量：
       // NO_INFORMATION = 255, LETHAL_OBSTACLE = 254, INSCRIBED_INFLATED_OBSTACLE = 253
