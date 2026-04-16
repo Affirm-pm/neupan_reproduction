@@ -7,12 +7,19 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
 endif ()
 
-find_package(ament_cmake_auto REQUIRED)
+find_package(ament_cmake REQUIRED)
 
-include_directories(include)
+set(dependencies
+        finenav_engine
+        finenav_map_grid_map
+        nav_msgs
+        geometry_msgs
+)
 
-ament_auto_find_build_dependencies()
+foreach(dep IN LISTS dependencies)
+    find_package(${dep} REQUIRED)
+endforeach()
 
 add_subdirectory(stvl_with_mppi)
 
-ament_auto_package()
+ament_package()
