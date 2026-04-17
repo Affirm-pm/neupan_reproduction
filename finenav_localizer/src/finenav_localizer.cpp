@@ -31,10 +31,17 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
                    opts.max_obs_queue_size)
     , logger_(rclcpp::get_logger("finenav.FineNavLocalizer"))
 {
+    // Propagate use_sim_time so pnode_ shares the same clock domain as parent_node_.
+    // We forward only this one parameter — not the full NodeOptions — because the
+    // parent's options may carry overrides that do not belong on the child node.
+    rclcpp::NodeOptions pnode_opts;
+    pnode_opts.append_parameter_override(
+        "use_sim_time",
+        parent_node_->get_parameter("use_sim_time").as_bool());
     pnode_ = rclcpp::Node::make_shared(
         "finenav_localizer",
         parent_node_->get_name(),
-        rclcpp::NodeOptions{});
+        pnode_opts);
     pnode_thread_ = std::make_unique<NodeThread>(pnode_);
 
     tf_br_ = std::make_shared<tf2_ros::TransformBroadcaster>(pnode_);
@@ -42,8 +49,10 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::duration<double>(1.0 / opts_.update_rate_hz));
 
+    // Use pnode_'s own clock: timer fires on pnode_'s executor thread, so
+    // now() must also come from pnode_ to avoid stale-clock issues with sim time.
     update_timer_ = rclcpp::create_timer(
-        pnode_, parent_node_->get_clock(), period,
+        pnode_, pnode_->get_clock(), period,
         [this]() { timerCallback(); });
 
     RCLCPP_INFO(
@@ -151,7 +160,7 @@ void FineNavLocalizer::timerCallback()
         return;
     }
 
-    const rclcpp::Time now = parent_node_->now();
+    const rclcpp::Time now = pnode_->now();
     std::lock_guard<std::mutex> lk(filter_mutex_);
 
     // ── 1. Compute dt ──────────────────────────────────────────────────────

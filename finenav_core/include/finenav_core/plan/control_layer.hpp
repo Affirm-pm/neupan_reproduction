@@ -156,7 +156,12 @@ template <typename PlannersT>
 ControlLayer<PlannersT>::ControlLayer(rclcpp::Node::SharedPtr node, const std::string& layer_name)
     : node_(node), layer_name_(layer_name)
 {
-    pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), rclcpp::NodeOptions()); // TODO：关于 node 参数，后面需要看看该怎么搞，尤其是进程内通信 | layer_name -> layer_name_
+    // Propagate use_sim_time so pnode_ shares the same clock domain as node_.
+    rclcpp::NodeOptions pnode_opts;
+    pnode_opts.append_parameter_override(
+        "use_sim_time",
+        node_->get_parameter("use_sim_time").as_bool());
+    pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts); // TODO：关于 node 参数，后面需要看看该怎么搞，尤其是进程内通信 | layer_name -> layer_name_
     pnode_thread_ = std::make_unique<NodeThread>(pnode_);
 
     pnode_->declare_parameter<std::string>("example_param", "hello, world"); // 示例参数

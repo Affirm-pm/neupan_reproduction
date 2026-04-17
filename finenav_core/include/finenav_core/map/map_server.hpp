@@ -188,7 +188,12 @@ template <MapConcept MapT>
 MapServer<MapT>::MapServer(rclcpp::Node::SharedPtr node, const std::string& server_name, double update_rate_hz,
                             FineNavLocalizer* localizer, double shift_rate_hz)
     : node_(node), server_name_(server_name), localizer_(localizer) {
-    pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), rclcpp::NodeOptions());
+    // Propagate use_sim_time so pnode_ shares the same clock domain as node_.
+    rclcpp::NodeOptions pnode_opts;
+    pnode_opts.append_parameter_override(
+        "use_sim_time",
+        node_->get_parameter("use_sim_time").as_bool());
+    pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<NodeThread>(pnode_);
 
     map_instance_ = std::make_unique<MapT>();
@@ -198,15 +203,16 @@ MapServer<MapT>::MapServer(rclcpp::Node::SharedPtr node, const std::string& serv
     auto period =
         std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / update_rate_hz));
 
-    update_timer_ = rclcpp::create_timer(pnode_, node_->get_clock(), period,
-                                         [this]() { this->runUpdateCycle(this->node_->now()); });
+    // Use pnode_'s own clock: timer fires on pnode_'s executor thread.
+    update_timer_ = rclcpp::create_timer(pnode_, pnode_->get_clock(), period,
+                                         [this]() { this->runUpdateCycle(this->pnode_->now()); });
 
     // update from robot moved
     if (localizer_ != nullptr) {
         auto shift_period =
             std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0 / shift_rate_hz));
-        shift_timer_ = rclcpp::create_timer(pnode_, node_->get_clock(), shift_period,
-                                            [this]() { this->runShiftCycle(this->node_->now()); });
+        shift_timer_ = rclcpp::create_timer(pnode_, pnode_->get_clock(), shift_period,
+                                            [this]() { this->runShiftCycle(this->pnode_->now()); });
     }
 
 }
