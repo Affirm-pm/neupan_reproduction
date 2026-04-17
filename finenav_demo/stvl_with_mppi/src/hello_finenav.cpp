@@ -16,14 +16,17 @@ using MyPlanners = PlannerSet<>; // TODO: check whether set is empty
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
-    auto node = rclcpp::Node::make_shared("hello_finenav");
+
+    rclcpp::NodeOptions options;
+    options.append_parameter_override("use_sim_time", true); // Use time in /clock
+    auto node = rclcpp::Node::make_shared("hello_finenav", options); // TODO: inhirent options?
 
     auto finenav_engine = std::make_shared<FineNavEngine>(node);
 
     // ------------------------------ Launch Localization ----------------------------------
     LocalizerOptions localizer_options {
         .update_rate_hz        = 100,
-        .max_delay_sec        = 0.5,
+        .max_delay_sec        = 0.05,
         .pose_smoothing_steps = 1,
         .twist_smoothing_steps = 1,
         .pose_gate_dist = 1e9,
@@ -37,11 +40,14 @@ int main(int argc, char** argv) {
     auto gt_pose_sub = node->create_subscription<geometry_msgs::msg::PoseStamped>(
         "ground_truth_pose",
         10,
-        [&finenav_engine](const geometry_msgs::msg::PoseStamped& msg) {
+        [&finenav_engine, &node](const geometry_msgs::msg::PoseStamped& msg) {
             // finenav_engine->getLocalizer().feedObservation(msg); // TODO: directly support odometry_msgs in the future
             geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
             pose_msg.header = msg.header;
             pose_msg.pose.pose = msg.pose;
+
+            // auto time = node->now() - msg.header.stamp;
+            // RCLCPP_INFO_STREAM(node->get_logger(), "Received GT pose with delay " << time.seconds() << " seconds.");
 
             static bool localizer_initialized = false;      // TODO: automatically iniitailize when receive the first pose_msg
             if (!localizer_initialized) {
@@ -76,12 +82,13 @@ int main(int argc, char** argv) {
     // ---- 2.
 
     rclcpp::Rate loop_rate(200); // 200Hz
+    auto nav_state_pub = node->create_publisher<nav_msgs::msg::Odometry>("nav_state", 10);
 
     while (rclcpp::ok()) {
         auto robot_state = finenav_engine->getLocalizer().getState();
 
         // Initialize with IIFE
-        const auto nav_state_msg = [node, robot_state] {
+        const auto nav_state_msg = [&node, &robot_state] {
             nav_msgs::msg::Odometry nav_state_msg;
             nav_state_msg.header.stamp = node->now();
             nav_state_msg.header.frame_id = "map";
@@ -106,8 +113,6 @@ int main(int argc, char** argv) {
 
             return nav_state_msg;
         }();
-
-        static auto nav_state_pub = node->create_publisher<nav_msgs::msg::Odometry>("nav_state", 10);
         nav_state_pub->publish(nav_state_msg);
 
 
