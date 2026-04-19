@@ -96,8 +96,9 @@ public:
        //TODO:初始化过程需要完善
     }
 
-    bool plan(const IMapView& map_view, const finenav::PlanningContext<MPPIController>& ctx, finenav_msgs::msg::Trajectory& output_traj) {
+     std::optional<finenav::DataPacket<OutputProfile>>plan(const finenav::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
 
+        finenav::DataPacket<OutputProfile> traj;
         auto start_pose = ctx.start_pose;
         auto goal_pose = ctx.goal_pose;
         auto trajectory = finenav_msgs::msg::Trajectory(); // 这里会有一个 helper function 帮忙解包
@@ -123,29 +124,16 @@ public:
 
     // 获取最优轨迹
     auto optimized_trajectory = optimizer_.getOptimizedTrajectory();
-
-    // 清空旧数据
-    output_traj.poses.clear();
-    output_traj.twists.clear();
-    output_traj.accels.clear();
-    output_traj.time_from_start.clear();
-
-    // 填充 header
-    output_traj.header.stamp = rclcpp::Clock().now();
-    output_traj.header.frame_id = "map";
-
+\
     // 填充轨迹点
     for (size_t i = 0; i < optimized_trajectory.shape(0); ++i) {
-        geometry_msgs::msg::Pose pose;
-        pose.position.x = optimized_trajectory(i, 0);
-        pose.position.y = optimized_trajectory(i, 1);
-        pose.position.z = 0.0;
-        output_traj.poses.push_back(pose);
-        // 如果需要，可以在这里填充速度、加速度和时间戳等信息
+        traj.poses.emplace_back();
+        traj.poses.back().position.x = optimized_trajectory(i, 0);
+        traj.poses.back().position.y = optimized_trajectory(i, 1);
     }
 
-        return true;
-    }
+    return traj;
+}
 
 
   /**

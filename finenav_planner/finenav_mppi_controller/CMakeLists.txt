@@ -117,6 +117,14 @@ foreach(lib IN LISTS libraries)
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
 
+install(
+  TARGETS ${libraries}
+  EXPORT export_${PROJECT_NAME}
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
 
 
 

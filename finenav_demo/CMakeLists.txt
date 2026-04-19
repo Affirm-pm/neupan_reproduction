@@ -8,11 +8,16 @@ if (NOT CMAKE_BUILD_TYPE)
 endif ()
 
 find_package(ament_cmake REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(PCL REQUIRED COMPONENTS common io)
 
 set(dependencies
         rclcpp
         finenav_engine
         finenav_map_grid_map
+        finenav_mppi_controller
+        finenav_core
+        finenav_collision_model
         nav_msgs
         geometry_msgs
         sensor_msgs
@@ -20,6 +25,7 @@ set(dependencies
         tf2_ros
         tf2_eigen
         message_filters
+        pcl_conversions
 )
 
 foreach(dep IN LISTS dependencies)

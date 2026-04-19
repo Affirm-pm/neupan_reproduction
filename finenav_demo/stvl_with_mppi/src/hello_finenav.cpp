@@ -26,6 +26,9 @@
 #include <tf2_ros/create_timer_ros.h>
 #include <tf2_ros/message_filter.h>
 #include <tf2_ros/transform_listener.h>
+#include "finenav_mppi_controller/controller.hpp"
+
+#include "terrain_mapview.hpp"
 
 using namespace finenav;
 using std::chrono_literals::operator""ms;
@@ -37,11 +40,6 @@ struct Pointcloud {
     float z;
 };
 
-struct Voxel {
-    float z_height = NAN;
-    bool is_static = false;
-    rclcpp::Time timestamp{};
-};
 
 struct PositionHash {
     std::size_t operator()(const Position & p) const noexcept {
@@ -311,9 +309,29 @@ int main(int argc, char** argv) {
 
 
     // --------------------------------- Launch Planning --------------------------------------
+    using MppiPlanners = PlannerSet<nav2_mppi_controller::MPPIController>;
+    auto my_control_layer= finenav_engine->createControlLayer<MppiPlanners>("mppi_layer");
 
-    // auto my_control_layer = finenav_engine->createControlLayer<MyPlanners>("my_control_layer");
-    // finenav_engine->registerPipeline(FineNavEngine::PipelineIO{}, my_control_layer);
+    auto mppi_map_server = finenav_engine->getMapResource<GridMap<Voxel>>("my_map_server");
+
+    auto mppi_locked_map = std::make_shared<finenav::LockedMapRO<GridMap<Voxel>>>(
+        mppi_map_server->getLockedReadView());
+    auto mppi_map_view = std::make_shared<SimpleGridMapView>(
+        const_cast<finenav::GridMap<Voxel>&>(mppi_locked_map->get()), node.get());
+
+    my_control_layer->set_map_view_factory(
+        [mppi_map_view, mppi_locked_map](const std::string & /*planner_id*/) -> ControlLayer<MppiPlanners>::MapViewsVariant {
+            (void)mppi_locked_map; // keep read-lock + map reference alive
+            using ExpectedPtr = std::shared_ptr<nav2_mppi_controller::IMapView>;
+            return ExpectedPtr{mppi_map_view};
+        });                                                                  //TODO: 目前是直接绑定死一个地图视图实例，后续可以改成工厂模式，根据 planner_id 返回不同的地图视图实例
+
+    finenav_engine->registerPipeline(
+        FineNavEngine::PipelineIO{
+            .input_topic = "",
+            .output_topic = "mppi_layer_plan",
+        },
+        my_control_layer);
 
     // .......
 
