@@ -9,11 +9,17 @@
 
     <buildtool_depend>ament_cmake</buildtool_depend>
 
+    <depend>rclcpp</depend>
     <depend>finenav_engine</depend>
     <depend>finenav_map_grid_map</depend>
 
     <depend>nav_msgs</depend>
     <depend>geometry_msgs</depend>
+    <depend>sensor_msgs</depend>
+    <depend>tf2</depend>
+    <depend>tf2_ros</depend>
+    <depend>tf2_eigen</depend>
+    <depend>message_filters</depend>
 
     <export>
         <build_type>ament_cmake</build_type>

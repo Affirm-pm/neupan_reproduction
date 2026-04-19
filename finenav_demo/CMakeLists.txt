@@ -10,10 +10,16 @@ endif ()
 find_package(ament_cmake REQUIRED)
 
 set(dependencies
+        rclcpp
         finenav_engine
         finenav_map_grid_map
         nav_msgs
         geometry_msgs
+        sensor_msgs
+        tf2
+        tf2_ros
+        tf2_eigen
+        message_filters
 )
 
 foreach(dep IN LISTS dependencies)

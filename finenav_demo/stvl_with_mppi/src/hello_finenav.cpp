@@ -3,6 +3,14 @@
 // All rights reserved.
 
 #include <nav_msgs/msg/detail/odometry__struct.hpp>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <memory>
+#include <unordered_set>
+
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 
 #include "finenav_engine/finenav_engine.hpp"
 #include "grid_map.hpp" // TODO: resolve anti-pattern export
@@ -10,9 +18,85 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <message_filters/subscriber.h>
+#include <tf2_eigen/tf2_eigen.hpp>
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/create_timer_ros.h>
+#include <tf2_ros/message_filter.h>
+#include <tf2_ros/transform_listener.h>
 
 using namespace finenav;
-using MyPlanners = PlannerSet<>; // TODO: check whether set is empty
+using std::chrono_literals::operator""ms;
+
+struct Pointcloud {
+
+    float x;
+    float y;
+    float z;
+};
+
+struct Voxel {
+    float z_height = NAN;
+    bool is_static = false;
+    rclcpp::Time timestamp{};
+};
+
+struct PositionHash {
+    std::size_t operator()(const Position & p) const noexcept {
+        std::size_t hx = std::hash<double>{}(p.x());
+        std::size_t hy = std::hash<double>{}(p.y());
+        std::size_t hz = std::hash<double>{}(p.z());
+        auto hash_combine = [](std::size_t seed, std::size_t v) {
+            seed ^= v + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+            return seed;
+        };
+        std::size_t seed = 0;
+        seed = hash_combine(seed, hx);
+        seed = hash_combine(seed, hy);
+        seed = hash_combine(seed, hz);
+        return seed;
+    }
+};
+
+struct PositionEqual {
+    bool operator()(const Position & a, const Position & b) const noexcept {
+        return a.x() == b.x() && a.y() == b.y() && a.z() == b.z();
+    }
+};
+
+using DynamicPosSet = std::unordered_set<Position, PositionHash, PositionEqual>;
+static DynamicPosSet g_dynamic_cells;
+static double g_decay_time_sec = 10.0;
+static double g_decay_time_fov_sec = 1.0;
+
+static bool numisfinite(float x) {
+    return std::isfinite(x);
+}
+
+static bool isInFrustum(const Eigen::Matrix4d & T_ws, const Position & p_world,
+                        double min_range, double max_range,
+                        double min_angle, double max_angle) {
+    const Eigen::Matrix3d R_ws = T_ws.topLeftCorner<3, 3>();
+    const Eigen::Vector3d origin = T_ws.topRightCorner<3, 1>();
+    const Eigen::Vector3d v_world = p_world - origin;
+
+    const double r = v_world.norm();
+    if (r <= 0.0 || r < min_range || r > max_range) {
+        return false;
+    }
+
+    const Eigen::Vector3d v_sensor = R_ws.transpose() * v_world;
+    const double norm = v_sensor.norm();
+    if (norm <= 0.0) {
+        return false;
+    }
+
+    const double cos_theta = std::clamp(v_sensor.z() / norm, -1.0, 1.0);
+    const double theta = std::acos(cos_theta);
+    return theta >= min_angle && theta <= max_angle;
+}
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
@@ -61,14 +145,170 @@ int main(int argc, char** argv) {
 
 
     // --------------------------------- Launch Mapping --------------------------------------
-    auto map_server = finenav_engine->createMapResource<GridMap<float>>(
-        "my_map_server",
-        10.0,
-        true,
-        100.0
-    );
+    auto map_server = finenav_engine->createMapResource<GridMap<Voxel>>(
+        "my_map_server", 10.0, true, 100.0);
 
-    // .......
+    auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
+
+    auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+    tf_buffer->setCreateTimerInterface(
+        std::make_shared<tf2_ros::CreateTimerROS>(
+            node->get_node_base_interface(),
+            node->get_node_timers_interface()));
+    auto tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
+
+    map_server->registerPreUpdateHook([node, tf_buffer](GridMap<Voxel> & map) {
+        const rclcpp::Time now = node->get_clock()->now();
+
+        Eigen::Matrix4d T_ws = Eigen::Matrix4d::Identity();
+        try {
+            const auto tf_stamped = tf_buffer->lookupTransform("map", "base_lidar", tf2::TimePointZero);
+            const Eigen::Isometry3d iso = tf2::transformToEigen(tf_stamped.transform);
+            T_ws = iso.matrix();
+        } catch (const tf2::TransformException & ex) {
+            RCLCPP_WARN(node->get_logger(), "TF lookup failed in pre-update hook: %s", ex.what());
+        }
+
+        constexpr double min_range = 0.0;
+        constexpr double max_range = 50.0;
+        constexpr double min_angle = 0.0;
+        constexpr double max_angle = M_PI / 3.0;
+
+        for (auto it = g_dynamic_cells.begin(); it != g_dynamic_cells.end();) {
+            const Position & pos = *it;
+
+            if (!map.isInside(pos)) {
+                it = g_dynamic_cells.erase(it);
+                continue;
+            }
+
+            Voxel & cell = map.atPosition(pos);
+            if (cell.timestamp.nanoseconds() == 0) {             //TODO：按照逻辑不应该出现，但实际上确实有哈希表里的索引对应的是time{},存在隐患，后续排查
+                it = g_dynamic_cells.erase(it);
+                continue;
+            }
+            
+            const double age_sec = (now - cell.timestamp).seconds();
+
+            if (age_sec > g_decay_time_sec) {
+                cell = Voxel{NAN, false, rclcpp::Time{}};
+                it = g_dynamic_cells.erase(it);
+                continue;
+            }
+
+            const bool in_fov = isInFrustum(T_ws, pos, min_range, max_range, min_angle, max_angle);
+            const double active_decay = in_fov ? g_decay_time_fov_sec : g_decay_time_sec;
+
+            if (age_sec > active_decay) {
+                cell = Voxel{NAN, false, rclcpp::Time{}};
+                it = g_dynamic_cells.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    });
+    map_server->registerPostUpdateHook([node, map_cloud_pub](GridMap<Voxel> & map) {
+        std::vector<Index> valid_indices;
+        map.selectCellsByCondition(valid_indices, [](const Voxel & v) {
+            return std::isfinite(v.z_height);
+        });
+        if (valid_indices.empty()) {
+            return;
+        }
+        sensor_msgs::msg::PointCloud2 cloud;
+        cloud.header.stamp = node->now();
+        cloud.header.frame_id = "map";
+        cloud.height = 1;
+        cloud.width = static_cast<uint32_t>(valid_indices.size());
+        sensor_msgs::PointCloud2Modifier modifier(cloud);
+        modifier.setPointCloud2FieldsByString(1, "xyz");
+        modifier.resize(valid_indices.size());
+
+        sensor_msgs::PointCloud2Iterator<float> iter_x(cloud, "x");
+        sensor_msgs::PointCloud2Iterator<float> iter_y(cloud, "y");
+        sensor_msgs::PointCloud2Iterator<float> iter_z(cloud, "z");
+
+        for (const auto & idx : valid_indices) {
+            const auto pos = map.getPosition(idx);
+            const auto & cell = map.at(idx);
+            *iter_x = static_cast<float>(pos.x());
+            *iter_y = static_cast<float>(pos.y());
+            *iter_z = cell.z_height;
+            ++iter_x;
+            ++iter_y;
+            ++iter_z;
+        }
+
+        map_cloud_pub->publish(cloud);
+    });
+
+    MapServer<GridMap<Voxel>>::SourceBufferPolicy policy;
+    policy.max_buffer_size = 50000;
+    policy.observation_keep_time_sec = 2.0;
+
+    auto laser_injector = map_server->addUpdateSource<Pointcloud>(
+        "front_laser",
+        policy,
+        [node](const Pointcloud & msg, GridMap<Voxel> & map) {
+            const rclcpp::Time now = node->get_clock()->now();
+            const Position hit_pos(msg.x, msg.y, msg.z);
+            if (!map.isInside(hit_pos)) {
+                return;
+            }
+
+            const Index idx = map.getIndex(hit_pos);
+            Voxel & cell = map.at(idx);
+            if (!cell.is_static) {
+                cell.z_height = msg.z;
+                cell.timestamp = now;
+                g_dynamic_cells.insert(map.getPosition(idx));
+            }
+        });
+
+    auto cloud_sub = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::PointCloud2>>(
+        node, "/cloud_for_lio");
+
+    auto tf_filter = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::PointCloud2>>(
+        *cloud_sub,
+        *tf_buffer,
+        "map",
+        10,
+        node->get_node_logging_interface(),
+        node->get_node_clock_interface(),
+        10ms);
+
+    tf_filter->registerCallback(
+        [node, laser_injector, tf_buffer](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
+            geometry_msgs::msg::TransformStamped tf_stamped;
+            try {
+                tf_stamped = tf_buffer->lookupTransform("map", msg->header.frame_id, msg->header.stamp);
+            } catch (const tf2::TransformException & ex) {
+                RCLCPP_WARN(node->get_logger(), "TF lookup failed in cloud callback: %s", ex.what());
+                return;
+            }
+
+            const Eigen::Isometry3d T_map_sensor = tf2::transformToEigen(tf_stamped.transform);
+            sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
+            sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
+            sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
+            const rclcpp::Time now = node->now();
+
+            for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
+                if (!numisfinite(*iter_x) || !numisfinite(*iter_y) || !numisfinite(*iter_z)) {
+                    continue;
+                }
+
+                const Eigen::Vector3d p_sensor(*iter_x, *iter_y, *iter_z);
+                const Eigen::Vector3d p_map = T_map_sensor * p_sensor;
+                Pointcloud p;
+                p.x = static_cast<float>(p_map.x());
+                p.y = static_cast<float>(p_map.y());
+                p.z = static_cast<float>(p_map.z());
+                laser_injector(std::move(p), now);
+            }
+        });
+
+
 
     // --------------------------------- Launch Planning --------------------------------------
 
