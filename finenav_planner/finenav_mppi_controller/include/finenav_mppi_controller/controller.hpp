@@ -101,17 +101,18 @@ public:
         finenav::DataPacket<OutputProfile> traj;
         auto start_pose = ctx.start_pose;
         auto goal_pose = ctx.goal_pose;
-        auto trajectory = finenav_msgs::msg::Trajectory(); // 这里会有一个 helper function 帮忙解包
 
-        // 执行规划算法，e.g. 生成一条直线路径
-        std::cout << "[nav2_mppi_controller] Planning from ("
+        nav_msgs::msg::Path path = convertDataPacketToPath(ctx.ref_traj, "map");
+
+        this->setPlan(path);
+
+        std::cout << "[finenav_mppi_controller] Planning from ("
                   << start_pose.position.x << ", " << start_pose.position.y << ") to ("
                   << goal_pose.position.x << ", " << goal_pose.position.y << ")" << std::endl;
         geometry_msgs::msg::PoseStamped start_pose_stamped;
         start_pose_stamped.pose = start_pose;
         start_pose_stamped.header.stamp = rclcpp::Clock().now();
         start_pose_stamped.header.frame_id = "map"; // 根据实际需求设置 frame_id
-
 
         computeVelocityCommands(
             start_pose_stamped,
@@ -120,11 +121,8 @@ public:
             );
         // 装填输出轨迹
 
-        std::cout<<"[nav2_mppi_controller] Planning completed. Going to fill output trajectory."<<std::endl;
-
     // 获取最优轨迹
     auto optimized_trajectory = optimizer_.getOptimizedTrajectory();
-\
     // 填充轨迹点
     for (size_t i = 0; i < optimized_trajectory.shape(0); ++i) {
         traj.poses.emplace_back();
@@ -149,9 +147,37 @@ public:
     */
   void setSpeedLimit(const double & speed_limit, const bool & percentage);
 
-  void registerCritic (std::unique_ptr<critics::CriticFunction> critic) {
+    void registerCritic (std::unique_ptr<critics::CriticFunction> critic) {
         critics_.push_back(std::move(critic));        //TODO:在初始化的时候要换成注册
-  }
+    }
+
+
+    template <typename DataPacketT>
+    nav_msgs::msg::Path convertDataPacketToPath(
+        const DataPacketT & data,
+        const std::string & frame_id)
+    {
+        nav_msgs::msg::Path path;
+
+        path.header.frame_id = frame_id;
+        path.header.stamp = rclcpp::Clock().now();
+
+        // ⭐ 关键：只有当有 poses 才能用
+        if constexpr (requires { data.poses; }) {
+
+            path.poses.reserve(data.poses.size());
+
+            for (const auto & pose : data.poses) {
+                geometry_msgs::msg::PoseStamped ps;
+                ps.header = path.header;
+                ps.pose = pose;
+
+                path.poses.push_back(ps);
+            }
+        }
+
+        return path;
+    }
 
 
 protected:

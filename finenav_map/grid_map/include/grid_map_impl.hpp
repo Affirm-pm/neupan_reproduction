@@ -81,7 +81,7 @@ std::span<const T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) const
 
     Index index_start(x, y, -half_size_.z());
     int buffer_start = getBufferIndex(index_start, size_, half_size_, start_index_);
-    return std::span<T>(&data_[buffer_start], size_.z());
+    return std::span<const T>(&data_[buffer_start], size_.z());
 }
 
 template <typename T>
