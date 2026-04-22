@@ -19,7 +19,7 @@ struct Voxel {
 
 class TerrainAnalyzer {
 public:
-    explicit TerrainAnalyzer(finenav::GridMap<Voxel>& map, rclcpp::Node* node) : map_(map),node_(node) {
+    explicit TerrainAnalyzer(const finenav::GridMap<Voxel>& map, rclcpp::Node::SharedPtr node) : map_(map),node_(node) {
         passability_image_ = cv::Mat::zeros(map_.getSize().x(), map_.getSize().y(), CV_8UC1);
         costmap_image_ = cv::Mat::zeros(map_.getSize().x(), map_.getSize().y(), CV_8UC1);
         cost_scaling_factor_ = 0.5;  // 后续改成根据传入参数调整
@@ -72,7 +72,7 @@ private:
 
         for (int x = sizeX_min; x <= sizeX_max; ++x) {
             for (int y = sizeY_min; y <= sizeY_max; ++y) {
-                std::span<Voxel> voxels_along_z_indices = getVoxelsAlongZ(x, y);
+                std::span<const Voxel> voxels_along_z_indices = getVoxelsAlongZ(x, y);
                 //这里可能要对获取的z值做一些处理，滤除掉特殊值之类
 
                 float nearest_ground = std::numeric_limits<float>::max();
@@ -168,16 +168,16 @@ private:
      * @brief 获取(x,y)位置上沿z轴的一串栅格数据，用于地形分析
      * @return 一个std::span<Voxel>，包含(x,y)位置上沿z轴的一串栅格数据。
      */
-    std::span<Voxel> getVoxelsAlongZ(const int& x, const int& y) const {
-        std::span<Voxel> voxels_along_z_indices;
+    std::span<const Voxel> getVoxelsAlongZ(const int& x, const int& y) const {
+        std::span<const Voxel> voxels_along_z_indices;
         voxels_along_z_indices = map_.getVoxelsAlongZ(static_cast<int>(x), static_cast<int>(y));
         return voxels_along_z_indices;
     }
 
-    finenav::GridMap<Voxel>& map_;
+    const finenav::GridMap<Voxel>& map_;
 
     // TODO: 这些成员目前只是为了让头文件自洽可编译；后续由你的分析流程初始化/更新。
-    rclcpp::Node* node_;
+    rclcpp::Node::SharedPtr node_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr passability_pub_;
     cv::Mat passability_image_;  // 存储每个格子的可通行性值（0或1）
     cv::Mat costmap_image_;  // 存储每个格子的可通行性值（0或1）

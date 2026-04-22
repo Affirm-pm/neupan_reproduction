@@ -314,26 +314,26 @@ int main(int argc, char** argv) {
 
     auto mppi_map_server = finenav_engine->getMapResource<GridMap<Voxel>>("my_map_server");
 
-    my_control_layer->bind_map_view(
-        mppi_map_server,
-        [node](const auto& map) {
-            return std::make_shared<SimpleGridMapView>(
-                const_cast<GridMap<Voxel>&>(map), node.get());
-        });
+    // my_control_layer->bind_map_view(
+    //     mppi_map_server,
+    //     [node](const auto& map) {
+    //         return std::make_shared<SimpleGridMapView>(
+    //             const_cast<GridMap<Voxel>&>(map), node.get());
+    //     });
 
     // MapView构造用非const的map引用是一个反模式，这不是框架的问题，而是出自用户的
     // 就好比C++提供了各种强制类型转换的工具，而用户不按类型写代码，到处使用强制类型转换
     // 如果MapView构造使用了const的map引用，bind_map_view的调用会极其简洁
-    // my_control_layer->bind_map_view(
-    //     mppi_map_server,
-    //     [node](const auto& map) {
-    //         return std::make_shared<SimpleGridMapView>(map, node); // 这里顺手把构造函数中的node从node指针变为node共享指针
-    // });
+    my_control_layer->bind_map_view(
+        mppi_map_server,
+        [node](const GridMap<Voxel>& map) {
+            return std::make_shared<SimpleGridMapView>(map, node); // 这里顺手把构造函数中的node从node指针变为node共享指针
+        });
 
 
     finenav_engine->registerPipeline(
         FineNavEngine::PipelineIO{
-            .input_topic = "",
+            .input_topic = "global_plan",
             .output_topic = "mppi_layer_plan",
         },
         my_control_layer);

@@ -25,8 +25,8 @@ using std::chrono_literals::operator"" ms;
 finenav::OBBCollisionModel collision_model({1.0, 1.0, 1.0});  //在实际使用中，尺寸应根据机器人实际尺寸设置应该有个tf回调函数实时更新位置
 class SimpleGridMapView : public nav2_mppi_controller::IMapView {
 public:
-    explicit SimpleGridMapView(finenav::GridMap<Voxel>& map, rclcpp::Node* node) : map_(map),node_(node) {
-        auto terrain_analyzer_ = std::make_shared<TerrainAnalyzer>(map_, node_);
+    explicit SimpleGridMapView(const finenav::GridMap<Voxel>& map, rclcpp::Node::SharedPtr node) : map_(map),node_(node) {
+        terrain_analyzer_ = std::make_shared<TerrainAnalyzer>(map_, node_);
         if (node_) {
             local_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>(
     "local_map", 10);
@@ -73,7 +73,7 @@ public:
      * @return 在给定位置处的代价值，通常是一个整数，表示该位置的通行成本。
     */
     int getCost(const finenav::Position3D& pos) const override {
-        terrain_analyzer_->getCost(pos);
+        return terrain_analyzer_->getCost(pos);
     }
 
     float getRadius() const override {
@@ -174,12 +174,12 @@ private:
     }
 
     std::shared_ptr<TerrainAnalyzer> terrain_analyzer_;
-    finenav::GridMap<Voxel>& map_;
+    const finenav::GridMap<Voxel>& map_;
     double inscribed_radius_;
     bool is_tracking_unknown_{false};
     bool consider_footprint_{true};
     Eigen::ArrayXXf ground_array_;
 
-    rclcpp::Node* node_;
+    rclcpp::Node::SharedPtr node_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_pub_;
 };
