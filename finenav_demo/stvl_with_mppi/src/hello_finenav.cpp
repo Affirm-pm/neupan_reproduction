@@ -314,17 +314,22 @@ int main(int argc, char** argv) {
 
     auto mppi_map_server = finenav_engine->getMapResource<GridMap<Voxel>>("my_map_server");
 
-    auto mppi_locked_map = std::make_shared<finenav::LockedMapRO<GridMap<Voxel>>>(
-        mppi_map_server->getLockedReadView());
-    auto mppi_map_view = std::make_shared<SimpleGridMapView>(
-        const_cast<finenav::GridMap<Voxel>&>(mppi_locked_map->get()), node.get());
+    my_control_layer->bind_map_view(
+        mppi_map_server,
+        [node](const auto& map) {
+            return std::make_shared<SimpleGridMapView>(
+                const_cast<GridMap<Voxel>&>(map), node.get());
+        });
 
-    my_control_layer->set_map_view_factory(
-        [mppi_map_view, mppi_locked_map](const std::string & /*planner_id*/) -> ControlLayer<MppiPlanners>::MapViewsVariant {
-            (void)mppi_locked_map; // keep read-lock + map reference alive
-            using ExpectedPtr = std::shared_ptr<nav2_mppi_controller::IMapView>;
-            return ExpectedPtr{mppi_map_view};
-        });                                                                  //TODO: 目前是直接绑定死一个地图视图实例，后续可以改成工厂模式，根据 planner_id 返回不同的地图视图实例
+    // MapView构造用非const的map引用是一个反模式，这不是框架的问题，而是出自用户的
+    // 就好比C++提供了各种强制类型转换的工具，而用户不按类型写代码，到处使用强制类型转换
+    // 如果MapView构造使用了const的map引用，bind_map_view的调用会极其简洁
+    // my_control_layer->bind_map_view(
+    //     mppi_map_server,
+    //     [node](const auto& map) {
+    //         return std::make_shared<SimpleGridMapView>(map, node); // 这里顺手把构造函数中的node从node指针变为node共享指针
+    // });
+
 
     finenav_engine->registerPipeline(
         FineNavEngine::PipelineIO{

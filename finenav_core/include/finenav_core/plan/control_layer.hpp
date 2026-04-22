@@ -17,6 +17,7 @@
 #include "finenav_msgs/msg/trajectory.hpp"
 #include "finenav_core/plan/conversions.hpp"
 #include "finenav_core/concepts.hpp"
+#include "finenav_core/map/map_server.hpp"
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/simple_action_server.hpp"
 #include "finenav_util/node_thread.hpp"
@@ -81,10 +82,19 @@ public:
     using ActionT = finenav_msgs::action::ComputePlan;
     using ActionServer = SimpleActionServer<ActionT>;
 
+    // 框架内部用于携带地图视图及其对应的 RAII 读锁的聚合体。
+    // lock_guard 持有 LockedMapRO<MapT> 的 shared_ptr，保证在 planner.plan() 整个
+    // 调用期间读锁不被释放；view_variant 是规划器实际读取的视图指针。
+    struct BoundMapView {
+        MapViewsVariant view_variant;
+        std::shared_ptr<void> lock_guard; // 持有 LockedMapRO<MapT>，离开作用域后自动释放读锁
+    };
+
     // 回调签名定义 (修改 PrePlan 返回 bool 以支持短路拦截)
-    using MapViewFactory = std::function<MapViewsVariant(const std::string& planner_id)>;
+    using MapViewFactory = std::function<BoundMapView()>;
     using PrePlanCallback = std::function<bool(PrePlanContext& cur_ctx)>;
     using PostPlanCallback = std::function<bool(PostPlanContext& cur_ctx)>;
+
 
     explicit ControlLayer(rclcpp::Node::SharedPtr node, const std::string& layer_name);
 
@@ -94,9 +104,30 @@ public:
 
     void setupDataPorts(); // TODO: 保护这些 public 接口？
 
-    void set_map_view_factory(MapViewFactory cb) { map_view_factory_ = std::move(cb); }
+    /**
+     * @brief 将 MapServer 与规划器所需的地图视图绑定。
+     *
+     * 框架在每次调用 planner.plan() 前自动通过 server 申请读锁，并将加锁后的
+     * const MapT& 传给 builder 以构造 IMapView；读锁在 plan() 返回后自动释放。
+     * 这确保规划期间地图数据不被写入线程修改，同时对用户完全透明。
+     *
+     * BuilderFn 的签名要求：接受 const MapT& 参数，返回值可构造 MapViewsVariant
+     * （即返回 variant 内任意一种 shared_ptr 子类型即可，无需显式转换）。
+     *
+     * @tparam MapT      地图类型，从 server 参数自动推导，必须满足 MapConcept
+     * @tparam BuilderFn 任意可调用类型（lambda / 函数对象等），签名受 requires 约束
+     * @param server     提供地图数据的 MapServer，通过弱引用持有（不延长生命周期）
+     * @param builder    用户提供的适配函数：接收加锁的 const MapT&，返回可构造 MapViewsVariant 的值
+     */
+    template <MapConcept MapT, typename BuilderFn>
+    requires std::is_invocable_v<BuilderFn, const MapT&> &&
+             std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>, MapViewsVariant>
+    void bind_map_view(std::shared_ptr<MapServer<MapT>> server, BuilderFn&& builder);
+
     void set_on_pre_plan(PrePlanCallback cb) { on_pre_plan_ = std::move(cb); }
     void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
+
+    const std::string& get_active_planner_id() const { return active_planner_id_; }
 
 protected:
     MapViewFactory map_view_factory_;
@@ -302,14 +333,15 @@ void ControlLayer<PlannersT>::execute() {
                 }
                 auto& ctx = opt_ctx.value();
 
-                auto view_variant = map_view_factory_(active_planner_id_);
+                auto bound = map_view_factory_();
                 using ExpectedPtrType = std::shared_ptr<typename PlannerT::IMapView>;
 
-                if (auto* ptr_to_ptr = std::get_if<ExpectedPtrType>(&view_variant)) {
+                if (auto* ptr_to_ptr = std::get_if<ExpectedPtrType>(&bound.view_variant)) {
                     auto map_view_ptr = *ptr_to_ptr;
                     if (map_view_ptr) {
-                        // TODO: 给地图上锁
+                        // bound.lock_guard 持有读锁，整个 plan() 调用期间读锁保持
                         auto plan_result = planner.plan(ctx, *map_view_ptr);
+                        // plan() 返回后 bound 随即析构，自动释放读锁
                         if (plan_result.has_value()) {
                             plan_success = true;
                             toROSMsg(std::move(plan_result.value()), output_traj_msg);
@@ -361,6 +393,42 @@ void ControlLayer<PlannersT>::execute() {
     // 设置成功结果
     action_server_->succeeded_current();
     RCLCPP_INFO(pnode_->get_logger(), "Goal succeeded");
+}
+
+// ==============================================================================
+// bind_map_view 实现
+// ==============================================================================
+
+template <typename PlannersT>
+template <MapConcept MapT, typename BuilderFn>
+requires std::is_invocable_v<BuilderFn, const MapT&> &&
+         std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>, typename ControlLayer<PlannersT>::MapViewsVariant>
+void ControlLayer<PlannersT>::bind_map_view(
+    std::shared_ptr<MapServer<MapT>> server,
+    BuilderFn&& builder)
+{
+    // 将 builder 的具体类型擦除进 std::function，以便存入 map_view_factory_
+    std::function<MapViewsVariant(const MapT&)> erased_builder = std::forward<BuilderFn>(builder);
+    std::weak_ptr<MapServer<MapT>> weak_server = server;
+
+    map_view_factory_ = [weak_server, erased_builder = std::move(erased_builder)]() -> BoundMapView
+    {
+        auto srv = weak_server.lock();
+        if (!srv) {
+            // MapServer 已销毁，返回空视图；execute() 会因 view_variant 为空而报错
+            return BoundMapView{};
+        }
+
+        // 1. 申请读锁，LockedMapRO 以堆对象形式存活于 shared_ptr 中，
+        //    确保在 BoundMapView 析构前读锁始终持有。
+        auto locked = std::make_shared<LockedMapRO<MapT>>(srv->getLockedReadView());
+
+        // 2. 将已加锁的 const MapT& 交给用户 builder，用户据此构造 IMapView。
+        MapViewsVariant view_variant = erased_builder(locked->get());
+
+        // 3. 将锁卫封装进 shared_ptr<void>，与 view_variant 一同返回。
+        return BoundMapView{std::move(view_variant), std::move(locked)};
+    };
 }
 
 } // namespace finenav
