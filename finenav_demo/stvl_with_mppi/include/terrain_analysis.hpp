@@ -5,11 +5,16 @@
 #pragma once
 
 #include "grid_map.hpp"
-
+#include "finenav_core/map/map_server.hpp"
 #include <cmath>
 #include <span>
+#include <algorithm>
+#include <cstring>
 
 #include <opencv2/opencv.hpp>
+
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <sensor_msgs/point_cloud2_iterator.hpp>
 
 struct Voxel {
     float z_height = NAN;
@@ -19,26 +24,36 @@ struct Voxel {
 
 class TerrainAnalyzer {
 public:
-    explicit TerrainAnalyzer(const finenav::GridMap<Voxel>& map, rclcpp::Node::SharedPtr node) : map_(map),node_(node) {
-        passability_image_ = cv::Mat::zeros(map_.getSize().x(), map_.getSize().y(), CV_8UC1);
-        costmap_image_ = cv::Mat::zeros(map_.getSize().x(), map_.getSize().y(), CV_8UC1);
+    explicit TerrainAnalyzer(const std::shared_ptr<finenav::MapServer<finenav::GridMap<Voxel>>> map_server, rclcpp::Node::SharedPtr node) : map_server_(map_server),node_(node) {
+        // One locked view for init-time map size query.
+        const auto map_ro = map_server_->getLockedReadView();
+        passability_image_ = cv::Mat::zeros(map_ro->getSize().x(), map_ro->getSize().y(), CV_8UC1);
+        costmap_image_ = cv::Mat::zeros(map_ro->getSize().x(), map_ro->getSize().y(), CV_8UC1);
         cost_scaling_factor_ = 0.5;  // 后续改成根据传入参数调整
         if (node_) {
             // 创建发布器map
             passability_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>(
                 "passability_map", 10);
+
+            // 代价地图（彩色点云）发布器
+            costmap_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>(
+                "costmap_cloud", 10);
         }
     }
 
     void update(float robot_pose_z) {
         TerrainAnalysis(robot_pose_z);
         MapInflation();
+
+        // 发布彩色代价地图点云（如果需要可改成外部触发/限频）
+        publishCostmapPointCloud();
     }
 
     int getCost(const finenav::Position3D& pos) const  {
-        if(map_.isInside(pos)) {
-            finenav::Index index = map_.getIndex(pos);
-            return costmap_image_.at<uchar>(index.y() + map_.getSize().y() / 2, index.x() + map_.getSize().x() / 2);
+        const auto map_ro = map_server_->getLockedReadView();
+        if(map_ro->isInside(pos)) {
+            finenav::Index index = map_ro->getIndex(pos);
+            return costmap_image_.at<uchar>(index.y() + map_ro->getSize().y() / 2, index.x() + map_ro->getSize().x() / 2);
         }else {
             return 254;  // 越界视为不可通行,具体逻辑有待完善
         }
@@ -50,8 +65,101 @@ public:
     * @param distance 距离值，通常是从距离变换图中获取的距离值，即距离最近障碍物的欧氏距离，单位为栅格数
     */
     int ComputeCost(int distance) const {
-        const double factor = std::exp(-1.0 * cost_scaling_factor_ * (distance * map_.getResolution()));
+        const auto map_ro = map_server_->getLockedReadView();
+        const double factor = std::exp(-1.0 * cost_scaling_factor_ * (distance * map_ro->getResolution()));
         return static_cast<int>(253 * factor);
+    }
+
+    /**
+     * @brief 以彩色点云形式发布当前代价地图。
+     * 颜色规则：
+     *   - cost == 254 : 黑色（不可通行）
+     *   - cost 由低到高 : 蓝色由浅到深
+     */
+    void publishCostmapPointCloud(float z_layer = 0.0f) {
+        if (!node_ || !costmap_pub_) {
+            return;
+        }
+
+        const auto map_ro = map_server_->getLockedReadView();
+
+        const int min_x = map_ro->getMinIndex().x();
+        const int max_x = map_ro->getMaxIndex().x();
+        const int min_y = map_ro->getMinIndex().y();
+        const int max_y = map_ro->getMaxIndex().y();
+
+        const size_t nx = static_cast<size_t>(max_x - min_x + 1);
+        const size_t ny = static_cast<size_t>(max_y - min_y + 1);
+        const size_t npts = nx * ny;
+
+        sensor_msgs::msg::PointCloud2 cloud;
+        cloud.header.stamp = node_->now();
+        cloud.header.frame_id = "map";
+        cloud.height = 1;
+        cloud.width = static_cast<uint32_t>(npts);
+        cloud.is_dense = false;
+
+        sensor_msgs::PointCloud2Modifier modifier(cloud);
+        modifier.setPointCloud2Fields(
+            4,
+            "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+            "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+            "z", 1, sensor_msgs::msg::PointField::FLOAT32,
+            "rgb", 1, sensor_msgs::msg::PointField::FLOAT32);
+        modifier.resize(npts);
+
+        sensor_msgs::PointCloud2Iterator<float> iter_x(cloud, "x");
+        sensor_msgs::PointCloud2Iterator<float> iter_y(cloud, "y");
+        sensor_msgs::PointCloud2Iterator<float> iter_z(cloud, "z");
+        sensor_msgs::PointCloud2Iterator<float> iter_rgb(cloud, "rgb");
+
+        auto packRGB = [](uint8_t r, uint8_t g, uint8_t b) -> float {
+            const uint32_t rgb = (static_cast<uint32_t>(r) << 16) |
+                                 (static_cast<uint32_t>(g) << 8) |
+                                 (static_cast<uint32_t>(b));
+            float out;
+            std::memcpy(&out, &rgb, sizeof(uint32_t));
+            return out;
+        };
+
+        // 蓝色最浅的下限（避免低代价几乎不可见）
+        constexpr uint8_t kBlueMin = 40;
+
+        for (int ix = min_x; ix <= max_x; ++ix) {
+            for (int iy = min_y; iy <= max_y; ++iy) {
+                // 获取该 (ix,iy) 对应的世界坐标；z 固定为一张 2D 图层
+                const finenav::Position3D pos = map_ro->getPosition(finenav::Index{ix, iy, map_ro->getMinIndex().z()});
+
+                const int row = iy + static_cast<int>(map_ro->getSize().y() / 2);
+                const int col = ix + static_cast<int>(map_ro->getSize().x() / 2);
+
+                const int cost = static_cast<int>(costmap_image_.at<uchar>(row, col));
+
+                uint8_t r = 0, g = 0, b = 0;
+                if (cost >= 254) {
+                    // 不可通行：黑色
+                    r = 0; g = 0; b = 0;
+                } else {
+                    // 0~253: 蓝色由浅到深
+                    const float t = std::clamp(static_cast<float>(cost) / 253.0f, 0.0f, 1.0f);
+                    b = static_cast<uint8_t>(kBlueMin + t * (255.0f - kBlueMin));
+                    r = 0;
+                    g = 0;
+                }
+
+                *iter_x = static_cast<float>(pos.x());
+                *iter_y = static_cast<float>(pos.y());
+                *iter_z = z_layer;
+                *iter_rgb = packRGB(r, g, b);
+
+                ++iter_x;
+                ++iter_y;
+                ++iter_z;
+                ++iter_rgb;
+            }
+        }
+
+        costmap_pub_->publish(cloud);
     }
 
 
@@ -60,19 +168,21 @@ private:
         const float ROBOT_HEIGHT = 1.0;  // 根据您的机器人实际高度设置
         const float MAX_GRADIENT = 0.5;  // 根据您的需求设置最大坡度
 
-        int sizeX_min = map_.getMinIndex().x();
-        int sizeX_max = map_.getMaxIndex().x();
-        int sizeY_min = map_.getMinIndex().y();
-        int sizeY_max = map_.getMaxIndex().y();
-        size_t size_x = map_.getSize().x();
-        size_t size_y = map_.getSize().y();
+        const auto map_ro = map_server_->getLockedReadView();
+
+        int sizeX_min = map_ro->getMinIndex().x();
+        int sizeX_max = map_ro->getMaxIndex().x();
+        int sizeY_min = map_ro->getMinIndex().y();
+        int sizeY_max = map_ro->getMaxIndex().y();
+        size_t size_x = map_ro->getSize().x();
+        size_t size_y = map_ro->getSize().y();
         size_t half_size_x = size_x / 2;
         size_t half_size_y = size_y / 2;
         Eigen::ArrayXXf ground_array_ = Eigen::ArrayXXf::Constant(size_x, size_y, NAN);
 
         for (int x = sizeX_min; x <= sizeX_max; ++x) {
             for (int y = sizeY_min; y <= sizeY_max; ++y) {
-                std::span<const Voxel> voxels_along_z_indices = getVoxelsAlongZ(x, y);
+                std::span<const Voxel> voxels_along_z_indices = map_ro->getVoxelsAlongZ(static_cast<int>(x), static_cast<int>(y));
                 //这里可能要对获取的z值做一些处理，滤除掉特殊值之类
 
                 float nearest_ground = std::numeric_limits<float>::max();
@@ -170,15 +280,15 @@ private:
      */
     std::span<const Voxel> getVoxelsAlongZ(const int& x, const int& y) const {
         std::span<const Voxel> voxels_along_z_indices;
-        voxels_along_z_indices = map_.getVoxelsAlongZ(static_cast<int>(x), static_cast<int>(y));
+        voxels_along_z_indices = map_server_->getLockedReadView()->getVoxelsAlongZ(static_cast<int>(x), static_cast<int>(y));
         return voxels_along_z_indices;
     }
 
-    const finenav::GridMap<Voxel>& map_;
-
+    const std::shared_ptr<finenav::MapServer<finenav::GridMap<Voxel>>> map_server_;
     // TODO: 这些成员目前只是为了让头文件自洽可编译；后续由你的分析流程初始化/更新。
     rclcpp::Node::SharedPtr node_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr passability_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr costmap_pub_;
     cv::Mat passability_image_;  // 存储每个格子的可通行性值（0或1）
     cv::Mat costmap_image_;  // 存储每个格子的可通行性值（0或1）
     double cost_scaling_factor_{1.0};

@@ -25,13 +25,13 @@ using std::chrono_literals::operator"" ms;
 finenav::OBBCollisionModel collision_model({1.0, 1.0, 1.0});  //在实际使用中，尺寸应根据机器人实际尺寸设置应该有个tf回调函数实时更新位置
 class SimpleGridMapView : public nav2_mppi_controller::IMapView {
 public:
-    explicit SimpleGridMapView(const finenav::GridMap<Voxel>& map, rclcpp::Node::SharedPtr node) : map_(map),node_(node) {
-        terrain_analyzer_ = std::make_shared<TerrainAnalyzer>(map_, node_);
+    explicit SimpleGridMapView(const finenav::GridMap<Voxel>& map, rclcpp::Node::SharedPtr node, std::shared_ptr<TerrainAnalyzer> terrain_analyzer) : map_(map),node_(node),terrain_analyzer_(terrain_analyzer) {
         if (node_) {
             local_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>(
     "local_map", 10);
         }
     }
+
 
     // 是否将未知区域视为可通行（占位实现）
     /**
@@ -75,6 +75,7 @@ public:
     int getCost(const finenav::Position3D& pos) const override {
         return terrain_analyzer_->getCost(pos);
     }
+
 
     float getRadius() const override {
         return collision_model.getOuterDiameter();

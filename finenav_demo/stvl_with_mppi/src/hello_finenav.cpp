@@ -66,8 +66,8 @@ struct PositionEqual {
 
 using DynamicPosSet = std::unordered_set<Position, PositionHash, PositionEqual>;
 static DynamicPosSet g_dynamic_cells;
-static double g_decay_time_sec = 10.0;
-static double g_decay_time_fov_sec = 1.0;
+static double g_decay_time_sec = 1000000.0;
+static double g_decay_time_fov_sec = 1000000.0;
 
 static bool numisfinite(float x) {
     return std::isfinite(x);
@@ -146,6 +146,8 @@ int main(int argc, char** argv) {
     auto map_server = finenav_engine->createMapResource<GridMap<Voxel>>(
         "my_map_server", 10.0, true, 100.0);
 
+    auto terrain_analyzer = std::make_shared<TerrainAnalyzer>(map_server, node);
+
     auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
 
     auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
@@ -205,7 +207,7 @@ int main(int argc, char** argv) {
             }
         }
     });
-    map_server->registerPostUpdateHook([node, map_cloud_pub](GridMap<Voxel> & map) {
+    map_server->registerPostUpdateHook([node, map_cloud_pub, terrain_analyzer,tf_buffer](GridMap<Voxel> & map) {
         std::vector<Index> valid_indices;
         map.selectCellsByCondition(valid_indices, [](const Voxel & v) {
             return std::isfinite(v.z_height);
@@ -276,7 +278,7 @@ int main(int argc, char** argv) {
         10ms);
 
     tf_filter->registerCallback(
-        [node, laser_injector, tf_buffer](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
+        [node, laser_injector, tf_buffer, terrain_analyzer](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
             geometry_msgs::msg::TransformStamped tf_stamped;
             try {
                 tf_stamped = tf_buffer->lookupTransform("map", msg->header.frame_id, msg->header.stamp);
@@ -304,6 +306,13 @@ int main(int argc, char** argv) {
                 p.z = static_cast<float>(p_map.z());
                 laser_injector(std::move(p), now);
             }
+            geometry_msgs::msg::TransformStamped tf_baselink;
+            try {
+                tf_baselink = tf_buffer->lookupTransform("map", "base_link", tf2::TimePointZero);
+            } catch (const tf2::TransformException & ex) {
+                RCLCPP_WARN(node->get_logger(), "TF lookup failed in pre-update hook: %s", ex.what());
+            }
+            terrain_analyzer->update(tf_baselink.transform.translation.z);
         });
 
 
@@ -311,8 +320,6 @@ int main(int argc, char** argv) {
     // --------------------------------- Launch Planning --------------------------------------
     using MppiPlanners = PlannerSet<nav2_mppi_controller::MPPIController>;
     auto my_control_layer= finenav_engine->createControlLayer<MppiPlanners>("mppi_layer");
-
-    auto mppi_map_server = finenav_engine->getMapResource<GridMap<Voxel>>("my_map_server");
 
     // my_control_layer->bind_map_view(
     //     mppi_map_server,
@@ -324,16 +331,18 @@ int main(int argc, char** argv) {
     // MapView构造用非const的map引用是一个反模式，这不是框架的问题，而是出自用户的
     // 就好比C++提供了各种强制类型转换的工具，而用户不按类型写代码，到处使用强制类型转换
     // 如果MapView构造使用了const的map引用，bind_map_view的调用会极其简洁
+
+
     my_control_layer->bind_map_view(
-        mppi_map_server,
-        [node](const GridMap<Voxel>& map) {
-            return std::make_shared<SimpleGridMapView>(map, node); // 这里顺手把构造函数中的node从node指针变为node共享指针
+       map_server,
+        [node, terrain_analyzer](const GridMap<Voxel>& map) {
+            return std::make_shared<SimpleGridMapView>(map, node, terrain_analyzer); // 这里顺手把构造函数中的node从node指针变为node共享指针
         });
 
 
     finenav_engine->registerPipeline(
         FineNavEngine::PipelineIO{
-            .input_topic = "global_plan",
+            .input_topic = "line_path",
             .output_topic = "mppi_layer_plan",
         },
         my_control_layer);

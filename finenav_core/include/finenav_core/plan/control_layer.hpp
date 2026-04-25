@@ -291,6 +291,10 @@ void ControlLayer<PlannersT>::execute() {
             "map", "base_link", tf2::TimePointZero);
 
         geometry_msgs::msg::Pose start_pose;
+        start_pose.position.x = t.transform.translation.x;
+        start_pose.position.y = t.transform.translation.y;
+        start_pose.position.z = t.transform.translation.z;
+        start_pose.orientation = t.transform.rotation;
 
         // 在 planners_instance_ 中找匹配 active_planner_id_ 的 planner
         bool planner_found_and_run = false;
