@@ -73,7 +73,7 @@ public:
      * @return 在给定位置处的代价值，通常是一个整数，表示该位置的通行成本。
     */
     int getCost(const finenav::Position3D& pos) const override {
-        return terrain_analyzer_->getCost(pos);
+        return terrain_analyzer_->getCost(pos, map_);
     }
 
 

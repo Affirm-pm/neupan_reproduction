@@ -4,6 +4,7 @@
 
 #include <nav_msgs/msg/detail/odometry__struct.hpp>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -148,6 +149,9 @@ int main(int argc, char** argv) {
 
     auto terrain_analyzer = std::make_shared<TerrainAnalyzer>(map_server, node);
 
+    // robot_pose_z 由点云回调线程原子写入，postUpdateHook 线程原子读取，无锁安全。
+    auto robot_pose_z_atomic = std::make_shared<std::atomic<float>>(0.0f);
+
     auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
 
     auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
@@ -207,7 +211,11 @@ int main(int argc, char** argv) {
             }
         }
     });
-    map_server->registerPostUpdateHook([node, map_cloud_pub, terrain_analyzer,tf_buffer](GridMap<Voxel> & map) {
+    map_server->registerPostUpdateHook([node, map_cloud_pub, terrain_analyzer, robot_pose_z_atomic](GridMap<Voxel> & map) {
+        // terrain_analyzer->update() 在写锁内调用，costmap_image_ 的写受 MapServer 互斥锁隐式保护。
+        // ControlLayer 在 plan() 时持有读锁，plan 路径上的 getCost() 读 costmap_image_ 也受同一锁保护。
+        // 因此 costmap_image_ 无需额外加锁。
+        terrain_analyzer->update(robot_pose_z_atomic->load(std::memory_order_relaxed), map);
         std::vector<Index> valid_indices;
         map.selectCellsByCondition(valid_indices, [](const Voxel & v) {
             return std::isfinite(v.z_height);
@@ -278,7 +286,7 @@ int main(int argc, char** argv) {
         10ms);
 
     tf_filter->registerCallback(
-        [node, laser_injector, tf_buffer, terrain_analyzer](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
+        [node, laser_injector, tf_buffer, robot_pose_z_atomic](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
             geometry_msgs::msg::TransformStamped tf_stamped;
             try {
                 tf_stamped = tf_buffer->lookupTransform("map", msg->header.frame_id, msg->header.stamp);
@@ -312,7 +320,10 @@ int main(int argc, char** argv) {
             } catch (const tf2::TransformException & ex) {
                 RCLCPP_WARN(node->get_logger(), "TF lookup failed in pre-update hook: %s", ex.what());
             }
-            terrain_analyzer->update(tf_baselink.transform.translation.z);
+            // 仅更新 z 坐标原子变量，地形分析在 postUpdateHook 中执行。
+            robot_pose_z_atomic->store(
+                static_cast<float>(tf_baselink.transform.translation.z),
+                std::memory_order_relaxed);
         });
 
 
