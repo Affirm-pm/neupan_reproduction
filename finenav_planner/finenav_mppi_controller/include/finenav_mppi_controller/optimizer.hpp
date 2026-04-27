@@ -111,19 +111,19 @@ public:
   	    // ...hardcoded parameters (以前由 parameters_handler_ 提供)...
   	    s.model_dt = 0.05f;
   	    s.time_steps = 56;
-  	    s.batch_size = 1000;
+  	    s.batch_size = 5000;
   	    s.iteration_count = 1;
   	    s.temperature = 0.3f;
   	    s.gamma = 0.015f;
 
-  	    s.base_constraints.vx_max = 0.5;
-  	    s.base_constraints.vx_min = -0.35;
-  	    s.base_constraints.vy = 0.5;
+  	    s.base_constraints.vx_max = 2.0;
+  	    s.base_constraints.vx_min = 0.0;
+  	    s.base_constraints.vy = 0.0;
   	    s.base_constraints.wz = 1.9;
 
-  	    s.sampling_std.vx = 0.8;
-  	    s.sampling_std.vy = 0.8;
-  	    s.sampling_std.wz = 0.4;
+  	    s.sampling_std.vx = 2.0;
+  	    s.sampling_std.vy = 1.0;
+  	    s.sampling_std.wz = 1.0;
 
   	    s.retry_attempt_limit = 1;
 

@@ -28,74 +28,11 @@
 #include <tf2_ros/message_filter.h>
 #include <tf2_ros/transform_listener.h>
 #include "finenav_mppi_controller/controller.hpp"
-
+#include "stvl_manager.hpp"
 #include "terrain_mapview.hpp"
 
 using namespace finenav;
 using std::chrono_literals::operator""ms;
-
-struct Pointcloud {
-
-    float x;
-    float y;
-    float z;
-};
-
-
-struct PositionHash {
-    std::size_t operator()(const Position & p) const noexcept {
-        std::size_t hx = std::hash<double>{}(p.x());
-        std::size_t hy = std::hash<double>{}(p.y());
-        std::size_t hz = std::hash<double>{}(p.z());
-        auto hash_combine = [](std::size_t seed, std::size_t v) {
-            seed ^= v + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-            return seed;
-        };
-        std::size_t seed = 0;
-        seed = hash_combine(seed, hx);
-        seed = hash_combine(seed, hy);
-        seed = hash_combine(seed, hz);
-        return seed;
-    }
-};
-
-struct PositionEqual {
-    bool operator()(const Position & a, const Position & b) const noexcept {
-        return a.x() == b.x() && a.y() == b.y() && a.z() == b.z();
-    }
-};
-
-using DynamicPosSet = std::unordered_set<Position, PositionHash, PositionEqual>;
-static DynamicPosSet g_dynamic_cells;
-static double g_decay_time_sec = 1000000.0;
-static double g_decay_time_fov_sec = 1000000.0;
-
-static bool numisfinite(float x) {
-    return std::isfinite(x);
-}
-
-static bool isInFrustum(const Eigen::Matrix4d & T_ws, const Position & p_world,
-                        double min_range, double max_range,
-                        double min_angle, double max_angle) {
-    const Eigen::Matrix3d R_ws = T_ws.topLeftCorner<3, 3>();
-    const Eigen::Vector3d origin = T_ws.topRightCorner<3, 1>();
-    const Eigen::Vector3d v_world = p_world - origin;
-
-    const double r = v_world.norm();
-    if (r <= 0.0 || r < min_range || r > max_range) {
-        return false;
-    }
-
-    const Eigen::Vector3d v_sensor = R_ws.transpose() * v_world;
-    const double norm = v_sensor.norm();
-    if (norm <= 0.0) {
-        return false;
-    }
-
-    const double cos_theta = std::clamp(v_sensor.z() / norm, -1.0, 1.0);
-    const double theta = std::acos(cos_theta);
-    return theta >= min_angle && theta <= max_angle;
-}
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
@@ -106,6 +43,7 @@ int main(int argc, char** argv) {
 
     auto finenav_engine = std::make_shared<FineNavEngine>(node);
 
+    StvlManager stvl_manager(node);
     // ------------------------------ Launch Localization ----------------------------------
     LocalizerOptions localizer_options {
         .update_rate_hz        = 100,
@@ -147,10 +85,8 @@ int main(int argc, char** argv) {
     auto map_server = finenav_engine->createMapResource<GridMap<Voxel>>(
         "my_map_server", 10.0, true, 100.0);
 
-    auto terrain_analyzer = std::make_shared<TerrainAnalyzer>(map_server, node);
 
-    // robot_pose_z 由点云回调线程原子写入，postUpdateHook 线程原子读取，无锁安全。
-    auto robot_pose_z_atomic = std::make_shared<std::atomic<float>>(0.0f);
+    auto terrain_analyzer = std::make_shared<TerrainAnalyzer>(map_server, node);
 
     auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
 
@@ -161,61 +97,14 @@ int main(int argc, char** argv) {
             node->get_node_timers_interface()));
     auto tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
 
-    map_server->registerPreUpdateHook([node, tf_buffer](GridMap<Voxel> & map) {
-        const rclcpp::Time now = node->get_clock()->now();
-
-        Eigen::Matrix4d T_ws = Eigen::Matrix4d::Identity();
-        try {
-            const auto tf_stamped = tf_buffer->lookupTransform("map", "base_lidar", tf2::TimePointZero);
-            const Eigen::Isometry3d iso = tf2::transformToEigen(tf_stamped.transform);
-            T_ws = iso.matrix();
-        } catch (const tf2::TransformException & ex) {
-            RCLCPP_WARN(node->get_logger(), "TF lookup failed in pre-update hook: %s", ex.what());
-        }
-
-        constexpr double min_range = 0.0;
-        constexpr double max_range = 50.0;
-        constexpr double min_angle = 0.0;
-        constexpr double max_angle = M_PI / 3.0;
-
-        for (auto it = g_dynamic_cells.begin(); it != g_dynamic_cells.end();) {
-            const Position & pos = *it;
-
-            if (!map.isInside(pos)) {
-                it = g_dynamic_cells.erase(it);
-                continue;
-            }
-
-            Voxel & cell = map.atPosition(pos);
-            if (cell.timestamp.nanoseconds() == 0) {             //TODO：按照逻辑不应该出现，但实际上确实有哈希表里的索引对应的是time{},存在隐患，后续排查
-                it = g_dynamic_cells.erase(it);
-                continue;
-            }
-            
-            const double age_sec = (now - cell.timestamp).seconds();
-
-            if (age_sec > g_decay_time_sec) {
-                cell = Voxel{NAN, false, rclcpp::Time{}};
-                it = g_dynamic_cells.erase(it);
-                continue;
-            }
-
-            const bool in_fov = isInFrustum(T_ws, pos, min_range, max_range, min_angle, max_angle);
-            const double active_decay = in_fov ? g_decay_time_fov_sec : g_decay_time_sec;
-
-            if (age_sec > active_decay) {
-                cell = Voxel{NAN, false, rclcpp::Time{}};
-                it = g_dynamic_cells.erase(it);
-            } else {
-                ++it;
-            }
-        }
+    map_server->registerPreUpdateHook([stvl_manager](GridMap<Voxel> & map) mutable {
+        stvl_manager.PruneExpiredCells(map);
     });
-    map_server->registerPostUpdateHook([node, map_cloud_pub, terrain_analyzer, robot_pose_z_atomic](GridMap<Voxel> & map) {
+    map_server->registerPostUpdateHook([node, map_cloud_pub, terrain_analyzer, finenav_engine](GridMap<Voxel> & map) {
         // terrain_analyzer->update() 在写锁内调用，costmap_image_ 的写受 MapServer 互斥锁隐式保护。
         // ControlLayer 在 plan() 时持有读锁，plan 路径上的 getCost() 读 costmap_image_ 也受同一锁保护。
         // 因此 costmap_image_ 无需额外加锁。
-        terrain_analyzer->update(robot_pose_z_atomic->load(std::memory_order_relaxed), map);
+        terrain_analyzer->update(finenav_engine->getLocalizer().getState().p.z(), map);
         std::vector<Index> valid_indices;
         map.selectCellsByCondition(valid_indices, [](const Voxel & v) {
             return std::isfinite(v.z_height);
@@ -257,20 +146,8 @@ int main(int argc, char** argv) {
     auto laser_injector = map_server->addUpdateSource<Pointcloud>(
         "front_laser",
         policy,
-        [node](const Pointcloud & msg, GridMap<Voxel> & map) {
-            const rclcpp::Time now = node->get_clock()->now();
-            const Position hit_pos(msg.x, msg.y, msg.z);
-            if (!map.isInside(hit_pos)) {
-                return;
-            }
-
-            const Index idx = map.getIndex(hit_pos);
-            Voxel & cell = map.at(idx);
-            if (!cell.is_static) {
-                cell.z_height = msg.z;
-                cell.timestamp = now;
-                g_dynamic_cells.insert(map.getPosition(idx));
-            }
+        [stvl_manager](const Pointcloud & msg, GridMap<Voxel> & map) mutable {
+            stvl_manager.InsertPointCloud(msg, map);
         });
 
     auto cloud_sub = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::PointCloud2>>(
@@ -286,7 +163,7 @@ int main(int argc, char** argv) {
         10ms);
 
     tf_filter->registerCallback(
-        [node, laser_injector, tf_buffer, robot_pose_z_atomic](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
+        [node, laser_injector, tf_buffer](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
             geometry_msgs::msg::TransformStamped tf_stamped;
             try {
                 tf_stamped = tf_buffer->lookupTransform("map", msg->header.frame_id, msg->header.stamp);
@@ -302,7 +179,7 @@ int main(int argc, char** argv) {
             const rclcpp::Time now = node->now();
 
             for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
-                if (!numisfinite(*iter_x) || !numisfinite(*iter_y) || !numisfinite(*iter_z)) {
+                if (!std::isfinite(*iter_x) || !std::isfinite(*iter_y) || !std::isfinite(*iter_z)) {
                     continue;
                 }
 
@@ -314,16 +191,6 @@ int main(int argc, char** argv) {
                 p.z = static_cast<float>(p_map.z());
                 laser_injector(std::move(p), now);
             }
-            geometry_msgs::msg::TransformStamped tf_baselink;
-            try {
-                tf_baselink = tf_buffer->lookupTransform("map", "base_link", tf2::TimePointZero);
-            } catch (const tf2::TransformException & ex) {
-                RCLCPP_WARN(node->get_logger(), "TF lookup failed in pre-update hook: %s", ex.what());
-            }
-            // 仅更新 z 坐标原子变量，地形分析在 postUpdateHook 中执行。
-            robot_pose_z_atomic->store(
-                static_cast<float>(tf_baselink.transform.translation.z),
-                std::memory_order_relaxed);
         });
 
 

@@ -1,0 +1,140 @@
+// Copyright (c) 2026.
+// IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+// All rights reserved.
+
+//
+// Created by fins on 26-4-27.
+//
+#include "terrain_analysis.hpp"
+
+TerrainAnalyzer::TerrainAnalyzer(
+    const std::shared_ptr<finenav::MapServer<finenav::GridMap<Voxel>>> map_server,
+    rclcpp::Node::SharedPtr node)
+    : node_(node)
+{
+    const auto map_ro = map_server->getLockedReadView();
+    passability_image_ = cv::Mat::zeros(map_ro->getSize().x(), map_ro->getSize().y(), CV_8UC1);
+    costmap_image_     = cv::Mat::zeros(map_ro->getSize().x(), map_ro->getSize().y(), CV_8UC1);
+    cached_resolution_ = map_ro->getResolution();
+    cost_scaling_factor_ = 0.5;
+    if (node_) {
+        passability_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>("passability_map", 10);
+        costmap_pub_     = node_->create_publisher<sensor_msgs::msg::PointCloud2>("costmap_cloud", 10);
+    }
+}
+
+void TerrainAnalyzer::update(float robot_pose_z, const finenav::GridMap<Voxel>& map) {
+    cached_resolution_ = map.getResolution();
+    TerrainAnalysis(robot_pose_z, map);
+    MapInflation();
+}
+
+int TerrainAnalyzer::getCost(const finenav::Position3D& pos, const finenav::GridMap<Voxel>& map) const {
+    if (map.isInside(pos)) {
+        finenav::Index index = map.getIndex(pos);
+        return costmap_image_.at<uchar>(
+            index.y() + map.getSize().y() / 2,
+            index.x() + map.getSize().x() / 2);
+    }
+    return 254;
+}
+
+int TerrainAnalyzer::ComputeCost(int distance) const {
+    const double factor = std::exp(-1.0 * cost_scaling_factor_ * (distance * cached_resolution_));
+    return static_cast<int>(253 * factor);
+}
+
+void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap<Voxel>& map) {
+    const float ROBOT_HEIGHT = 1.0;
+    const float MAX_GRADIENT = 0.5;
+
+    int sizeX_min = map.getMinIndex().x();
+    int sizeX_max = map.getMaxIndex().x();
+    int sizeY_min = map.getMinIndex().y();
+    int sizeY_max = map.getMaxIndex().y();
+    size_t size_x      = map.getSize().x();
+    size_t size_y      = map.getSize().y();
+    size_t half_size_x = size_x / 2;
+    size_t half_size_y = size_y / 2;
+
+    Eigen::ArrayXXf ground_array_ = Eigen::ArrayXXf::Constant(size_x, size_y, NAN);
+
+    for (int x = sizeX_min; x <= sizeX_max; ++x) {
+        for (int y = sizeY_min; y <= sizeY_max; ++y) {
+            std::span<const Voxel> voxels_along_z_indices = map.getVoxelsAlongZ(static_cast<int>(x), static_cast<int>(y));
+
+            std::vector<Voxel> valid_z_values;
+            for (const auto& voxel : voxels_along_z_indices) {
+                if (!std::isnan(voxel.z_height)) {
+                    valid_z_values.push_back(voxel);
+                }
+            }
+
+            float nearest_ground = std::numeric_limits<float>::max();
+            if (!valid_z_values.empty()) {
+                for (size_t i = 0; i < valid_z_values.size() - 1; ++i) {
+                    if(valid_z_values[i + 1].z_height - valid_z_values[i].z_height > ROBOT_HEIGHT) {
+                        if (fabs(valid_z_values[i].z_height - robot_pose_z) < fabs(nearest_ground - robot_pose_z)) {
+                            nearest_ground = valid_z_values[i].z_height;
+                        }
+                    }
+                }
+                if (fabs(valid_z_values.back().z_height - robot_pose_z) < fabs(nearest_ground - robot_pose_z)) {
+                    nearest_ground = valid_z_values.back().z_height;
+                }
+            } else {
+                nearest_ground = NAN;
+            }
+            ground_array_(x + half_size_x, y + half_size_y) = nearest_ground;
+        }
+    }
+
+    for (size_t x = 0; x < size_x; ++x) {
+        for (size_t y = 0; y < size_y; ++y) {
+            int dx[4] = {0, 1, 0, -1};
+            int dy[4] = {1, 0, -1, 0};
+
+            float terrain_value  = 0;
+            float current_ground = ground_array_(x, y);
+            if (!std::isnan(current_ground)) {
+                for (int i = 0; i < 4; ++i) {
+                    int nx = x + dx[i];
+                    int ny = y + dy[i];
+                    if (nx < 0 || nx > static_cast<int>(size_x) - 1 ||
+                        ny < 0 || ny > static_cast<int>(size_y) - 1) continue;
+                    float neighbor_ground = ground_array_(nx, ny);
+                    if (!std::isnan(neighbor_ground)) {
+                        if (fabs(current_ground - neighbor_ground) > MAX_GRADIENT) {
+                            terrain_value = 254;
+                            break;
+                        }
+                    }
+                }
+            }
+            passability_image_.at<uchar>(y, x) = terrain_value;
+        }
+    }
+}
+
+void TerrainAnalyzer::MapInflation() {
+    cv::Mat distance_transform = DistanceTransform();
+    for (int x = 0; x < passability_image_.cols; ++x) {
+        for (int y = 0; y < passability_image_.rows; ++y) {
+            if (passability_image_.at<uchar>(y, x) == 0) {
+                float distance = distance_transform.at<float>(y, x);
+                costmap_image_.at<uchar>(y, x) = static_cast<uchar>(ComputeCost(distance));
+            } else {
+                costmap_image_.at<uchar>(y, x) = 254;
+            }
+        }
+    }
+}
+
+
+cv::Mat TerrainAnalyzer::DistanceTransform() {
+    cv::Mat passability_binary = 254 - passability_image_;
+    cv::Mat distance_transform;
+    cv::distanceTransform(passability_binary, distance_transform, cv::DIST_L2, 3);
+    return distance_transform;
+}
+// namespace finenav

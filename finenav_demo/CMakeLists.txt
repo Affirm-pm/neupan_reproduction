@@ -13,6 +13,7 @@ find_package(PCL REQUIRED COMPONENTS common io)
 
 set(dependencies
         rclcpp
+        rclcpp_action
         finenav_engine
         finenav_map_grid_map
         finenav_mppi_controller

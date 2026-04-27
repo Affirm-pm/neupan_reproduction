@@ -18,6 +18,7 @@
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/node_thread.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
+#include "finenav_core/concepts.hpp"
 
 namespace finenav {
 
