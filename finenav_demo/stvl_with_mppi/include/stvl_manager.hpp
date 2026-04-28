@@ -9,23 +9,15 @@
 #include <memory>
 #include <unordered_set>
 #include <Eigen/Core>
+#include <Eigen/Geometry>
 
-#include <sensor_msgs/point_cloud2_iterator.hpp>
-#include <sensor_msgs/msg/point_cloud2.hpp>
-#include <message_filters/subscriber.h>
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/message_filter.h>
-#include <tf2_ros/transform_listener.h>
-#include "grid_map.hpp" // TODO: resolve anti-pattern export
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include "grid_map.hpp"
 #include "voxel.hpp"
 
 namespace finenav {
-
-struct Pointcloud {
-    float x;
-    float y;
-    float z;
-};
 
 struct PositionHash {
     std::size_t operator()(const Position & p) const noexcept {
@@ -54,36 +46,29 @@ using DynamicPosSet = std::unordered_set<Position, PositionHash, PositionEqual>;
 
 class StvlManager {
 public:
-    StvlManager(rclcpp::Node::SharedPtr node);
+    /// @param node       ROS节点
+    /// @param T_body_lidar  雷达在车体坐标系下的安装位姿（默认为 Identity，即雷达在车体原点）
+    explicit StvlManager(rclcpp::Node::SharedPtr node,
+                         Eigen::Isometry3d T_body_lidar = Eigen::Isometry3d::Identity());
 
-    // Initialize mapping components
-    void InsertPointCloud(const Pointcloud & msg, GridMap<Voxel> & map);
+    /// @param T_map_body  当前车体在地图坐标系下的位姿，由外部定位模块提供
+    void PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3d & T_map_body);
 
-    void PruneExpiredCells(finenav::GridMap<Voxel> & map);
+    void InsertPointCloud(const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map);
+
 private:
-    bool isInFrustum(const Eigen::Matrix4d & T_ws, const Position & p_world,
-                   double min_range, double max_range,
-                   double min_angle, double max_angle) const;
+    static bool isInFrustum(const Eigen::Isometry3d & T_map_lidar, const Position & p_world,
+                            double min_range, double max_range,
+                            double min_angle, double max_angle);
 
     rclcpp::Node::SharedPtr node_;
+    Eigen::Isometry3d T_body_lidar_;
 
     DynamicPosSet dynamic_cells_;
-    double decay_time_sec_ = 1000000.0;
+    double decay_time_sec_     = 1000000.0;
     double decay_time_fov_sec_ = 1000000.0;
-
-
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr map_cloud_pub_;
-
-    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-
-    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::PointCloud2>> cloud_sub_;
-    std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::PointCloud2>> tf_filter_;
-
-
 };
 
 } // namespace finenav
 
 #endif // STVL_MANAGER_HPP_
-

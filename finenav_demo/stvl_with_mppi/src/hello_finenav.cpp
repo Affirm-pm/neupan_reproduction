@@ -20,7 +20,9 @@
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <pcl/point_types.h>
+#include <pcl/point_cloud.h>
+#include <pcl_conversions/pcl_conversions.h>
 #include "finenav_mppi_controller/controller.hpp"
 #include "stvl_manager.hpp"
 #include "terrain_mapview.hpp"
@@ -36,7 +38,11 @@ int main(int argc, char** argv) {
 
     auto finenav_engine = std::make_shared<FineNavEngine>(node);
 
-    StvlManager stvl_manager(node);
+    // 雷达相对车体的安装位姿（外参）。默认 Identity 表示雷达与车体原点重合。
+    // TODO: 从 ROS 参数或 URDF 读取
+    Eigen::Isometry3d T_body_lidar = Eigen::Isometry3d::Identity();
+
+    auto stvl_manager = std::make_shared<StvlManager>(node, T_body_lidar);
     // ------------------------------ Launch Localization ----------------------------------
     LocalizerOptions localizer_options {
         .update_rate_hz        = 100,
@@ -84,14 +90,18 @@ int main(int argc, char** argv) {
     auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
 
 
-    map_server->registerPreUpdateHook([stvl_manager](GridMap<Voxel> & map) mutable {
-        stvl_manager.PruneExpiredCells(map);
+    map_server->registerPreUpdateHook([stvl_manager, &finenav_engine](GridMap<Voxel> & map) {
+        const auto & state = finenav_engine->getLocalizer().getState();
+        Eigen::Isometry3d T_map_body = Eigen::Isometry3d::Identity();
+        T_map_body.linear() = state.R.matrix();
+        T_map_body.translation() = state.p;
+        stvl_manager->PruneExpiredCells(map, T_map_body);
     });
     map_server->registerPostUpdateHook([node, map_cloud_pub, terrain_analyzer, finenav_engine](GridMap<Voxel> & map) {
-        // terrain_analyzer->update() 在写锁内调用，costmap_image_ 的写受 MapServer 互斥锁隐式保护。
-        // ControlLayer 在 plan() 时持有读锁，plan 路径上的 getCost() 读 costmap_image_ 也受同一锁保护。
-        // 因此 costmap_image_ 无需额外加锁。
+
         terrain_analyzer->update(finenav_engine->getLocalizer().getState().p.z(), map);
+
+        // 可视化
         std::vector<Index> valid_indices;
         map.selectCellsByCondition(valid_indices, [](const Voxel & v) {
             return std::isfinite(v.z_height);
@@ -100,28 +110,19 @@ int main(int argc, char** argv) {
             return;
         }
         sensor_msgs::msg::PointCloud2 cloud;
-        cloud.header.stamp = node->now();
-        cloud.header.frame_id = "map";
-        cloud.height = 1;
-        cloud.width = static_cast<uint32_t>(valid_indices.size());
-        sensor_msgs::PointCloud2Modifier modifier(cloud);
-        modifier.setPointCloud2FieldsByString(1, "xyz");
-        modifier.resize(valid_indices.size());
-
-        sensor_msgs::PointCloud2Iterator<float> iter_x(cloud, "x");
-        sensor_msgs::PointCloud2Iterator<float> iter_y(cloud, "y");
-        sensor_msgs::PointCloud2Iterator<float> iter_z(cloud, "z");
-
+        pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
+        pcl_cloud.reserve(valid_indices.size());
         for (const auto & idx : valid_indices) {
             const auto pos = map.getPosition(idx);
             const auto & cell = map.at(idx);
-            *iter_x = static_cast<float>(pos.x());
-            *iter_y = static_cast<float>(pos.y());
-            *iter_z = cell.z_height;
-            ++iter_x;
-            ++iter_y;
-            ++iter_z;
+            pcl_cloud.emplace_back(
+                static_cast<float>(pos.x()),
+                static_cast<float>(pos.y()),
+                cell.z_height);
         }
+        pcl::toROSMsg(pcl_cloud, cloud);
+        cloud.header.stamp = node->now();
+        cloud.header.frame_id = "map";
 
         map_cloud_pub->publish(cloud);
     });
@@ -130,34 +131,21 @@ int main(int argc, char** argv) {
     policy.max_buffer_size = 50000;
     policy.observation_keep_time_sec = 2.0;
 
-    auto laser_injector = map_server->addUpdateSource<Pointcloud>(
+    auto laser_injector = map_server->addUpdateSource<pcl::PointCloud<pcl::PointXYZ>>(
         "front_laser",
         policy,
-        [stvl_manager](const Pointcloud & msg, GridMap<Voxel> & map) mutable {
-            stvl_manager.InsertPointCloud(msg, map);
+        [stvl_manager](const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map) {
+            stvl_manager->InsertPointCloud(cloud, map);
         });
 
     // TODO: 输入点云默认在车体坐标系下，无需 TF 变换；即使对于raycast一类需要雷达物理安装位置的应用，也可以通过读tf的方式来获取
     auto cloud_sub = node->create_subscription<sensor_msgs::msg::PointCloud2>(
         "/cloud_for_lio",
         10,
-        [node, laser_injector](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
-            sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
-            sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
-            sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
-            const rclcpp::Time now = node->now();
-
-            for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
-                if (!std::isfinite(*iter_x) || !std::isfinite(*iter_y) || !std::isfinite(*iter_z)) {
-                    continue;
-                }
-
-                Pointcloud p;
-                p.x = *iter_x;
-                p.y = *iter_y;
-                p.z = *iter_z;
-                laser_injector(std::move(p), now);
-            }
+        [node, laser_injector](const sensor_msgs::msg::PointCloud2 & msg) {
+            pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
+            pcl::fromROSMsg(msg, pcl_cloud);
+            laser_injector(std::move(pcl_cloud), rclcpp::Time(msg.header.stamp)); // TODO： 输入时间戳应该是 builtin_msgs，而不是 rclcpp::Time
         });
 
 
@@ -166,6 +154,7 @@ int main(int argc, char** argv) {
     using MppiPlanners = PlannerSet<nav2_mppi_controller::MPPIController>;
     auto my_control_layer= finenav_engine->createControlLayer<MppiPlanners>("mppi_layer");
 
+    // TODO: 函数签名对静态工具支持不友好，后续需要改
     my_control_layer->bind_map_view(
        map_server,
         [node, terrain_analyzer](const GridMap<Voxel>& map) {
