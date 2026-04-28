@@ -21,18 +21,11 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
-#include <message_filters/subscriber.h>
-#include <tf2_eigen/tf2_eigen.hpp>
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/create_timer_ros.h>
-#include <tf2_ros/message_filter.h>
-#include <tf2_ros/transform_listener.h>
 #include "finenav_mppi_controller/controller.hpp"
 #include "stvl_manager.hpp"
 #include "terrain_mapview.hpp"
 
 using namespace finenav;
-using std::chrono_literals::operator""ms;
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
@@ -90,12 +83,6 @@ int main(int argc, char** argv) {
 
     auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
 
-    auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
-    tf_buffer->setCreateTimerInterface(
-        std::make_shared<tf2_ros::CreateTimerROS>(
-            node->get_node_base_interface(),
-            node->get_node_timers_interface()));
-    auto tf_listener = std::make_shared<tf2_ros::TransformListener>(*tf_buffer);
 
     map_server->registerPreUpdateHook([stvl_manager](GridMap<Voxel> & map) mutable {
         stvl_manager.PruneExpiredCells(map);
@@ -150,29 +137,11 @@ int main(int argc, char** argv) {
             stvl_manager.InsertPointCloud(msg, map);
         });
 
-    auto cloud_sub = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::PointCloud2>>(
-        node, "/cloud_for_lio");
-
-    auto tf_filter = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::PointCloud2>>(
-        *cloud_sub,
-        *tf_buffer,
-        "map",
+    // TODO: 输入点云默认在车体坐标系下，无需 TF 变换；即使对于raycast一类需要雷达物理安装位置的应用，也可以通过读tf的方式来获取
+    auto cloud_sub = node->create_subscription<sensor_msgs::msg::PointCloud2>(
+        "/cloud_for_lio",
         10,
-        node->get_node_logging_interface(),
-        node->get_node_clock_interface(),
-        10ms);
-
-    tf_filter->registerCallback(
-        [node, laser_injector, tf_buffer](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
-            geometry_msgs::msg::TransformStamped tf_stamped;
-            try {
-                tf_stamped = tf_buffer->lookupTransform("map", msg->header.frame_id, msg->header.stamp);
-            } catch (const tf2::TransformException & ex) {
-                RCLCPP_WARN(node->get_logger(), "TF lookup failed in cloud callback: %s", ex.what());
-                return;
-            }
-
-            const Eigen::Isometry3d T_map_sensor = tf2::transformToEigen(tf_stamped.transform);
+        [node, laser_injector](const sensor_msgs::msg::PointCloud2::ConstSharedPtr & msg) {
             sensor_msgs::PointCloud2ConstIterator<float> iter_x(*msg, "x");
             sensor_msgs::PointCloud2ConstIterator<float> iter_y(*msg, "y");
             sensor_msgs::PointCloud2ConstIterator<float> iter_z(*msg, "z");
@@ -183,12 +152,10 @@ int main(int argc, char** argv) {
                     continue;
                 }
 
-                const Eigen::Vector3d p_sensor(*iter_x, *iter_y, *iter_z);
-                const Eigen::Vector3d p_map = T_map_sensor * p_sensor;
                 Pointcloud p;
-                p.x = static_cast<float>(p_map.x());
-                p.y = static_cast<float>(p_map.y());
-                p.z = static_cast<float>(p_map.z());
+                p.x = *iter_x;
+                p.y = *iter_y;
+                p.z = *iter_z;
                 laser_injector(std::move(p), now);
             }
         });
@@ -199,22 +166,10 @@ int main(int argc, char** argv) {
     using MppiPlanners = PlannerSet<nav2_mppi_controller::MPPIController>;
     auto my_control_layer= finenav_engine->createControlLayer<MppiPlanners>("mppi_layer");
 
-    // my_control_layer->bind_map_view(
-    //     mppi_map_server,
-    //     [node](const auto& map) {
-    //         return std::make_shared<SimpleGridMapView>(
-    //             const_cast<GridMap<Voxel>&>(map), node.get());
-    //     });
-
-    // MapView构造用非const的map引用是一个反模式，这不是框架的问题，而是出自用户的
-    // 就好比C++提供了各种强制类型转换的工具，而用户不按类型写代码，到处使用强制类型转换
-    // 如果MapView构造使用了const的map引用，bind_map_view的调用会极其简洁
-
-
     my_control_layer->bind_map_view(
        map_server,
         [node, terrain_analyzer](const GridMap<Voxel>& map) {
-            return std::make_shared<SimpleGridMapView>(map, node, terrain_analyzer); // 这里顺手把构造函数中的node从node指针变为node共享指针
+            return std::make_shared<SimpleGridMapView>(map, node, terrain_analyzer);
         });
 
 
@@ -225,7 +180,6 @@ int main(int argc, char** argv) {
         },
         my_control_layer);
 
-    // .......
 
     // --------------------------------- Main Loop --------------------------------------------
     // ---- 1.Publish current state using nav_msgs/msg/Odometry
