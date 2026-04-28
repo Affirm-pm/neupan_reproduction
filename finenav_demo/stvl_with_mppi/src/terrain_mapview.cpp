@@ -8,13 +8,13 @@
 
 #include "terrain_mapview.hpp"
 
-finenav::OBBCollisionModel collision_model({0.3, 0.3, 0.3});
 
 SimpleGridMapView::SimpleGridMapView(const finenav::GridMap<Voxel>& map, rclcpp::Node::SharedPtr node, std::shared_ptr<TerrainAnalyzer> terrain_analyzer)
     : map_(map), node_(node), terrain_analyzer_(terrain_analyzer) {
     if (node_) {
         local_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>("local_map", 10);
     }
+    collision_model_ = std::make_unique<finenav::OBBCollisionModel>(finenav::Vector3D(0.3, 0.3, 0.3));
 }
 
 bool SimpleGridMapView::isTrackingUnknown() const {
@@ -28,12 +28,12 @@ bool SimpleGridMapView::considerFootprint() const {
 bool SimpleGridMapView::isCollision(float x, float y, float theta) const {
     int pose_cost = getCost(finenav::Position3D{x, y, 0.0});
     finenav::Pose pose = createPose2D(x, y, theta);
-    int possible_collision_cost = ComputeCost(collision_model.getOuterDiameter() / map_.getResolution());
+    int possible_collision_cost = ComputeCost(collision_model_->getOuterDiameter() / map_.getResolution());
     if (pose_cost == 254) {
         return true;
     }
     if (pose_cost >= possible_collision_cost) {
-        return collision_model.checkCollision(pose, CollisionRule());
+        return collision_model_->checkCollision(pose, CollisionRule());
     }
     return false;
 }
@@ -43,12 +43,12 @@ int SimpleGridMapView::getCost(const finenav::Position3D& pos) const {
 }
 
 float SimpleGridMapView::getRadius() const {
-    return collision_model.getOuterDiameter();
+    return collision_model_->getOuterDiameter();
 }
 
 float SimpleGridMapView::costAtPose(float x, float y, float theta) const {
     finenav::Pose pose = createPose2D(x, y, theta);
-    return collision_model.checkCost(pose,[this](const finenav::Position3D& pos) {
+    return collision_model_->checkCost(pose,[this](const finenav::Position3D& pos) {
         return this->getCost(pos);
     });
 }

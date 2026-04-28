@@ -20,8 +20,6 @@
 using namespace mppi;
 using std::chrono_literals::operator"" ms;
 
-extern finenav::OBBCollisionModel collision_model;
-
 class SimpleGridMapView : public nav2_mppi_controller::IMapView {
 public:
     explicit SimpleGridMapView(const finenav::GridMap<Voxel>& map, rclcpp::Node::SharedPtr node, std::shared_ptr<TerrainAnalyzer> terrain_analyzer);
@@ -59,5 +57,5 @@ private:
     rclcpp::Node::SharedPtr node_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr local_pub_;
 
-    finenav::OBBCollisionModel collision_model_;
+    std::unique_ptr<finenav::OBBCollisionModel> collision_model_;
 };
