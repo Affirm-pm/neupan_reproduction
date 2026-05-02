@@ -9,11 +9,16 @@
 #include "terrain_mapview.hpp"
 
 
-SimpleGridMapView::SimpleGridMapView(const finenav::GridMap<Voxel>& map, rclcpp::Node::SharedPtr node, std::shared_ptr<TerrainAnalyzer> terrain_analyzer)
-    : map_(map), node_(node), terrain_analyzer_(terrain_analyzer) {
-    if (node_) {
-        local_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>("local_map", 10);
-    }
+SimpleGridMapView::SimpleGridMapView(
+    const finenav::GridMap<Voxel>& map,
+    rclcpp::Node::SharedPtr node,
+    std::shared_ptr<TerrainAnalyzer> terrain_analyzer,
+    std::shared_ptr<finenav_utils::CloudPublishHelper> local_map_helper)
+    : map_(map)
+    , node_(node)
+    , terrain_analyzer_(terrain_analyzer)
+    , local_map_helper_(std::move(local_map_helper))
+{
     collision_model_ = std::make_unique<finenav::OBBCollisionModel>(finenav::Vector3D(0.3, 0.3, 0.3));
 }
 
@@ -58,27 +63,31 @@ std::string SimpleGridMapView::getBaseFrameID() const {
 }
 
 void SimpleGridMapView::publishLocalMap() {
-    if (!node_ || !local_pub_ ) {
-        return;
-    }
-    pcl::PointCloud<pcl::PointXYZI> cloud;
-    cloud.header.frame_id = "map";
+    if (!local_map_helper_ || !node_) return;
+
+    const size_t size_x = map_.getSize().x();
+    const size_t size_y = map_.getSize().y();
+    local_map_helper_->reserve(size_x * size_y);
+
     for (int x = map_.getMinIndex().x(); x <= map_.getMaxIndex().x(); ++x) {
         for (int y = map_.getMinIndex().y(); y < map_.getMaxIndex().y(); ++y) {
-            for(int z = map_.getMinIndex().z(); z < map_.getMaxIndex().z(); ++z) {
+            for (int z = map_.getMinIndex().z(); z < map_.getMaxIndex().z(); ++z) {
                 finenav::Position3D pos = map_.getPosition({x, y, z});
-                pcl::PointXYZI point;
-                point.x = pos.x();
-                point.y = pos.y();
-                point.z = map_.atPosition(pos).z_height;
-                cloud.push_back(point);
+                const float z_height = map_.atPosition(pos).z_height;
+                if (!std::isfinite(z_height)) continue;
+                // 用代价值编码颜色：低代价绿，高代价红
+                const int cost = getCost(pos);
+                const uint8_t cv = static_cast<uint8_t>(std::clamp(cost, 0, 255));
+                const std::array<uint8_t, 3> color = {cv, static_cast<uint8_t>(255 - cv), 0};
+                local_map_helper_->addPoint(
+                    static_cast<float>(pos.x()),
+                    static_cast<float>(pos.y()),
+                    z_height,
+                    color);
             }
         }
     }
-    sensor_msgs::msg::PointCloud2 cloud_msg;
-    pcl::toROSMsg(cloud, cloud_msg);
-    cloud_msg.header.stamp = node_->now();
-    local_pub_->publish(cloud_msg);
+    local_map_helper_->publish(node_->now());
 }
 
 std::function<bool(const finenav::Position3D&)> SimpleGridMapView::CollisionRule() const {

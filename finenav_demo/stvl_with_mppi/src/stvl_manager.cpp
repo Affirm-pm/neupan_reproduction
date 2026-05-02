@@ -77,20 +77,25 @@ void StvlManager::PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3
 
 }
 
-void StvlManager::InsertPointCloud(const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map) {
+void StvlManager::InsertPointCloud(const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map,
+                                   const Eigen::Isometry3d & T_map_body) {
+    // 将雷达安装位姿合入，得到 lidar → map 的完整变换
+    const Eigen::Isometry3d T_map_lidar = T_map_body * T_body_lidar_;
     const rclcpp::Time now = node_->get_clock()->now();
     for (const auto & pt : cloud) {
         if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || !std::isfinite(pt.z)) {
             continue;
         }
-        const Position hit_pos(pt.x, pt.y, pt.z);
+        // 关键修正：将点从 lidar(base_link) 坐标系变换到 map(world) 坐标系
+        const Eigen::Vector3d p_world = T_map_lidar * Eigen::Vector3d(pt.x, pt.y, pt.z);
+        const Position hit_pos(p_world.x(), p_world.y(), p_world.z());
         if (!map.isInside(hit_pos)) {
             continue;
         }
         const Index idx = map.getIndex(hit_pos);
         Voxel & cell = map.at(idx);
         if (!cell.is_static) {
-            cell.z_height = pt.z;
+            cell.z_height = static_cast<float>(p_world.z());
             cell.timestamp = now;
             dynamic_cells_.insert(map.getPosition(idx));
         }

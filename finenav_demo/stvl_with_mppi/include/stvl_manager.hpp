@@ -54,7 +54,9 @@ public:
     /// @param T_map_body  当前车体在地图坐标系下的位姿，由外部定位模块提供
     void PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3d & T_map_body);
 
-    void InsertPointCloud(const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map);
+    /// @param T_map_body  当前车体在地图坐标系下的位姿，用于将点云从 base_link 变换到 map 系
+    void InsertPointCloud(const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map,
+                          const Eigen::Isometry3d & T_map_body);
 
 private:
     static bool isInFrustum(const Eigen::Isometry3d & T_map_lidar, const Position & p_world,

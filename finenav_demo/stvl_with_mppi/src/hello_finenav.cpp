@@ -26,6 +26,7 @@
 #include "finenav_mppi_controller/controller.hpp"
 #include "stvl_manager.hpp"
 #include "terrain_mapview.hpp"
+#include "finenav_util/cloud_publish_helper.hpp"
 
 using namespace finenav;
 
@@ -85,10 +86,34 @@ int main(int argc, char** argv) {
         "my_map_server", 10.0, true, 100.0);
 
 
-    auto terrain_analyzer = std::make_shared<TerrainAnalyzer>(map_server, node);
+    // ============================================================
+    // 可视化点云 Helpers（由 main 持有，生命周期覆盖所有使用方）
+    // ============================================================
 
+    // 1. /map_cloud : 地图中有效 Voxel 的高度点云（白色）
     auto map_cloud_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("/map_cloud", 10);
+    auto map_cloud_helper = std::make_shared<finenav_utils::CloudPublishHelper>();
+    map_cloud_helper->configure(map_cloud_pub, true, "map");
 
+    // 2. passability_map : 地形可通行性（绿=可通行, 红=障碍）
+    auto passability_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("passability_map", 10);
+    auto passability_helper = std::make_shared<finenav_utils::CloudPublishHelper>();
+    passability_helper->configure(passability_pub, true, "map");
+
+    // 3. costmap_cloud : 膨胀后代价图（绿=低代价, 红=高代价）
+    auto costmap_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("costmap_cloud", 10);
+    auto costmap_helper = std::make_shared<finenav_utils::CloudPublishHelper>();
+    costmap_helper->configure(costmap_pub, true, "map");
+
+    // 4. local_map : SimpleGridMapView 局部地图（按代价着色）
+    auto local_map_pub = node->create_publisher<sensor_msgs::msg::PointCloud2>("local_map", 10);
+    auto local_map_helper = std::make_shared<finenav_utils::CloudPublishHelper>();
+    local_map_helper->configure(local_map_pub, false, "map");
+
+    // ============================================================
+
+    auto terrain_analyzer = std::make_shared<TerrainAnalyzer>(
+        map_server, node, passability_helper, costmap_helper);
 
     map_server->registerPreUpdateHook([stvl_manager, &finenav_engine](GridMap<Voxel> & map) {
         const auto & state = finenav_engine->getLocalizer().getState();
@@ -97,34 +122,31 @@ int main(int argc, char** argv) {
         T_map_body.translation() = state.p;
         stvl_manager->PruneExpiredCells(map, T_map_body);
     });
-    map_server->registerPostUpdateHook([node, map_cloud_pub, terrain_analyzer, finenav_engine](GridMap<Voxel> & map) {
+
+    map_server->registerPostUpdateHook([node, map_cloud_helper, terrain_analyzer, finenav_engine](GridMap<Voxel> & map) {
 
         terrain_analyzer->update(finenav_engine->getLocalizer().getState().p.z(), map);
 
-        // 可视化
-        std::vector<Index> valid_indices;
-        map.selectCellsByCondition(valid_indices, [](const Voxel & v) {
-            return std::isfinite(v.z_height);
-        });
-        if (valid_indices.empty()) {
-            return;
+        // /map_cloud 可视化：所有有效 Voxel，高度映射到颜色（蓝低红高，简化为白色）
+        if (map_cloud_helper->hasSubscribers()) {
+            std::vector<Index> valid_indices;
+            map.selectCellsByCondition(valid_indices, [](const Voxel & v) {
+                return std::isfinite(v.z_height);
+            });
+            if (!valid_indices.empty()) {
+                map_cloud_helper->reserve(valid_indices.size());
+                for (const auto & idx : valid_indices) {
+                    const auto pos = map.getPosition(idx);
+                    const auto & cell = map.at(idx);
+                    map_cloud_helper->addPoint(
+                        static_cast<float>(pos.x()),
+                        static_cast<float>(pos.y()),
+                        cell.z_height,
+                        {255, 255, 255}); // 白色
+                }
+                map_cloud_helper->publish(node->now());
+            }
         }
-        sensor_msgs::msg::PointCloud2 cloud;
-        pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
-        pcl_cloud.reserve(valid_indices.size());
-        for (const auto & idx : valid_indices) {
-            const auto pos = map.getPosition(idx);
-            const auto & cell = map.at(idx);
-            pcl_cloud.emplace_back(
-                static_cast<float>(pos.x()),
-                static_cast<float>(pos.y()),
-                cell.z_height);
-        }
-        pcl::toROSMsg(pcl_cloud, cloud);
-        cloud.header.stamp = node->now();
-        cloud.header.frame_id = "map";
-
-        map_cloud_pub->publish(cloud);
     });
 
     MapServer<GridMap<Voxel>>::SourceBufferPolicy policy;
@@ -134,18 +156,22 @@ int main(int argc, char** argv) {
     auto laser_injector = map_server->addUpdateSource<pcl::PointCloud<pcl::PointXYZ>>(
         "front_laser",
         policy,
-        [stvl_manager](const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map) {
-            stvl_manager->InsertPointCloud(cloud, map);
+        [stvl_manager, finenav_engine](const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map) {
+            const auto & state = finenav_engine->getLocalizer().getState();
+            Eigen::Isometry3d T_map_body = Eigen::Isometry3d::Identity();
+            T_map_body.linear() = state.R.matrix();
+            T_map_body.translation() = state.p;
+            stvl_manager->InsertPointCloud(cloud, map, T_map_body);
         });
 
-    // TODO: 输入点云默认在车体坐标系下，无需 TF 变换；即使对于raycast一类需要雷达物理安装位置的应用，也可以通过读tf的方式来获取
+    // TODO: 输入点云默认在车体坐标系下，无需 TF 变换
     auto cloud_sub = node->create_subscription<sensor_msgs::msg::PointCloud2>(
         "/cloud_for_lio",
         10,
         [node, laser_injector](const sensor_msgs::msg::PointCloud2 & msg) {
             pcl::PointCloud<pcl::PointXYZ> pcl_cloud;
             pcl::fromROSMsg(msg, pcl_cloud);
-            laser_injector(std::move(pcl_cloud), rclcpp::Time(msg.header.stamp)); // TODO： 输入时间戳应该是 builtin_msgs，而不是 rclcpp::Time
+            laser_injector(std::move(pcl_cloud), rclcpp::Time(msg.header.stamp));
         });
 
 
@@ -154,11 +180,11 @@ int main(int argc, char** argv) {
     using MppiPlanners = PlannerSet<nav2_mppi_controller::MPPIController>;
     auto my_control_layer= finenav_engine->createControlLayer<MppiPlanners>("mppi_layer");
 
-    // TODO: 函数签名对静态工具支持不友好，后续需要改
+    // local_map_helper 捕获到 builder lambda，每次构造 SimpleGridMapView 时传入
     my_control_layer->bind_map_view(
-       map_server,
-        [node, terrain_analyzer](const GridMap<Voxel>& map) {
-            return std::make_shared<SimpleGridMapView>(map, node, terrain_analyzer);
+        map_server,
+        [node, terrain_analyzer, local_map_helper](const GridMap<Voxel>& map) {
+            return std::make_shared<SimpleGridMapView>(map, node, terrain_analyzer, local_map_helper);
         });
 
 
@@ -171,8 +197,6 @@ int main(int argc, char** argv) {
 
 
     // --------------------------------- Main Loop --------------------------------------------
-    // ---- 1.Publish current state using nav_msgs/msg/Odometry
-    // ---- 2.
 
     rclcpp::Rate loop_rate(200); // 200Hz
     auto nav_state_pub = node->create_publisher<nav_msgs::msg::Odometry>("nav_state", 10);

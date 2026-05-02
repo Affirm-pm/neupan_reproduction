@@ -37,8 +37,18 @@ def generate_launch_description():
         ]
     )
 
+    start_goal_pose_bridge = Node(
+        package='finenav_demo',
+        executable='goal_pose_bridge_node',
+        output='screen',
+        parameters=[
+            {'use_sim_time': True},
+        ]
+    )
+
     ld = LaunchDescription()
     ld.add_action(start_finenav_simulator)
     ld.add_action(start_hello_finenav)
+    ld.add_action(start_goal_pose_bridge)
 
     return ld

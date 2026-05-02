@@ -22,6 +22,7 @@ ament_auto_find_build_dependencies()
 
 ament_auto_add_library(${PROJECT_NAME} SHARED
         src/node_thread.cpp
+        src/cloud_publish_helper.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
