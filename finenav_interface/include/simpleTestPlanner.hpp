@@ -40,6 +40,10 @@ public:
         if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
     }
 
+    void reset() {
+        // SimpleTestPlanner 无跨 Episode 状态，空实现即可
+    }
+
     Result plan(const Context& ctx, const IMapView& map_view) {
         auto start_pose = ctx.start_pose;
         auto goal_pose = ctx.goal_pose;

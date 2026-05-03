@@ -75,6 +75,9 @@ concept PlannerConcept = std::default_initializable<T> &&
         // --- 基本配置 ---
         { planner.configure(config) } -> std::same_as<void>;
 
+        // --- 重置接口（Episode 边界，由框架在新目标到来时调用）---
+        { planner.reset() } -> std::same_as<void>;
+
         // --- 规划接口 ---
         { planner.plan(ctx, map_view) } -> std::same_as<std::optional<OutputDataT<T>>>;
 };

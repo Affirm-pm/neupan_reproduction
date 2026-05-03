@@ -147,6 +147,16 @@ public:
     */
   void setSpeedLimit(const double & speed_limit, const bool & percentage);
 
+  /**
+   * @brief Reset optimizer state at Episode boundary (new goal).
+   *        Called by ControlLayer whenever a new Action Goal arrives.
+   *        Clears control_sequence_ so the next plan() call starts from
+   *        a zero warm-start, independent of any previous planning direction.
+   */
+  void reset() {
+      optimizer_.reset();
+  }
+
     void registerCritic (std::unique_ptr<critics::CriticFunction> critic) {
         critics_.push_back(std::move(critic));        //TODO:在初始化的时候要换成注册
     }
