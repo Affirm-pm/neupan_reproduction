@@ -23,6 +23,7 @@
 //#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/critic_data.hpp"
 #include "finenav_mppi_controller/map_view_def.hpp"
+#include "finenav_mppi_controller/finenav_mppi_controller_params.hpp"
 
 namespace mppi::critics
 {
@@ -63,16 +64,17 @@ public:
     * @param costmap_ros Costmap2DROS object of environment
     * @param dynamic_parameter_handler Parameter handler object
     */
-  void on_configure(                     //TODO:去除了动态参数加载还有这个函数的必要吗
+  void on_configure(
     rclcpp_lifecycle::LifecycleNode::WeakPtr parent,
     const std::string & parent_name,
-    const std::string & name)
+    const std::string & name,
+    const finenav_mppi_controller::Params & params)
   {
     parent_ = parent;
     name_ = name;
     parent_name_ = parent_name;
 
-    initialize();
+    initialize(params);
   }
 
   /**
@@ -84,7 +86,7 @@ public:
   /**
     * @brief Initialize critic
     */
-  virtual void initialize() = 0;
+  virtual void initialize(const finenav_mppi_controller::Params & params) = 0;
 
   /**
     * @brief Get name of critic#include "finenav_control_layers/local_layer.hpp"

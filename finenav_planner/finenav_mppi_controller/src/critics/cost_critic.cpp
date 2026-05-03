@@ -21,26 +21,19 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-void CostCritic::initialize()
+void CostCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 以前通过参数服务器加载的参数，改为直接赋固定值（无需动态加载）
-//  consider_footprint_ = false;
-  power_ = 1;
-  weight_ = 3.81f;
-  critical_cost_ = 300.0f;
-  collision_cost_ = 1000000.0f;
-  near_goal_distance_ = 0.5f;
-  inflation_layer_name_ = std::string("");
-  enabled_ = true;
+  const auto & c = p.CostCritic;
+  enabled_           = c.enabled;
+  power_             = static_cast<unsigned int>(c.cost_power);
+  weight_            = static_cast<float>(c.cost_weight);
+  critical_cost_     = static_cast<float>(c.critical_cost);
+  collision_cost_    = static_cast<float>(c.collision_cost);
+  near_goal_distance_= static_cast<float>(c.near_goal_distance);
+  inflation_layer_name_ = "";
 
-  // Normalized by cost value to pu t in same regime as other weights
+  // Normalized by cost value to put in same regime as other weights
   weight_ /= 254.0f;
-
-  // Normalize weight when parameter is changed dynamically as well
-  auto weightDynamicCb = [&](const rclcpp::Parameter & weight) {
-      weight_ = weight.as_double() / 254.0f;
-    };
-  // parameters_handler_->addDynamicParamCallback(name_ + ".cost_weight", weightDynamicCb);
 }
 
 

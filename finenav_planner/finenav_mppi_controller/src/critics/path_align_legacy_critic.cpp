@@ -23,17 +23,17 @@ using namespace nav2_mppi_controller;
 using namespace xt::placeholders;  // NOLINT
 using xt::evaluation_strategy::immediate;
 
-void PathAlignLegacyCritic::initialize()
+void PathAlignLegacyCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 直接赋默认值，不动态加载
-  power_ = 1;
-  weight_ = 10.0f;
-  max_path_occupancy_ratio_ = 0.07f;
-  offset_from_furthest_ = 5u;
-  trajectory_point_step_ = 4u;
-  threshold_to_consider_ = 0.5f;
-  use_path_orientations_ = false;
-  enabled_ = true;
+  const auto & c = p.PathAlignLegacyCritic;
+  enabled_                  = c.enabled;
+  power_                    = static_cast<unsigned int>(c.cost_power);
+  weight_                   = static_cast<float>(c.cost_weight);
+  max_path_occupancy_ratio_ = static_cast<float>(c.max_path_occupancy_ratio);
+  offset_from_furthest_     = static_cast<size_t>(c.offset_from_furthest);
+  trajectory_point_step_    = c.trajectory_point_step;
+  threshold_to_consider_    = static_cast<float>(c.threshold_to_consider);
+  use_path_orientations_    = c.use_path_orientations;
 }
 
 void PathAlignLegacyCritic::score(CriticData & data, const IMapView& map_view)

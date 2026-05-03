@@ -13,21 +13,21 @@
 // limitations under the License.
 
 #include "finenav_mppi_controller/critic_manager.hpp"
+#include "finenav_mppi_controller/finenav_mppi_controller_params.hpp"
 
 namespace mppi
 {
 using namespace nav2_mppi_controller;
 
 void CriticManager::on_configure(
-    std::vector<std::unique_ptr<critics::CriticFunction>> & critics)
+    std::vector<std::unique_ptr<critics::CriticFunction>> & critics,
+    const finenav_mppi_controller::Params & params)
 {
-
     critics_ = std::move(critics);
     std::cout<<"[Critic Manager] Critic Manager configured;"<<std::endl;
     for (size_t q = 0; q < critics_.size(); q++) {
-        critics_[q]->initialize();
+        critics_[q]->initialize(params);
     }
-//  getParams();   //TODO:参数加载
 }
 
 //void CriticManager::getParams()

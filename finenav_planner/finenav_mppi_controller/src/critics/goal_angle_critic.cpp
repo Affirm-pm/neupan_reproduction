@@ -18,18 +18,13 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-void GoalAngleCritic::initialize()
+void GoalAngleCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 直接赋固定默认值（不再从参数服务器读取）
-  power_ = 1;
-  weight_ = 3.0f;
-  threshold_to_consider_ = 0.5f;
-  enabled_ = true;
-  // RCLCPP_INFO(
-  //   logger_,
-  //   "GoalAngleCritic instantiated with %d power, %f weight, and %f "
-  //   "angular threshold.",
-  //   power_, weight_, threshold_to_consider_);
+  const auto & c = p.GoalAngleCritic;
+  enabled_               = c.enabled;
+  power_                 = static_cast<unsigned int>(c.cost_power);
+  weight_                = static_cast<float>(c.cost_weight);
+  threshold_to_consider_ = static_cast<float>(c.threshold_to_consider);
 }
 
 void GoalAngleCritic::score(CriticData & data, const IMapView& map_view)

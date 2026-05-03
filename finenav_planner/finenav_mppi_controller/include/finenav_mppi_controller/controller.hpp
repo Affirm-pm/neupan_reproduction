@@ -62,7 +62,7 @@ public:
     };
     static constexpr finenav::IOProfile OutputProfile = {
         .pose = true,
-        .vel  = false,
+        .vel  = false, // TODO： 这里不对呀
         .accel= false,
         .time = false
     };
@@ -88,10 +88,10 @@ public:
         std::cout<<"[nav2_mppi_controller] Critics registered. Initializing optimizer..."<<std::endl;
         std::cout<<"[nav2_mppi_controller] Number of critics: "<<critics_.size()<<std::endl;
 
-
         optimizer_.initialize(
             "MPPIController",
-            critics_
+            critics_,
+            params
             );
        //TODO:初始化过程需要完善
     }

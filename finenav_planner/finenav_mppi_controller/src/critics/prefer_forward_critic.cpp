@@ -18,13 +18,13 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-void PreferForwardCritic::initialize()
+void PreferForwardCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 直接赋默认值，不动态加载
-  power_ = 1;
-  weight_ = 5.0f;
-  threshold_to_consider_ = 0.5f;
-  enabled_ = true;
+  const auto & c = p.PreferForwardCritic;
+  enabled_               = c.enabled;
+  power_                 = static_cast<unsigned int>(c.cost_power);
+  weight_                = static_cast<float>(c.cost_weight);
+  threshold_to_consider_ = static_cast<float>(c.threshold_to_consider);
 }
 
 void PreferForwardCritic::score(CriticData & data, const IMapView& map_view)

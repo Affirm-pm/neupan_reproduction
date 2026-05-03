@@ -21,22 +21,13 @@ using namespace nav2_mppi_controller;
 
 using xt::evaluation_strategy::immediate;
 
-void GoalCritic::initialize()
+void GoalCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 直接赋默认值，不动态加载
-  power_ = 1;
-  weight_ = 5.0f;
-  threshold_to_consider_ = 1.4f;
-    enabled_ = true;
-//  auto getParam = parameters_handler_->getParamGetter(name_);
-//
-//  getParam(power_, "cost_power", 1);
-//  getParam(weight_, "cost_weight", 5.0);
-//  getParam(threshold_to_consider_, "threshold_to_consider", 1.4);  //TODO：参数加载
-
-//  RCLCPP_INFO(
-//    logger_, "GoalCritic instantiated with %d power and %f weight.",
-//    power_, weight_);
+  const auto & c = p.GoalCritic;
+  enabled_               = c.enabled;
+  power_                 = static_cast<unsigned int>(c.cost_power);
+  weight_                = static_cast<float>(c.cost_weight);
+  threshold_to_consider_ = static_cast<float>(c.threshold_to_consider);
 }
 
 void GoalCritic::score(CriticData & data, const IMapView& map_view)

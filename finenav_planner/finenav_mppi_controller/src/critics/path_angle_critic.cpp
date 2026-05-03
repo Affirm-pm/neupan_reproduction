@@ -21,33 +21,20 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-void PathAngleCritic::initialize()
+void PathAngleCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 直接从父节点参数取固定默认值（原来注释给出的默认）
-  float vx_min = -0.35f;
-  if (fabs(vx_min) < 1e-6) {  // zero
-    reversing_allowed_ = false;
-  } else if (vx_min < 0.0f) {   // reversing possible
-    reversing_allowed_ = true;
-  }
+  const auto & c = p.PathAngleCritic;
+  enabled_               = c.enabled;
+  power_                 = static_cast<unsigned int>(c.cost_power);
+  weight_                = static_cast<float>(c.cost_weight);
+  offset_from_furthest_  = static_cast<size_t>(c.offset_from_furthest);
+  threshold_to_consider_ = static_cast<float>(c.threshold_to_consider);
+  max_angle_to_furthest_ = static_cast<float>(c.max_angle_to_furthest);
 
-  // 直接赋默认值，不动态加载
-  offset_from_furthest_ = 4u;
-  power_ = 1;
-  weight_ = 2.0f;
-  threshold_to_consider_ = 0.5f;
-  max_angle_to_furthest_ = 1.2f;
-  forward_preference_ = true;
-  enabled_ = true;
-
-  if (!reversing_allowed_) {
-    forward_preference_ = true;
-  }
-
-//  RCLCPP_INFO(
-//    logger_,
-//    "PathAngleCritic instantiated with %d power and %f weight. Reversing %s",
-//    power_, weight_, reversing_allowed_ ? "allowed." : "not allowed.");
+  // Determine reversing capability from top-level vx_min
+  const float vx_min = static_cast<float>(p.vx_min);
+  reversing_allowed_  = (vx_min < 0.0f);
+  forward_preference_ = !reversing_allowed_;
 }
 
 void PathAngleCritic::score(CriticData & data, const IMapView& map_view)

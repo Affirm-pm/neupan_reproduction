@@ -18,19 +18,18 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-void VelocityDeadbandCritic::initialize()
+void VelocityDeadbandCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 直接赋默认值，不动态加载
-  power_ = 1;
-  weight_ = 35.0f;
-  enabled_ = true;
+  const auto & c = p.VelocityDeadbandCritic;
+  enabled_ = c.enabled;
+  power_   = static_cast<unsigned int>(c.cost_power);
+  weight_  = static_cast<float>(c.cost_weight);
 
-  // Recast double to float
-  std::vector<double> deadband_velocities{0.0, 0.0, 0.0};
-  // 如果需要修改 deadband，可在此处直接更改以上数组
-  std::transform(
-    deadband_velocities.begin(), deadband_velocities.end(), deadband_velocities_.begin(),
-    [](double d) {return static_cast<float>(d);});
+  deadband_velocities_.resize(3);
+  const auto & dv = c.deadband_velocities;
+  for (size_t i = 0; i < 3 && i < dv.size(); ++i) {
+    deadband_velocities_[i] = static_cast<float>(dv[i]);
+  }
 //
 //  RCLCPP_INFO_STREAM(
 //    logger_, "VelocityDeadbandCritic instantiated with "

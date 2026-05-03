@@ -33,7 +33,7 @@ public:
   /**
     * @brief Initialize critic
     */
-  void initialize() override;
+  void initialize(const finenav_mppi_controller::Params & params) override;
 
   /**
    * @brief Evaluate cost related to robot orientation at goal pose

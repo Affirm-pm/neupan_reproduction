@@ -19,21 +19,21 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-void ObstaclesCritic::initialize()
+void ObstaclesCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 直接赋默认值，不动态加载
-  consider_footprint_ = false;
-  power_ = 1;
-  repulsion_weight_ = 1.5f;
-  critical_weight_ = 20.0f;
-  collision_cost_ = 10000.0f;
-  collision_margin_distance_ = 0.10f;
-  inflation_radius_= 2.0f;
-  inflation_scale_factor_ = 10.0f;
-  near_goal_distance_ = 0.5f;
-  enabled_ = true;
+  const auto & c = p.ObstaclesCritic;
+  enabled_            = c.enabled;
+  power_              = static_cast<unsigned int>(c.cost_power);
+  repulsion_weight_   = static_cast<float>(c.repulsion_weight);
+  critical_weight_    = static_cast<float>(c.critical_weight);
+  consider_footprint_ = c.consider_footprint;
+  collision_cost_     = static_cast<float>(c.collision_cost);
+  collision_margin_distance_ = static_cast<float>(c.collision_margin_distance);
+  near_goal_distance_ = static_cast<float>(c.near_goal_distance);
+  inflation_scale_factor_ = static_cast<float>(c.cost_scaling_factor);
+  inflation_radius_   = static_cast<float>(c.inflation_radius);
 
-  // possibly_inscribed_cost_ = findCircumscribedCost(costmap_ros_);
+  std::cout << "[ObstaclesCritic] Critic initialized" << std::endl;
 }
 
 //float ObstaclesCritic::findCircumscribedCost(

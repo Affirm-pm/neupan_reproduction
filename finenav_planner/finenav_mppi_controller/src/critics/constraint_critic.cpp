@@ -18,22 +18,23 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-void ConstraintCritic::initialize()
+void ConstraintCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 以前通过参数服务器加载的参数，改为直接赋固定值（无需动态加载）
-  power_ = 1;              // 原始默认值：1
-  weight_ = 4.0f;          // 原始默认值：4.0
-  enabled_ = true;
-  // 父节点参数的默认值，直接赋值（原注释默认值）
-  float vx_max = 0.5f;
-  float vy_max = 0.0f;
-  float vx_min = -0.35f;   // TODO：如需调整，修改此处常量
+  const auto & c = p.ConstraintCritic;
+  enabled_ = c.enabled;
+  power_   = static_cast<unsigned int>(c.cost_power);
+  weight_  = static_cast<float>(c.cost_weight);
+
+  // Velocity limits come from the top-level optimizer params
+  const float vx_max = static_cast<float>(p.vx_max);
+  const float vy_max = static_cast<float>(p.vy_max);
+  const float vx_min = static_cast<float>(p.vx_min);
 
   const float min_sgn = vx_min > 0.0f ? 1.0f : -1.0f;
   max_vel_ = sqrtf(vx_max * vx_max + vy_max * vy_max);
   min_vel_ = min_sgn * sqrtf(vx_min * vx_min + vy_max * vy_max);
 
-    std::cout<<"[ContraintCritic] Critic initialized"<<std::endl;
+  std::cout << "[ConstraintCritic] Critic initialized" << std::endl;
 }
 
 void ConstraintCritic::score(CriticData & data, const IMapView& map_view)
