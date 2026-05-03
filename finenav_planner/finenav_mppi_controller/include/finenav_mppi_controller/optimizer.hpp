@@ -183,6 +183,23 @@ public:
    * @brief Get the optimal trajectory for a cycle for visualization
    * @return Optimal trajectory
    */
+    /**
+     * @brief Get the optimal control sequence (vx, vy, wz) for each time step
+     * @return xtensor of shape [time_steps, 3] with columns (vx, wz, vy) — or (vx, wz, 0) for DiffDrive
+     */
+    xt::xtensor<float, 2> getControlSequence() const
+    {
+        auto && seq = xt::xtensor<float, 2>::from_shape({settings_.time_steps, 3u});
+        xt::noalias(xt::view(seq, xt::all(), 0)) = control_sequence_.vx;
+        xt::noalias(xt::view(seq, xt::all(), 1)) = control_sequence_.wz;
+        if (isHolonomic()) {
+            xt::noalias(xt::view(seq, xt::all(), 2)) = control_sequence_.vy;
+        } else {
+            xt::noalias(xt::view(seq, xt::all(), 2)) = xt::zeros<float>({settings_.time_steps});
+        }
+        return seq;
+    }
+
     xt::xtensor<float, 2>getOptimizedTrajectory()
     {
         auto && sequence =

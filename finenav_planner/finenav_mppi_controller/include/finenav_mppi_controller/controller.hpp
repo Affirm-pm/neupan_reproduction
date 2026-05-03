@@ -62,7 +62,7 @@ public:
     };
     static constexpr finenav::IOProfile OutputProfile = {
         .pose = true,
-        .vel  = false, // TODO： 这里不对呀
+        .vel  = true,
         .accel= false,
         .time = false
     };
@@ -123,11 +123,28 @@ public:
 
     // 获取最优轨迹
     auto optimized_trajectory = optimizer_.getOptimizedTrajectory();
-    // 填充轨迹点
-    for (size_t i = 0; i < optimized_trajectory.shape(0); ++i) {
-        traj.poses.emplace_back();
-        traj.poses.back().position.x = optimized_trajectory(i, 0);
-        traj.poses.back().position.y = optimized_trajectory(i, 1);
+    auto control_seq = optimizer_.getControlSequence();
+    // 填充轨迹点 (pose + twist)
+    const size_t n = optimized_trajectory.shape(0);
+    traj.poses.reserve(n);
+    traj.twists.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        // pose: x, y, yaw -> quaternion
+        geometry_msgs::msg::Pose pose;
+        pose.position.x = optimized_trajectory(i, 0);
+        pose.position.y = optimized_trajectory(i, 1);
+        pose.position.z = 0.0;
+        const float yaw = optimized_trajectory(i, 2);
+        pose.orientation.z = std::sin(yaw * 0.5f);
+        pose.orientation.w = std::cos(yaw * 0.5f);
+        traj.poses.push_back(pose);
+
+        // twist: vx, vy, wz from control sequence
+        geometry_msgs::msg::Twist twist;
+        twist.linear.x  = control_seq(i, 0);
+        twist.angular.z = control_seq(i, 1);
+        twist.linear.y  = control_seq(i, 2);
+        traj.twists.push_back(twist);
     }
 
     return traj;

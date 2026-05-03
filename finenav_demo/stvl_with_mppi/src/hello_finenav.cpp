@@ -27,6 +27,7 @@
 #include "stvl_manager.hpp"
 #include "terrain_mapview.hpp"
 #include "finenav_util/cloud_publish_helper.hpp"
+#include "geometry_msgs/msg/twist.hpp"
 
 using namespace finenav;
 
@@ -178,7 +179,21 @@ int main(int argc, char** argv) {
 
     // --------------------------------- Launch Planning --------------------------------------
     using MppiPlanners = PlannerSet<nav2_mppi_controller::MPPIController>;
-    auto my_control_layer = finenav_engine->createControlLayer<MppiPlanners>("mppi_layer", finenav::SingleShotPolicy{});
+    auto my_control_layer = finenav_engine->createControlLayer<MppiPlanners>(
+        "mppi_layer", finenav::TrackingPolicy{20.0});
+
+    // /cmd_vel publisher — 由 post_plan 回调驱动，在每次规划成功后取第一步速度指令
+    auto cmd_vel_pub = node->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+
+    my_control_layer->set_on_post_plan(
+        [cmd_vel_pub](finenav::PostPlanContext& ctx) -> bool {
+            if (ctx.is_success &&
+                !ctx.result_traj.twists.empty())
+            {
+                cmd_vel_pub->publish(ctx.result_traj.twists[0]);
+            }
+            return ctx.is_success;
+        });
 
     // local_map_helper 捕获到 builder lambda，每次构造 SimpleGridMapView 时传入
     my_control_layer->bind_map_view(
