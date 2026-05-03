@@ -10,6 +10,13 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 
 def generate_launch_description():
+    finenav_demo_pkg_dir = get_package_share_directory('finenav_demo')
+    mppi_params_file = os.path.join(
+        finenav_demo_pkg_dir,
+        'config',
+        'mppi_params.yaml'
+    )
+
     finenav_simulator_pkg_dir = get_package_share_directory('finenav_simulator')
     finenav_simulator_launch_file = os.path.join(
         finenav_simulator_pkg_dir,
@@ -34,6 +41,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             {'use_sim_time': True},
+            mppi_params_file,
         ]
     )
 
