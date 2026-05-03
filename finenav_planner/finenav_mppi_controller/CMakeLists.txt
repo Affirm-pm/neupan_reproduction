@@ -87,9 +87,6 @@ add_compile_options(-O3 -finline-limit=10000000 -ffp-contract=fast -ffast-math -
 add_library(mppi_controller SHARED
   src/controller.cpp
   src/critic_manager.cpp
-  src/trajectory_visualizer.cpp
-  src/path_handler.cpp
-  src/parameters_handler.cpp
   src/noise_generator.cpp
 )
 
