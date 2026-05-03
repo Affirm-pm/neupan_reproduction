@@ -99,24 +99,25 @@ public:
      std::optional<finenav::DataPacket<OutputProfile>>plan(const finenav::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
 
         finenav::DataPacket<OutputProfile> traj;
-        auto start_pose = ctx.start_pose;
+        // 从框架注入的 RobotState 中取出 pose 和 twist，无需 TF 查询
+        const auto& robot_state = ctx.robot_state;
         auto goal_pose = ctx.goal_pose;
 
         nav_msgs::msg::Path path = convertDataPacketToPath(ctx.ref_traj, "map");
-
         this->setPlan(path);
 
         std::cout << "[finenav_mppi_controller] Planning from ("
-                  << start_pose.position.x << ", " << start_pose.position.y << ") to ("
+                  << robot_state.pose.position.x << ", " << robot_state.pose.position.y << ") to ("
                   << goal_pose.position.x << ", " << goal_pose.position.y << ")" << std::endl;
+
         geometry_msgs::msg::PoseStamped start_pose_stamped;
-        start_pose_stamped.pose = start_pose;
+        start_pose_stamped.pose = robot_state.pose;
         start_pose_stamped.header.stamp = rclcpp::Clock().now();
-        start_pose_stamped.header.frame_id = "map"; // 根据实际需求设置 frame_id
+        start_pose_stamped.header.frame_id = "map";
 
         computeVelocityCommands(
             start_pose_stamped,
-            geometry_msgs::msg::Twist(),  //TODO: 传入实际速度，先用零速度占位
+            robot_state.twist,  // 直接使用当前实际速度
             map_view
             );
         // 装填输出轨迹

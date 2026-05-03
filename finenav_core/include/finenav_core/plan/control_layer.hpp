@@ -9,11 +9,9 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.hpp>
-#include <tf2_eigen/tf2_eigen.hpp>
 
 #include "finenav_msgs/action/compute_plan.hpp"
+#include "finenav_msgs/msg/robot_state.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
 #include "finenav_core/plan/conversions.hpp"
 #include "finenav_core/concepts.hpp"
@@ -48,10 +46,10 @@ using GenerateMapViewsVariant = typename ToVariant<typename PlannerSetT::Tuple>:
 // ---------------------------------------------------------------------------------
 
 struct PrePlanContext {
-    const std::string& active_planner_id;       // [RO] 当前请求的规划器 ID
-    geometry_msgs::msg::Pose& start_pose;       // [RW] 起始位姿
-    geometry_msgs::msg::Pose& goal_pose;        // [RW] 目标位姿
-    finenav_msgs::msg::Trajectory& ref_traj;    // [RW] 规划参考轨迹
+    const std::string& active_planner_id;            // [RO] 当前请求的规划器 ID
+    finenav_msgs::msg::RobotState& robot_state;      // [RW] 当前机器人状态（可被回调修改）
+    geometry_msgs::msg::Pose& goal_pose;             // [RW] 目标位姿
+    finenav_msgs::msg::Trajectory& ref_traj;         // [RW] 规划参考轨迹
 };
 
 struct PostPlanContext {
@@ -110,9 +108,10 @@ public:
         std::shared_ptr<void> lock_guard; // 持有 LockedMapRO<MapT>，离开作用域后自动释放读锁
     };
 
-    using MapViewFactory   = std::function<BoundMapView()>;
-    using PrePlanCallback  = std::function<bool(PrePlanContext&)>;
-    using PostPlanCallback = std::function<bool(PostPlanContext&)>;
+    using MapViewFactory        = std::function<BoundMapView()>;
+    using PrePlanCallback       = std::function<bool(PrePlanContext&)>;
+    using PostPlanCallback      = std::function<bool(PostPlanContext&)>;
+    using RobotStateProvider    = std::function<finenav_msgs::msg::RobotState()>;
 
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,
@@ -148,12 +147,24 @@ public:
     void set_on_pre_plan(PrePlanCallback cb) { on_pre_plan_ = std::move(cb); }
     void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
 
+    /**
+     * @brief 注册机器人状态提供者。
+     *
+     * 框架在每次 planOnce() 开始时调用此回调获取当前 RobotState，
+     * 取代原来基于 TF 查询的 getCurrentPose()。
+     * 典型实现：从 FineNavEngine Localizer 读取最新 NavState 并转换为 RobotState。
+     */
+    void set_robot_state_provider(RobotStateProvider provider) {
+        robot_state_provider_ = std::move(provider);
+    }
+
     const std::string& get_active_planner_id() const { return active_planner_id_; }
 
 protected:
     MapViewFactory map_view_factory_;
     PrePlanCallback on_pre_plan_;
     PostPlanCallback on_post_plan_;
+    RobotStateProvider robot_state_provider_;
 
     rclcpp::Node::SharedPtr node_;
     rclcpp::Node::SharedPtr pnode_;
@@ -196,8 +207,6 @@ private:
      */
     bool planOnce(geometry_msgs::msg::Pose goal_pose);
 
-    /** @brief 从 TF 读取当前机器人位姿（map → base_link）。 */
-    geometry_msgs::msg::Pose getCurrentPose();
 
 private:
     std::string layer_name_;
@@ -214,9 +223,6 @@ private:
     std::mutex plan_ref_mutex_;                  // 新增互斥锁
     finenav_msgs::msg::Trajectory plan_ref_msg_; // 最近一次收到的规划参考
 
-    // tf buffer 和监听器
-    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     std::vector<std::shared_ptr<void>> param_handles_; // 用于存储参数回调句柄，防止被析构
 };
@@ -242,8 +248,6 @@ ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
 
     pnode_->declare_parameter<std::string>("example_param", "hello, world");
 
-    tf_buffer_   = std::make_unique<tf2_ros::Buffer>(pnode_->get_clock()); // TODO: 移出 ControlLayer
-    tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
 
     if (!layer_name.empty()) {
         action_server_ = std::make_unique<ActionServer>(
@@ -309,20 +313,6 @@ void ControlLayer<PlannersT, ExecutionPolicy>::PlanRefCallback(
 // ------------------------------------------------------------------------------
 
 template <typename PlannersT, typename ExecutionPolicy>
-geometry_msgs::msg::Pose ControlLayer<PlannersT, ExecutionPolicy>::getCurrentPose() {
-    // TODO: 替换为从 FineNavEngine Localizer 获取，而非 TF 查询
-    geometry_msgs::msg::TransformStamped t =
-        tf_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
-
-    geometry_msgs::msg::Pose pose;
-    pose.position.x  = t.transform.translation.x;
-    pose.position.y  = t.transform.translation.y;
-    pose.position.z  = t.transform.translation.z;
-    pose.orientation = t.transform.rotation;
-    return pose;
-}
-
-template <typename PlannersT, typename ExecutionPolicy>
 void ControlLayer<PlannersT, ExecutionPolicy>::resetActivePlanner() {
     std::apply([&](auto&... planners) {
         ([&](auto& p) {
@@ -345,7 +335,11 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
         return false;
     }
 
-    geometry_msgs::msg::Pose start_pose = getCurrentPose();
+    if (!robot_state_provider_) {
+        RCLCPP_ERROR(pnode_->get_logger(), "RobotStateProvider not set! Call set_robot_state_provider() first.");
+        return false;
+    }
+    finenav_msgs::msg::RobotState current_robot_state = robot_state_provider_();
 
     finenav_msgs::msg::Trajectory current_ref_msg;
     {
@@ -365,15 +359,15 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
 
         auto opt_ctx = [&]() -> std::optional<PlanningContext<PlannerT>> {
             PrePlanContext pre_ctx{
-                active_planner_id_, start_pose, goal_pose, current_ref_msg};
+                active_planner_id_, current_robot_state, goal_pose, current_ref_msg};
 
             if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
                 return std::nullopt; // 用户拦截，中止此次规划
             }
 
             PlanningContext<PlannerT> ctx;
-            ctx.start_pose = pre_ctx.start_pose;
-            ctx.goal_pose  = pre_ctx.goal_pose;
+            ctx.robot_state = pre_ctx.robot_state;
+            ctx.goal_pose   = pre_ctx.goal_pose;
             fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj);
             return ctx;
         }();

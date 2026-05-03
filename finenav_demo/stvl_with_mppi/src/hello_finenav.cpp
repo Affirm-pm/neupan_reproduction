@@ -196,6 +196,31 @@ int main(int argc, char** argv) {
         });
 
     // local_map_helper 捕获到 builder lambda，每次构造 SimpleGridMapView 时传入
+    // 注册机器人状态提供者：从 Localizer 的 NavState 转换为 RobotState（geometry_msgs 组合体）
+    my_control_layer->set_robot_state_provider( // TODO: 之后改成ControlLayer内自动组装
+        [&finenav_engine]() -> finenav_msgs::msg::RobotState {
+            const auto& state = finenav_engine->getLocalizer().getState();
+            finenav_msgs::msg::RobotState rs;
+            // pose
+            rs.pose.position.x = state.p.x();
+            rs.pose.position.y = state.p.y();
+            rs.pose.position.z = state.p.z();
+            const auto q = state.R.unit_quaternion();
+            rs.pose.orientation.w = q.w();
+            rs.pose.orientation.x = q.x();
+            rs.pose.orientation.y = q.y();
+            rs.pose.orientation.z = q.z();
+            // twist: linear in body frame (R^T * v), angular = omega (body frame)
+            const Eigen::Vector3d v_body = state.R.inverse() * state.v;
+            rs.twist.linear.x  = v_body.x();
+            rs.twist.linear.y  = v_body.y();
+            rs.twist.linear.z  = v_body.z();
+            rs.twist.angular.x = state.omega.x();
+            rs.twist.angular.y = state.omega.y();
+            rs.twist.angular.z = state.omega.z();
+            return rs;
+        });
+
     my_control_layer->bind_map_view(
         map_server,
         [node, terrain_analyzer, local_map_helper](const GridMap<Voxel>& map) {
