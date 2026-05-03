@@ -71,10 +71,13 @@ public:
         return nullptr;
     }
 
-    template <typename PlannersT>
+    template <typename PlannersT, typename ExecutionPolicy = SingleShotPolicy>
     [[nodiscard("ControlLayer was created but the handle was lost!")]]
-    std::shared_ptr<ControlLayer<PlannersT>> createControlLayer(const std::string& name) {
-        auto layer = std::make_shared<ControlLayer<PlannersT>>(node_,  name);
+    std::shared_ptr<ControlLayer<PlannersT, ExecutionPolicy>> createControlLayer(
+        const std::string& name,
+        ExecutionPolicy policy = ExecutionPolicy{})
+    {
+        auto layer = std::make_shared<ControlLayer<PlannersT, ExecutionPolicy>>(node_, name, std::move(policy));
         held_layers_.push_back(layer);  // TODO: prevent same name
         return layer;
     }

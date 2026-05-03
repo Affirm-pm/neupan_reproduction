@@ -178,7 +178,7 @@ int main(int argc, char** argv) {
 
     // --------------------------------- Launch Planning --------------------------------------
     using MppiPlanners = PlannerSet<nav2_mppi_controller::MPPIController>;
-    auto my_control_layer= finenav_engine->createControlLayer<MppiPlanners>("mppi_layer");
+    auto my_control_layer = finenav_engine->createControlLayer<MppiPlanners>("mppi_layer", finenav::SingleShotPolicy{});
 
     // local_map_helper 捕获到 builder lambda，每次构造 SimpleGridMapView 时传入
     my_control_layer->bind_map_view(

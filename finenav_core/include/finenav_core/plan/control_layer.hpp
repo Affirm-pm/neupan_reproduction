@@ -60,22 +60,42 @@ struct PostPlanContext {
     finenav_msgs::msg::Trajectory& result_traj; // [RW] 规划结果轨迹
 };
 
-enum class ControlMode {
-    OneShot = 0,
-    ServoLoop = 1
-};
+// ---------------------------------------------------------------------------------
+// Execution Policies
+// ---------------------------------------------------------------------------------
 
-struct ControlLayerConfig { // TODO： 待删除
-    std::string task_action;
-    std::string input_topic;
-    std::string output_topic;
-    ControlMode mode; // TODO: OneShot v.s. ServoLoop, 考虑是否需要做成编译期常量，这样允许编译期分支控制流；代价，无法通过参数运行时修改
+/**
+ * @brief SingleShotPolicy — 每次 Action Goal 执行一次 plan()，完成后立即 succeed。
+ *
+ * 适用于离线规划、测试等"请求-响应"场景。
+ * planner.reset() 在 execute() 开始时调用（Episode 边界）。
+ */
+struct SingleShotPolicy {};
+
+/**
+ * @brief TrackingPolicy — 每次 Action Goal 以固定频率循环调用 plan()，直到取消或目标到达。
+ *
+ * 适用于 MPPI 等需要持续追踪的在线控制器。
+ * planner.reset() 仅在 execute() 开始时调用一次；循环内各帧 plan() 共享热启动状态。
+ *
+ * @param frequency_hz  控制循环频率（Hz），默认 10 Hz。
+ */
+struct TrackingPolicy {
+    double frequency_hz = 10.0;
 };
 
 // ==============================================================================
-// Definition
+// ControlLayer Definition
 // ==============================================================================
-template <typename PlannersT>  // TODO: 逐个检查 PlannersT 中的每个规划器是否满足 PlannerConcept; 每个 Planner 只能注册一次
+
+/**
+ * @brief ControlLayer — 将 Planner、MapView 与执行策略绑定为一个规划层。
+ *
+ * @tparam PlannersT      PlannerSet<...>，枚举所有支持的规划器类型。
+ * @tparam ExecutionPolicy  执行策略类型，默认 SingleShotPolicy。
+ *                          支持扩展：新增策略只需定义 policy struct + 添加对应 executeImpl() 重载。
+ */
+template <typename PlannersT, typename ExecutionPolicy = SingleShotPolicy>
 class ControlLayer {
 public:
     using MapViewsVariant = GenerateMapViewsVariant<PlannersT>;
@@ -90,13 +110,14 @@ public:
         std::shared_ptr<void> lock_guard; // 持有 LockedMapRO<MapT>，离开作用域后自动释放读锁
     };
 
-    // 回调签名定义 (修改 PrePlan 返回 bool 以支持短路拦截)
-    using MapViewFactory = std::function<BoundMapView()>;
-    using PrePlanCallback = std::function<bool(PrePlanContext& cur_ctx)>;
-    using PostPlanCallback = std::function<bool(PostPlanContext& cur_ctx)>;
+    using MapViewFactory   = std::function<BoundMapView()>;
+    using PrePlanCallback  = std::function<bool(PrePlanContext&)>;
+    using PostPlanCallback = std::function<bool(PostPlanContext&)>;
 
-
-    explicit ControlLayer(rclcpp::Node::SharedPtr node, const std::string& layer_name);
+    explicit ControlLayer(
+        rclcpp::Node::SharedPtr node,
+        const std::string& layer_name,
+        ExecutionPolicy policy = ExecutionPolicy{});
 
     void setInputTopic(const std::string& topic);
     void setOutputTopic(const std::string& topic);
@@ -138,9 +159,10 @@ protected:
     rclcpp::Node::SharedPtr pnode_;
     std::unique_ptr<NodeThread> pnode_thread_;
 
-    PlannersT::Tuple planners_instance_;
+    typename PlannersT::Tuple planners_instance_;
 
-    std::string active_planner_id_; // 运行时请求的 ID (来自 Action Goal)
+    std::string active_planner_id_;
+    ExecutionPolicy policy_;
 
     // TODO: onPrePlan(), OnPlanResult() 等函数接口，可能要考虑下语义区分的问题，防止和 LocalLayer 中定义的混淆
 
@@ -149,12 +171,33 @@ protected:
 private:
     template <typename T> void keep_alive(std::shared_ptr<T> handle);
 
-    /// THREAD 0: 更新规划参考轨迹，等于主线程？
     void PlanRefCallback(const finenav_msgs::msg::Trajectory& msg);
 
-    /// THREAD 1: 执行规划
+    /// THREAD 1: 执行规划 — Episode 入口，处理边界后派发给 executeImpl()
     using GoalHandleComputePlan = rclcpp_action::ServerGoalHandle<finenav_msgs::action::ComputePlan>;
     void execute();
+
+    // ------------------------------------------------------------------
+    // Policy dispatch — 新增执行模式：定义 policy struct + 添加此处重载
+    // ------------------------------------------------------------------
+    void executeImpl(SingleShotPolicy& policy);
+    void executeImpl(TrackingPolicy& policy);
+
+    // ------------------------------------------------------------------
+    // 共享 Helpers（两种策略均使用）
+    // ------------------------------------------------------------------
+
+    /** @brief 对匹配 active_planner_id_ 的规划器调用 reset()，在 Episode 边界处触发。 */
+    void resetActivePlanner();
+
+    /**
+     * @brief 执行一次完整规划步骤：pre-cb → ctx → 地图锁 → plan() → post-cb → 发布。
+     * @return true 表示规划成功并发布了结果。
+     */
+    bool planOnce(geometry_msgs::msg::Pose goal_pose);
+
+    /** @brief 从 TF 读取当前机器人位姿（map → base_link）。 */
+    geometry_msgs::msg::Pose getCurrentPose();
 
 private:
     std::string layer_name_;
@@ -183,33 +226,32 @@ private:
 // ControlLayer 实现部
 // ==============================================================================
 
-template <typename PlannersT>
-ControlLayer<PlannersT>::ControlLayer(rclcpp::Node::SharedPtr node, const std::string& layer_name)
-    : node_(node), layer_name_(layer_name)
+template <typename PlannersT, typename ExecutionPolicy>
+ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
+    rclcpp::Node::SharedPtr node,
+    const std::string& layer_name,
+    ExecutionPolicy policy)
+    : node_(node), layer_name_(layer_name), policy_(std::move(policy))
 {
-    // Propagate use_sim_time so pnode_ shares the same clock domain as node_.
     rclcpp::NodeOptions pnode_opts;
     pnode_opts.append_parameter_override(
         "use_sim_time",
         node_->get_parameter("use_sim_time").as_bool());
-    pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts); // TODO：关于 node 参数，后面需要看看该怎么搞，尤其是进程内通信 | layer_name -> layer_name_
+    pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<NodeThread>(pnode_);
 
-    pnode_->declare_parameter<std::string>("example_param", "hello, world"); // 示例参数
+    pnode_->declare_parameter<std::string>("example_param", "hello, world");
 
-    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(pnode_->get_clock()); // TODO: 必须删掉，ControlLayer不负责这个
+    tf_buffer_   = std::make_unique<tf2_ros::Buffer>(pnode_->get_clock()); // TODO: 移出 ControlLayer
     tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
 
-    std::string task_action = layer_name;
-    if (!task_action.empty()) {    // TODO: 如果 layer_name 是空字符串该怎么办，要不要拦下来
+    if (!layer_name.empty()) {
         action_server_ = std::make_unique<ActionServer>(
             pnode_,
-            task_action,
-            std::bind(&ControlLayer::execute, this)
-        );
+            layer_name,
+            std::bind(&ControlLayer::execute, this));
     }
 
-    // 加载 tuple 中的每个规划器
     std::apply([this](auto&... planners) {
         ([this](auto& p) {
             using T = std::decay_t<decltype(p)>;
@@ -219,218 +261,279 @@ ControlLayer<PlannersT>::ControlLayer(rclcpp::Node::SharedPtr node, const std::s
     }, planners_instance_);
 }
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::setInputTopic(const std::string& topic) {
+template <typename PlannersT, typename ExecutionPolicy>
+void ControlLayer<PlannersT, ExecutionPolicy>::setInputTopic(const std::string& topic) {
     input_topic_ = topic;
 }
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::setOutputTopic(const std::string& topic) {
+template <typename PlannersT, typename ExecutionPolicy>
+void ControlLayer<PlannersT, ExecutionPolicy>::setOutputTopic(const std::string& topic) {
     output_topic_ = topic;
 }
 
-template <typename PlannersT>
-std::string ControlLayer<PlannersT>::getName() const {
+template <typename PlannersT, typename ExecutionPolicy>
+std::string ControlLayer<PlannersT, ExecutionPolicy>::getName() const {
     return pnode_->get_name();
 }
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::setupDataPorts() {  // TODO: 保护这些 public 接口？
+template <typename PlannersT, typename ExecutionPolicy>
+void ControlLayer<PlannersT, ExecutionPolicy>::setupDataPorts() {
     if (!input_topic_.empty()) {
         plan_ref_sub_ = pnode_->create_subscription<finenav_msgs::msg::Trajectory>(
-            input_topic_, 10, std::bind(&ControlLayer::PlanRefCallback, this, std::placeholders::_1));
+            input_topic_, 10,
+            std::bind(&ControlLayer::PlanRefCallback, this, std::placeholders::_1));
     }
-    if (!output_topic_.empty())  {
+    if (!output_topic_.empty()) {
         plan_result_pub_ = pnode_->create_publisher<finenav_msgs::msg::Trajectory>(output_topic_, 10);
     }
 }
 
-template <typename PlannersT>
+template <typename PlannersT, typename ExecutionPolicy>
 template <typename T>
-void ControlLayer<PlannersT>::keep_alive(std::shared_ptr<T> handle) {
+void ControlLayer<PlannersT, ExecutionPolicy>::keep_alive(std::shared_ptr<T> handle) {
     if (handle) {
         param_handles_.push_back(handle);
     }
 }
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::PlanRefCallback(const finenav_msgs::msg::Trajectory& msg) {
-    RCLCPP_INFO(pnode_->get_logger(), "Received plan reference");
-    // TODO: 接收时，检测 trajectroy_msg is consistent
-    // TODO: 这里需要做互斥
+template <typename PlannersT, typename ExecutionPolicy>
+void ControlLayer<PlannersT, ExecutionPolicy>::PlanRefCallback(
+    const finenav_msgs::msg::Trajectory& msg)
+{
     std::lock_guard<std::mutex> lock(plan_ref_mutex_);
     plan_ref_msg_ = msg;
 }
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::execute() {
-    RCLCPP_INFO(pnode_->get_logger(), "Executing goal");
-    auto goal = action_server_->get_current_goal();
-    auto result = std::make_shared<finenav_msgs::action::ComputePlan::Result>();
-    active_planner_id_ = goal->planner_id; // 记录当前请求的规划器 ID
+// ------------------------------------------------------------------------------
+// 共享 Helpers
+// ------------------------------------------------------------------------------
 
-    auto goal_pose = goal->goal;
+template <typename PlannersT, typename ExecutionPolicy>
+geometry_msgs::msg::Pose ControlLayer<PlannersT, ExecutionPolicy>::getCurrentPose() {
+    // TODO: 替换为从 FineNavEngine Localizer 获取，而非 TF 查询
+    geometry_msgs::msg::TransformStamped t =
+        tf_buffer_->lookupTransform("map", "base_link", tf2::TimePointZero);
 
-    // 创建一个周期调用的定时器，定时器频率为控制周期
-    {
-        // 检查 ROS 客户端请求是否被取消
-        if (action_server_->is_cancel_requested()) {
-            RCLCPP_INFO(pnode_->get_logger(), "Goal canceled");
-            action_server_->terminate_all(); // TODO: terminate_all 返回的是 abort 而不是 canceled
-            return;
-        }
+    geometry_msgs::msg::Pose pose;
+    pose.position.x  = t.transform.translation.x;
+    pose.position.y  = t.transform.translation.y;
+    pose.position.z  = t.transform.translation.z;
+    pose.orientation = t.transform.rotation;
+    return pose;
+}
 
-        if (!map_view_factory_) {
-            RCLCPP_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
-            action_server_->terminate_all(); // TODO: terminate_all 返回的是 abort 而不是 canceled
-            return;
-        }
-
-        // 从 TF 获取当前机器人位姿作为起点, map 系下 base_link 的位置，对应 base_link->map 的变换
-        geometry_msgs::msg::TransformStamped t = tf_buffer_->lookupTransform( // TODO: 改成从全局读取 current_state
-            "map", "base_link", tf2::TimePointZero);
-
-        geometry_msgs::msg::Pose start_pose;
-        start_pose.position.x = t.transform.translation.x;
-        start_pose.position.y = t.transform.translation.y;
-        start_pose.position.z = t.transform.translation.z;
-        start_pose.orientation = t.transform.rotation;
-
-        // 在 planners_instance_ 中找匹配 active_planner_id_ 的 planner
-        bool planner_found_and_run = false;
-        bool plan_success = false;
-        finenav_msgs::msg::Trajectory output_traj_msg; // TODO: 后续可能要用unique_ptr封装，否则无法进行进程内 IPC
-
-        // 安全地拷贝参考轨迹
-        finenav_msgs::msg::Trajectory current_ref_msg;
-        {
-            std::lock_guard<std::mutex> lock(plan_ref_mutex_);
-            current_ref_msg = plan_ref_msg_;
-        }
-
-        auto try_run_planner = [&](auto& planner) -> bool {
-            using PlannerT = std::decay_t<decltype(planner)>;
+template <typename PlannersT, typename ExecutionPolicy>
+void ControlLayer<PlannersT, ExecutionPolicy>::resetActivePlanner() {
+    std::apply([&](auto&... planners) {
+        ([&](auto& p) {
+            using PlannerT = std::decay_t<decltype(p)>;
             if (AlgoConfigurator<PlannerT>::name == active_planner_id_) {
-
-                auto opt_ctx = [&]() -> std::optional<PlanningContext<PlannerT>> {
-                    PrePlanContext pre_ctx {
-                        active_planner_id_,
-                        start_pose,
-                        goal_pose,
-                        current_ref_msg,
-                    };
-
-                    if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
-                        // 如果用户拦截，返回空壳，宣告构建中止
-                        return std::nullopt;
-                    }
-
-                    PlanningContext<PlannerT> ctx;
-                    ctx.start_pose = pre_ctx.start_pose;
-                    ctx.goal_pose = pre_ctx.goal_pose;
-                    fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj); // TODO: 这里需要做互斥
-                    return ctx;
-                }();
-
-                if (!opt_ctx.has_value()) {
-                    return true; // 返回 true 以触发短路，停止后续遍历
+                if constexpr (requires { p.reset(); }) {
+                    p.reset();
+                    RCLCPP_INFO(pnode_->get_logger(),
+                        "Planner '%s' reset at episode boundary.", active_planner_id_.c_str());
                 }
-                auto& ctx = opt_ctx.value();
-
-                auto bound = map_view_factory_();
-                using ExpectedPtrType = std::shared_ptr<typename PlannerT::IMapView>;
-
-                if (auto* ptr_to_ptr = std::get_if<ExpectedPtrType>(&bound.view_variant)) {
-                    auto map_view_ptr = *ptr_to_ptr;
-                    if (map_view_ptr) {
-                        // bound.lock_guard 持有读锁，整个 plan() 调用期间读锁保持
-                        auto plan_result = planner.plan(ctx, *map_view_ptr);
-                        // plan() 返回后 bound 随即析构，自动释放读锁
-                        if (plan_result.has_value()) {
-                            plan_success = true;
-                            toROSMsg(std::move(plan_result.value()), output_traj_msg);
-                        }
-                        else {
-                            RCLCPP_ERROR(pnode_->get_logger(), "User returned a nullptr MapView!");
-                        }
-                    } else {
-                        RCLCPP_ERROR(pnode_->get_logger(), "MapView Type Mismatch for planner %s", active_planner_id_.c_str());
-                    }
-                }
-
-                if (on_post_plan_) {
-                    PostPlanContext post_ctx {
-                        active_planner_id_,
-                        plan_success,      // 把底层的真实结果告诉用户
-                        output_traj_msg,
-                    };
-
-                    plan_success = on_post_plan_(post_ctx);
-                }
-                return true; // 返回 true 以触发短路，停止后续遍历
             }
-            return false;
-        };
+        }(planners), ...);
+    }, planners_instance_);
+}
 
-        std::apply([&](auto&... planners) {
-            planner_found_and_run = (try_run_planner(planners) || ...);
-        }, planners_instance_);
-
-        if (!planner_found_and_run) {
-            RCLCPP_ERROR_STREAM(pnode_->get_logger(), "Planner with ID " << active_planner_id_ << " not found");
-            action_server_->terminate_all();
-            return;
-        }
-        if (!plan_success) {
-            RCLCPP_ERROR_STREAM(pnode_->get_logger(), "Planner " << active_planner_id_ << " failed to compute a plan");
-            action_server_->terminate_all();
-            return;
-        }
-
-        // 发布规划结果
-        // TODO: 发布时， 检测 trajectroy_msg is consistent
-        plan_result_pub_->publish(output_traj_msg);
-
-        // 通过current_state,检查是否抵达终点，如果抵达
+template <typename PlannersT, typename ExecutionPolicy>
+bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose goal_pose) {
+    if (!map_view_factory_) {
+        RCLCPP_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
+        return false;
     }
 
-    // 设置成功结果
+    geometry_msgs::msg::Pose start_pose = getCurrentPose();
+
+    finenav_msgs::msg::Trajectory current_ref_msg;
+    {
+        std::lock_guard<std::mutex> lock(plan_ref_mutex_);
+        current_ref_msg = plan_ref_msg_;
+    }
+
+    bool plan_success  = false;
+    bool planner_found = false;
+    finenav_msgs::msg::Trajectory output_traj_msg;
+
+    auto try_run_planner = [&](auto& planner) -> bool {
+        using PlannerT = std::decay_t<decltype(planner)>;
+        if (AlgoConfigurator<PlannerT>::name != active_planner_id_) {
+            return false;
+        }
+
+        auto opt_ctx = [&]() -> std::optional<PlanningContext<PlannerT>> {
+            PrePlanContext pre_ctx{
+                active_planner_id_, start_pose, goal_pose, current_ref_msg};
+
+            if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
+                return std::nullopt; // 用户拦截，中止此次规划
+            }
+
+            PlanningContext<PlannerT> ctx;
+            ctx.start_pose = pre_ctx.start_pose;
+            ctx.goal_pose  = pre_ctx.goal_pose;
+            fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj);
+            return ctx;
+        }();
+
+        if (!opt_ctx.has_value()) {
+            return true; // 短路遍历
+        }
+
+        auto& ctx   = opt_ctx.value();
+        auto  bound = map_view_factory_();
+
+        using ExpectedPtrType = std::shared_ptr<typename PlannerT::IMapView>;
+        if (auto* ptr = std::get_if<ExpectedPtrType>(&bound.view_variant)) {
+            if (*ptr) {
+                // bound.lock_guard 持有读锁，plan() 调用期间地图不被写入
+                auto result = planner.plan(ctx, **ptr);
+                if (result.has_value()) {
+                    plan_success = true;
+                    toROSMsg(std::move(result.value()), output_traj_msg);
+                } else {
+                    RCLCPP_WARN(pnode_->get_logger(), "plan() returned nullopt.");
+                }
+            } else {
+                RCLCPP_ERROR(pnode_->get_logger(),
+                    "MapView ptr is null for planner '%s'.", active_planner_id_.c_str());
+            }
+        } else {
+            RCLCPP_ERROR(pnode_->get_logger(),
+                "MapView type mismatch for planner '%s'.", active_planner_id_.c_str());
+        }
+
+        if (on_post_plan_) {
+            PostPlanContext post_ctx{active_planner_id_, plan_success, output_traj_msg};
+            plan_success = on_post_plan_(post_ctx);
+        }
+
+        return true; // 短路遍历
+    };
+
+    std::apply([&](auto&... planners) {
+        planner_found = (try_run_planner(planners) || ...);
+    }, planners_instance_);
+
+    if (!planner_found) {
+        RCLCPP_ERROR_STREAM(pnode_->get_logger(),
+            "Planner '" << active_planner_id_ << "' not found.");
+        return false;
+    }
+
+    if (plan_success && plan_result_pub_) {
+        plan_result_pub_->publish(output_traj_msg);
+    }
+
+    return plan_success;
+}
+
+// ------------------------------------------------------------------------------
+// execute() — Episode 入口
+// ------------------------------------------------------------------------------
+
+template <typename PlannersT, typename ExecutionPolicy>
+void ControlLayer<PlannersT, ExecutionPolicy>::execute() {
+    RCLCPP_INFO(pnode_->get_logger(), "New goal received — starting episode.");
+
+    auto goal          = action_server_->get_current_goal();
+    active_planner_id_ = goal->planner_id;
+
+    // Episode 边界：在任何 plan() 调用前重置规划器内部状态
+    resetActivePlanner();
+
+    // 按策略执行
+    executeImpl(policy_);
+}
+
+// ------------------------------------------------------------------------------
+// executeImpl — SingleShotPolicy
+// ------------------------------------------------------------------------------
+
+template <typename PlannersT, typename ExecutionPolicy>
+void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(SingleShotPolicy&) {
+    auto goal_pose = action_server_->get_current_goal()->goal;
+
+    if (action_server_->is_cancel_requested()) {
+        RCLCPP_INFO(pnode_->get_logger(), "SingleShot: goal cancelled before plan.");
+        action_server_->terminate_all();
+        return;
+    }
+
+    if (!planOnce(goal_pose)) {
+        RCLCPP_ERROR(pnode_->get_logger(), "SingleShot: plan() failed.");
+        action_server_->terminate_all();
+        return;
+    }
+
     action_server_->succeeded_current();
-    RCLCPP_INFO(pnode_->get_logger(), "Goal succeeded");
+    RCLCPP_INFO(pnode_->get_logger(), "SingleShot: goal succeeded.");
+}
+
+// ------------------------------------------------------------------------------
+// executeImpl — TrackingPolicy
+// ------------------------------------------------------------------------------
+
+template <typename PlannersT, typename ExecutionPolicy>
+void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(TrackingPolicy& policy) {
+    auto goal_pose = action_server_->get_current_goal()->goal;
+    rclcpp::Rate rate(policy.frequency_hz);
+
+    RCLCPP_INFO(pnode_->get_logger(),
+        "Tracking: control loop started at %.1f Hz.", policy.frequency_hz);
+
+    while (rclcpp::ok()) {
+        if (action_server_->is_cancel_requested()) {
+            RCLCPP_INFO(pnode_->get_logger(), "Tracking: goal cancelled.");
+            action_server_->terminate_all();
+            return;
+        }
+
+        if (!planOnce(goal_pose)) {
+            RCLCPP_ERROR(pnode_->get_logger(), "Tracking: plan() failed — aborting.");
+            action_server_->terminate_all();
+            return;
+        }
+
+        // TODO: 接入目标到达判断。
+        // 推荐：通过 on_post_plan_ 回调返回 false 来触发退出，
+        // 或在此对比 getCurrentPose() 与 goal_pose 的距离阈值。
+
+        rate.sleep();
+    }
+
+    action_server_->succeeded_current();
+    RCLCPP_INFO(pnode_->get_logger(), "Tracking: goal succeeded.");
 }
 
 // ==============================================================================
 // bind_map_view 实现
 // ==============================================================================
 
-template <typename PlannersT>
+template <typename PlannersT, typename ExecutionPolicy>
 template <MapConcept MapT, typename BuilderFn>
 requires std::is_invocable_v<BuilderFn, const MapT&> &&
-         std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>, typename ControlLayer<PlannersT>::MapViewsVariant>
-void ControlLayer<PlannersT>::bind_map_view(
+         std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>,
+                             typename ControlLayer<PlannersT, ExecutionPolicy>::MapViewsVariant>
+void ControlLayer<PlannersT, ExecutionPolicy>::bind_map_view(
     std::shared_ptr<MapServer<MapT>> server,
     BuilderFn&& builder)
 {
-    // 将 builder 的具体类型擦除进 std::function，以便存入 map_view_factory_
-    std::function<MapViewsVariant(const MapT&)> erased_builder = std::forward<BuilderFn>(builder);
+    std::function<MapViewsVariant(const MapT&)> erased_builder =
+        std::forward<BuilderFn>(builder);
     std::weak_ptr<MapServer<MapT>> weak_server = server;
 
     map_view_factory_ = [weak_server, erased_builder = std::move(erased_builder)]() -> BoundMapView
     {
         auto srv = weak_server.lock();
         if (!srv) {
-            // MapServer 已销毁，返回空视图；execute() 会因 view_variant 为空而报错
             return BoundMapView{};
         }
 
-        // 1. 申请读锁，LockedMapRO 以堆对象形式存活于 shared_ptr 中，
-        //    确保在 BoundMapView 析构前读锁始终持有。
         auto locked = std::make_shared<LockedMapRO<MapT>>(srv->getLockedReadView());
-
-        // 2. 将已加锁的 const MapT& 交给用户 builder，用户据此构造 IMapView。
         MapViewsVariant view_variant = erased_builder(locked->get());
-
-        // 3. 将锁卫封装进 shared_ptr<void>，与 view_variant 一同返回。
         return BoundMapView{std::move(view_variant), std::move(locked)};
     };
 }
