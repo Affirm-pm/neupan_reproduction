@@ -33,18 +33,18 @@ finenav_localizer:
   }
   pose_gate_dist: {
     type: double,
-    default_value: 12.59,
-    description: "Mahalanobis gate distance for pose observations (chi^2(6) 95%)",
+    default_value: 1000000000.0,
+    description: "Mahalanobis gate distance for pose observations; set large (>=0) to disable gating",
     validation: {
-      bounds<>: [0.0, 1000.0]
+      bounds<>: [0.0, 1000000000.0]
     }
   }
   twist_gate_dist: {
     type: double,
-    default_value: 12.59,
-    description: "Mahalanobis gate distance for twist observations (chi^2(6) 95%)",
+    default_value: 1000000000.0,
+    description: "Mahalanobis gate distance for twist observations; set large (>=0) to disable gating",
     validation: {
-      bounds<>: [0.0, 1000.0]
+      bounds<>: [0.0, 1000000000.0]
     }
   }
   max_dt_sec: {
