@@ -60,22 +60,22 @@
         omega_noise_std: 0.10
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Navigator
-# 私有子节点名: finenav_navigator，命名空间继承自 hello_finenav
-# 完整节点路径: /hello_finenav/finenav_navigator
-# ══════════════════════════════════════════════════════════════════════════════
-/hello_finenav/finenav_navigator:
-  ros__parameters:
-    finenav_navigator:
-      # Action Server 名称（客户端需向此名称发送目标）
-      action_name: "navigate_to_pose"
-      # 行为树 tick 频率 [Hz]
-      tick_frequency: 100
-      # BT 插件列表（格式: "package_name/subfolder"），空列表使用默认内置插件
-      plugins: []
-      # BT RosNodeParams 超时 [ms]
-      ros_plugins_timeout: 1000
-      # 子树 XML 文件列表（格式: "package_name/subfolder"）
-      behavior_trees: []
+## ══════════════════════════════════════════════════════════════════════════════
+## Navigator
+## 私有子节点名: finenav_navigator，命名空间继承自 hello_finenav
+## 完整节点路径: /hello_finenav/finenav_navigator
+## ══════════════════════════════════════════════════════════════════════════════
+#/hello_finenav/finenav_navigator:
+#  ros__parameters:
+#    finenav_navigator:
+#      # Action Server 名称（客户端需向此名称发送目标）
+#      action_name: "navigate_to_pose"
+#      # 行为树 tick 频率 [Hz]
+#      tick_frequency: 100
+#      # BT 插件列表（格式: "package_name/subfolder"），空列表使用默认内置插件
+#      plugins: []
+#      # BT RosNodeParams 超时 [ms]
+#      ros_plugins_timeout: 1000
+#      # 子树 XML 文件列表（格式: "package_name/subfolder"）
+#      behavior_trees: []
 
