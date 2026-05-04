@@ -12,10 +12,10 @@ namespace finenav {
 
 consteval uint32_t ProfileToMsgMask(const IOProfile& p) {
     uint32_t mask = 0;
-    if (p.pose)  mask |= 1;
-    if (p.vel)   mask |= 2;
-    if (p.accel) mask |= 4;
-    if (p.time)  mask |= 8;
+    if (p.pose)  mask = 1;
+    if (p.vel)   mask = 2;
+    if (p.accel) mask = 4;
+    if (p.time)  mask = 8;
     return mask;
 }
 
@@ -25,10 +25,7 @@ template <IOProfile Config>
 void toROSMsg(const finenav::DataPacket<Config>& src,
               finenav_msgs::msg::Trajectory& dst)
 {
-    // writing mask
     dst.valid_fields = ProfileToMsgMask(Config);
-
-    // writing data
     if constexpr (Config.pose)  dst.poses = src.poses;
     if constexpr (Config.vel)   dst.twists = src.twists;
     if constexpr (Config.accel) dst.accels = src.accels;
@@ -39,10 +36,7 @@ template <IOProfile Config>
 void toROSMsg(finenav::DataPacket<Config>&& src,
               finenav_msgs::msg::Trajectory& dst)
 {
-    // writing mask
     dst.valid_fields = ProfileToMsgMask(Config);
-
-    // writing data
     if constexpr (Config.pose)  dst.poses = std::move(src.poses);
     if constexpr (Config.vel)   dst.twists = std::move(src.twists);
     if constexpr (Config.accel) dst.accels = std::move(src.accels);
@@ -53,14 +47,10 @@ template <IOProfile Config>
 void fromROSMsg(const finenav_msgs::msg::Trajectory& src,
                 finenav::DataPacket<Config>& dst)
 {
-
-    // checking mask
     uint32_t required = ProfileToMsgMask(Config);
     if ((src.valid_fields & required) != required) {
-        throw std::runtime_error( "Input trajectory message is missing required fields.");
+        throw std::runtime_error("Input trajectory message is missing required fields.");
     }
-
-    // writing data
     if constexpr (Config.pose)  dst.poses = src.poses;
     if constexpr (Config.vel)   dst.twists = src.twists;
     if constexpr (Config.accel) dst.accels = src.accels;
@@ -71,20 +61,14 @@ template <IOProfile Config>
 void fromROSMsg(finenav_msgs::msg::Trajectory&& src,
                 finenav::DataPacket<Config>& dst)
 {
-
-    // checking mask
     uint32_t required = ProfileToMsgMask(Config);
     if ((src.valid_fields & required) != required) {
-        throw std::runtime_error( "Input trajectory message is missing required fields.");
+        throw std::runtime_error("Input trajectory message is missing required fields.");
     }
-
-    // writing data
     if constexpr (Config.pose)  dst.poses = std::move(src.poses);
     if constexpr (Config.vel)   dst.twists = std::move(src.twists);
     if constexpr (Config.accel) dst.accels = std::move(src.accels);
     if constexpr (Config.time)  dst.times = std::move(src.time_from_start);
 }
 
-}
-
-
+} // namespace finenav
