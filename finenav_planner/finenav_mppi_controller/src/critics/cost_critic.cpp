@@ -30,7 +30,6 @@ void CostCritic::initialize(const finenav_mppi_controller::Params & p)
   critical_cost_     = static_cast<float>(c.critical_cost);
   collision_cost_    = static_cast<float>(c.collision_cost);
   near_goal_distance_= static_cast<float>(c.near_goal_distance);
-  inflation_layer_name_ = "";
 
   // Normalized by cost value to put in same regime as other weights
   weight_ /= 254.0f;
@@ -87,7 +86,7 @@ void CostCritic::score(CriticData & data,const IMapView& map_view)
     if (!trajectory_collide) {
       all_trajectories_collide = false;
     } else {
-      repulsive_cost[i] = collision_cost_;
+      repulsive_cost[i] = std::numeric_limits<float>::max();
     }
   }
 
