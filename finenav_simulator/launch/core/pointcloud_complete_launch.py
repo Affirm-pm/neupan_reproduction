@@ -66,7 +66,7 @@ def generate_launch_description():
             {
                 'output_frame_id': PythonExpression([
                     "'lidar_frame' if '", LaunchConfiguration('lio_type'),
-                    "' == 'fast_lio' else 'map'"
+                    "' == 'fast_lio' else 'base_link'"
                 ])
             },
             {
