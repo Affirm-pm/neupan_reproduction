@@ -45,14 +45,6 @@ target_link_libraries(finenav_navigator
         navigator_params
 )
 
-# Executable
-add_executable(test_node
-        src/test_node.cpp
-)
-target_link_libraries(test_node
-        finenav_navigator
-)
-
 # Plugins
 add_library(finenav_compute_plan_behavior SHARED
         src/plugins/action/compute_plan.cpp
@@ -66,10 +58,6 @@ target_compile_definitions(finenav_compute_plan_behavior PRIVATE BT_PLUGIN_EXPOR
 install(TARGETS finenav_navigator
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
-        RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-install(TARGETS test_node
         RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 

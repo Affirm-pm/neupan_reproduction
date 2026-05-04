@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "plugins/action/compute_plan.hpp"
+#include "finenav_navigator/plugins/action/compute_plan.hpp"
 
 namespace finenav {
 
@@ -35,5 +35,5 @@ BT::NodeStatus ComputePlanAction::onResultReceived(const WrappedResult& result) 
 
 }
 
-#include "thirdparty/plugins.hpp"
+#include "finenav_navigator/thirdparty/plugins.hpp"
 CreateRosNodePlugin(finenav::ComputePlanAction, "ComputePlan");

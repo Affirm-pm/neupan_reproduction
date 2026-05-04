@@ -6,7 +6,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "behavior_tree_engine.hpp"
+#include "finenav_navigator/behavior_tree_engine.hpp"
 
 #include "finenav_util/simple_action_server.hpp"
 #include "finenav_util/node_thread.hpp"

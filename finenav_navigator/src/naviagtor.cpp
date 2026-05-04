@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "navigator.hpp"
+#include "finenav_navigator/navigator.hpp"
 
 namespace finenav {
 
