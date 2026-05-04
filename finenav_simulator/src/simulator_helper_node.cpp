@@ -9,7 +9,7 @@ SimulatorHelper::SimulatorHelper(std::shared_ptr<rclcpp::Node> node)
 {
   teleop_ = std::make_unique<KeyboardTeleop>(node_.get());
   path_publisher_ = std::make_unique<OdomPathPublisher>(node_.get(), tf_broadcaster_);
-  localizer_ = std::make_unique<GroundTruthMapLocalizer>(node_.get(), tf_broadcaster_);
+  publisher_ = std::make_unique<GroundTruthMapPublisher>(node_.get());
 }
 
 }  // namespace finenav_2d

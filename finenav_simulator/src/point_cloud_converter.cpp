@@ -19,7 +19,12 @@
 #include <memory>
 #include <string>
 
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
+#include "tf2/exceptions.h"
+#include "tf2/LinearMath/Matrix3x3.h"
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2/LinearMath/Vector3.h"
 
 namespace
 {
@@ -107,6 +112,23 @@ bool IsInsideBox(
          y >= min_y && y <= max_y &&
          z >= min_z && z <= max_z;
 }
+
+void ApplyTransformToPoint(
+  const geometry_msgs::msg::TransformStamped & transform,
+  float & x, float & y, float & z)
+{
+  const auto & translation = transform.transform.translation;
+  const auto & rotation = transform.transform.rotation;
+
+  tf2::Quaternion quaternion(rotation.x, rotation.y, rotation.z, rotation.w);
+  tf2::Matrix3x3 basis(quaternion);
+  const tf2::Vector3 point(x, y, z);
+  const tf2::Vector3 transformed = basis * point;
+
+  x = static_cast<float>(transformed.x() + translation.x);
+  y = static_cast<float>(transformed.y() + translation.y);
+  z = static_cast<float>(transformed.z() + translation.z);
+}
 }  // namespace
 
 namespace ign_sim_pointcloud_tool
@@ -127,6 +149,7 @@ PointCloudConverter::PointCloudConverter(const rclcpp::NodeOptions & options)
   this->declare_parameter<bool>("synthesize_time", true);
   this->declare_parameter<std::string>("output_topic", "/cloud_for_lio");
   this->declare_parameter<std::string>("output_frame_id", "");
+  this->declare_parameter<bool>("transform_output_to_frame", false);
   // Self-filter box in lidar_frame, sized from the current robot body + wheels.
   this->declare_parameter<bool>("self_filter_box.enable", true);
   this->declare_parameter<float>("self_filter_box.min_x", -0.50F);
@@ -147,6 +170,7 @@ PointCloudConverter::PointCloudConverter(const rclcpp::NodeOptions & options)
   synthesize_time_ = this->get_parameter("synthesize_time").as_bool();
   output_topic_ = this->get_parameter("output_topic").as_string();
   output_frame_id_ = this->get_parameter("output_frame_id").as_string();
+  transform_output_to_frame_ = this->get_parameter("transform_output_to_frame").as_bool();
   self_filter_box_enable_ = this->get_parameter("self_filter_box.enable").as_bool();
   self_filter_box_min_x_ = this->get_parameter("self_filter_box.min_x").as_double();
   self_filter_box_max_x_ = this->get_parameter("self_filter_box.max_x").as_double();
@@ -162,6 +186,9 @@ PointCloudConverter::PointCloudConverter(const rclcpp::NodeOptions & options)
     horizontal_samples_ = this->get_parameter("horizon_scan").as_int();
   }
 
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+  tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
   pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
     pcd_topic_, rclcpp::SensorDataQoS(),
     std::bind(&PointCloudConverter::lidarHandle, this, std::placeholders::_1));
@@ -171,15 +198,41 @@ PointCloudConverter::PointCloudConverter(const rclcpp::NodeOptions & options)
 
   RCLCPP_INFO(
     this->get_logger(),
-    "Listening to lidar topic: %s, expected layout: %d x %d, h_angle:[%.4f, %.4f], v_angle:[%.4f, %.4f], scan_period: %.4f, synthesize_time: %s, output_topic: %s, output_frame_id: %s, self_filter_box: %s [x: %.2f..%.2f, y: %.2f..%.2f, z: %.2f..%.2f]",
+    "Listening to lidar topic: %s, expected layout: %d x %d, h_angle:[%.4f, %.4f], v_angle:[%.4f, %.4f], scan_period: %.4f, synthesize_time: %s, output_topic: %s, output_frame_id: %s, transform_output_to_frame: %s, self_filter_box: %s [x: %.2f..%.2f, y: %.2f..%.2f, z: %.2f..%.2f]",
     pcd_topic_.c_str(), vertical_samples_, horizontal_samples_,
     horizontal_min_angle_, horizontal_max_angle_, vertical_min_angle_, vertical_max_angle_,
     scan_period_, synthesize_time_ ? "true" : "false", output_topic_.c_str(),
     output_frame_id_.empty() ? "<input>" : output_frame_id_.c_str(),
+    transform_output_to_frame_ ? "true" : "false",
     self_filter_box_enable_ ? "enabled" : "disabled",
     self_filter_box_min_x_, self_filter_box_max_x_,
     self_filter_box_min_y_, self_filter_box_max_y_,
     self_filter_box_min_z_, self_filter_box_max_z_);
+}
+
+bool PointCloudConverter::LookupOutputTransform(
+  const std::string & source_frame, const rclcpp::Time & stamp,
+  geometry_msgs::msg::TransformStamped & transform)
+{
+  try {
+    transform = tf_buffer_->lookupTransform(output_frame_id_, source_frame, stamp);
+    return true;
+  } catch (const tf2::TransformException & ex) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 5000,
+      "Failed to transform point cloud from '%s' to '%s': %s",
+      source_frame.c_str(), output_frame_id_.c_str(), ex.what());
+    return false;
+  }
+}
+
+void PointCloudConverter::ApplyFrameTransform(
+  pcl::PointCloud<PointXYZIRT>::Ptr & cloud,
+  const geometry_msgs::msg::TransformStamped & transform)
+{
+  for (auto & point : cloud->points) {
+    ApplyTransformToPoint(transform, point.x, point.y, point.z);
+  }
 }
 
 void PointCloudConverter::lidarHandle(const sensor_msgs::msg::PointCloud2::SharedPtr pc_msg)
@@ -287,6 +340,28 @@ void PointCloudConverter::lidarHandle(const sensor_msgs::msg::PointCloud2::Share
   converted_pc->width = keep_organized_output ? static_cast<uint32_t>(horizontal_samples) :
     static_cast<uint32_t>(converted_pc->points.size());
   converted_pc->height = keep_organized_output ? static_cast<uint32_t>(vertical_samples) : 1;
+
+  geometry_msgs::msg::TransformStamped output_transform;
+  if (transform_output_to_frame_) {
+    if (output_frame_id_.empty()) {
+      RCLCPP_ERROR_THROTTLE(
+        this->get_logger(), *this->get_clock(), 5000,
+        "transform_output_to_frame is enabled but output_frame_id is empty.");
+      return;
+    }
+    if (pc_msg->header.frame_id.empty()) {
+      RCLCPP_WARN_THROTTLE(
+        this->get_logger(), *this->get_clock(), 5000,
+        "Incoming point cloud has empty frame_id; cannot transform to '%s'.",
+        output_frame_id_.c_str());
+      return;
+    }
+    if (!LookupOutputTransform(pc_msg->header.frame_id, pc_msg->header.stamp, output_transform)) {
+      return;
+    }
+    ApplyFrameTransform(converted_pc, output_transform);
+  }
+
   publishPoints<PointXYZIRT>(converted_pc, *pc_msg);
 }
 

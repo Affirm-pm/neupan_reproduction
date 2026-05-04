@@ -4,7 +4,6 @@ import sys
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
@@ -23,7 +22,11 @@ from sdf_launch_utils import (
 def generate_launch_description():
     pkg = get_package_share_directory("finenav_simulator")
     sdf_xmacro_path = os.path.join(pkg, "resource", "robot", "model.sdf.xmacro")
-    robot_xml = generate_robot_sdf_from_xmacro(sdf_xmacro_path)
+    lidar_support_mesh_uri = f"file://{os.path.join(pkg, 'resource', 'robot', 'meshes', 'lidar_support_tri_prism.obj')}"
+    robot_xml = generate_robot_sdf_from_xmacro(
+        sdf_xmacro_path,
+        mappings={"lidar_support_mesh_uri": lidar_support_mesh_uri},
+    )
     sdf_config = load_robot_sdf_config_from_string(robot_xml)
     robot_name = "fine_robot"
 
@@ -60,7 +63,18 @@ def generate_launch_description():
             {'use_sim_time': LaunchConfiguration('use_sim_time')},
             {'pcd_topic': '/livox/lidar'},
             {'output_topic': '/cloud_for_lio'},
-            {'output_frame_id': 'lidar_frame'},
+            {
+                'output_frame_id': PythonExpression([
+                    "'lidar_frame' if '", LaunchConfiguration('lio_type'),
+                    "' == 'fast_lio' else 'map'"
+                ])
+            },
+            {
+                'transform_output_to_frame': PythonExpression([
+                    "'False' if '", LaunchConfiguration('lio_type'),
+                    "' == 'fast_lio' else 'True'"
+                ])
+            },
             {'vertical_samples': sdf_config['lidar_vertical_samples']},
             {'horizontal_samples': sdf_config['lidar_horizontal_samples']},
             {'vertical_min_angle': sdf_config['lidar_vertical_min_angle']},

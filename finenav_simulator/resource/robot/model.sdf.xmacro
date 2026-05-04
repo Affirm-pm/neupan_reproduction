@@ -4,12 +4,24 @@
     <xmacro_define_value name="base_width" value="0.4"/>
     <xmacro_define_value name="base_height" value="0.3"/>
     <xmacro_define_value name="base_mass" value="6.0"/>
-    <xmacro_define_value name="lidar_mount_x" value="0.12"/>
+    <xmacro_define_value name="lidar_mount_x" value="0.16"/>
     <xmacro_define_value name="lidar_mount_y" value="0.0"/>
-    <xmacro_define_value name="lidar_mount_z" value="-0.35"/>
+    <xmacro_define_value name="lidar_mount_z" value="-0.27"/>
+    <xmacro_define_value name="lidar_mount_pitch" value="0.78539816339"/>
+    <xmacro_define_value name="lidar_mount_slide_along_slope" value="0.045"/>
     <xmacro_define_value name="lidar_visual_z" value="0.04"/>
     <xmacro_define_value name="lidar_length" value="0.08"/>
     <xmacro_define_value name="lidar_radius" value="0.06"/>
+    <xmacro_define_value name="lidar_support_length" value="0.095"/>
+    <xmacro_define_value name="lidar_support_height" value="0.095"/>
+    <xmacro_define_value name="lidar_support_width" value="0.07"/>
+    <xmacro_define_value name="lidar_support_y" value="0.0"/>
+    <xmacro_define_value name="lidar_support_pitch" value="-0.78539816339"/>
+    <xmacro_define_value name="lidar_support_lidar_clearance" value="0.0"/>
+    <xmacro_define_value name="lidar_support_body_clearance" value="0.0"/>
+    <xmacro_define_value name="lidar_support_x_offset" value="0.0"/>
+    <xmacro_define_value name="lidar_support_z_offset" value="0.0"/>
+    <xmacro_define_value name="lidar_support_mesh_uri" value="''"/>
     <xmacro_define_value name="lidar_update_rate" value="10.0"/>
     <xmacro_define_value name="lidar_horizontal_samples" value="360"/>
     <xmacro_define_value name="lidar_vertical_samples" value="64"/>
@@ -78,7 +90,7 @@
             </sensor>
         </link>
         <link name="base_lidar">
-            <pose relative_to="base_origin">${lidar_mount_x} ${lidar_mount_y} ${lidar_mount_z} 0 0 0</pose>
+            <pose relative_to="base_origin">${lidar_mount_x + lidar_mount_slide_along_slope * cos(lidar_mount_pitch)} ${lidar_mount_y} ${lidar_mount_z - lidar_mount_slide_along_slope * sin(lidar_mount_pitch)} 0 ${lidar_mount_pitch} 0</pose>
             <inertial>
                 <pose>0 0 ${lidar_visual_z} 0 0 0</pose>
                 <mass>0.15</mass>
@@ -103,6 +115,20 @@
                     <ambient>${lidar_ambient}</ambient>
                     <diffuse>${lidar_diffuse}</diffuse>
                     <specular>${lidar_specular}</specular>
+                </material>
+            </visual>
+            <visual name="base_lidar_support_visual">
+                <pose>${((lidar_visual_z - lidar_length / 2.0 - lidar_support_lidar_clearance - lidar_support_height / sqrt(2.0) - lidar_support_body_clearance) - (((-0.5 + base_height / 2.0) - (lidar_mount_z - lidar_mount_slide_along_slope * sin(lidar_mount_pitch))) / cos(lidar_mount_pitch))) / tan(lidar_mount_pitch) + lidar_support_x_offset} ${lidar_support_y} ${lidar_visual_z - lidar_length / 2.0 - lidar_support_lidar_clearance + lidar_support_z_offset} 0 ${lidar_support_pitch} 0</pose>
+                <geometry>
+                    <mesh>
+                        <uri>${lidar_support_mesh_uri}</uri>
+                        <scale>${lidar_support_length} ${lidar_support_width} ${lidar_support_height}</scale>
+                    </mesh>
+                </geometry>
+                <material>
+                    <ambient>0.18 0.18 0.2 1</ambient>
+                    <diffuse>0.18 0.18 0.2 1</diffuse>
+                    <specular>0.1 0.1 0.1 1</specular>
                 </material>
             </visual>
             <collision name="base_lidar_collision">
@@ -150,7 +176,7 @@
         <joint name="base_lidar_joint" type="fixed">
             <parent>base_origin</parent>
             <child>base_lidar</child>
-            <pose>${lidar_mount_x} ${lidar_mount_y} ${lidar_mount_z} 0 0 0</pose>
+            <pose>${lidar_mount_x + lidar_mount_slide_along_slope * cos(lidar_mount_pitch)} ${lidar_mount_y} ${lidar_mount_z - lidar_mount_slide_along_slope * sin(lidar_mount_pitch)} 0 ${lidar_mount_pitch} 0</pose>
         </joint>
         <link name="base_link">
             <inertial>
@@ -532,17 +558,12 @@
         <plugin filename="libignition-gazebo-joint-state-publisher-system.so" name="ignition::gazebo::systems::JointStatePublisher">
             <topic>/joint_states</topic>
         </plugin>
-        <plugin filename="libignition-gazebo-pose-publisher-system.so" name="ignition::gazebo::systems::PosePublisher">
-            <publish_link_pose>false</publish_link_pose>
-            <publish_visual_pose>false</publish_visual_pose>
-            <publish_collision_pose>false</publish_collision_pose>
-            <publish_sensor_pose>false</publish_sensor_pose>
-            <publish_model_pose>true</publish_model_pose>
-            <publish_nested_model_pose>true</publish_nested_model_pose>
-            <use_pose_vector_msg>false</use_pose_vector_msg>
-            <static_publisher>false</static_publisher>
-            <update_frequency>50</update_frequency>
-            <topic>/ground_truth_pose</topic>
+        <plugin filename="libignition-gazebo-odometry-publisher-system.so" name="ignition::gazebo::systems::OdometryPublisher">
+            <odom_publish_frequency>50</odom_publish_frequency>
+            <dimensions>3</dimensions>
+            <odom_topic>/ground_truth_odometry</odom_topic>
+            <odom_frame>odom</odom_frame>
+            <robot_base_frame>base_link</robot_base_frame>
         </plugin>
     </model>
 </sdf>
