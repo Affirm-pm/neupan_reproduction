@@ -1,0 +1,81 @@
+# FineNav Engine Parameters
+#
+# 本文件统一管理 FineNavEngine 中三个全局单例的 generate_parameter_library 参数：
+#   - NavStateManager   （运行在主节点 /hello_finenav 上）
+#   - FineNavLocalizer  （私有子节点 /hello_finenav/finenav_localizer）
+#   - Navigator         （私有子节点 /hello_finenav/finenav_navigator）
+#
+# 与 mppi_params.yaml 一并在 launch 文件中传入同一 Node 即可生效。
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NavStateManager
+# 参数直接声明在主节点 /hello_finenav 上，前缀为 nav_state_manager.*
+# ══════════════════════════════════════════════════════════════════════════════
+/hello_finenav:
+  ros__parameters:
+    nav_state_manager:
+      # 到达目标的距离阈值 [m]
+      goal_tolerance: 0.25
+      # Stuck 检测：在 stuck_timeout_s 内位移小于此值时判定为 Stuck [m]
+      stuck_dist_threshold: 0.05
+      # Stuck 判定超时时长 [s]
+      stuck_timeout_s: 5.0
+      # 定位协方差迹超过此阈值时触发 LOCALIZATION_ERROR
+      localization_cov_threshold: 5.0
+      # 定位输出超过此时长未更新时触发 LOCALIZATION_ERROR [s]
+      localization_stale_timeout_s: 1.0
+      # FSM 内部监控定时器频率 [Hz]
+      monitor_rate_hz: 10.0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FineNavLocalizer
+# 私有子节点名: finenav_localizer，命名空间继承自 hello_finenav
+# 完整节点路径: /hello_finenav/finenav_localizer
+# ══════════════════════════════════════════════════════════════════════════════
+/hello_finenav/finenav_localizer:
+  ros__parameters:
+    finenav_localizer:
+      # ESKF 更新循环频率 [Hz]
+      update_rate_hz: 100.0
+      # 最大可容忍的观测延迟 [s]
+      max_delay_sec: 0.05
+      # 位姿观测复用次数（R 矩阵按此倍数缩放）
+      pose_smoothing_steps: 1
+      # 速度观测复用次数
+      twist_smoothing_steps: 1
+      # 位姿观测 Mahalanobis 门限（chi²(6) 95% ≈ 12.59）
+      pose_gate_dist: 1.0e9
+      # 速度观测 Mahalanobis 门限
+      twist_gate_dist: 1.0e9
+      # dt 上限 [s]
+      max_dt_sec: 0.5
+      # 每类观测队列容量
+      max_obs_queue_size: 64
+      model:
+        # 线速度过程噪声标准差 [m/s/√s]
+        vel_noise_std: 0.10
+        # 角速度过程噪声标准差 [rad/s/√s]
+        omega_noise_std: 0.10
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Navigator
+# 私有子节点名: finenav_navigator，命名空间继承自 hello_finenav
+# 完整节点路径: /hello_finenav/finenav_navigator
+# ══════════════════════════════════════════════════════════════════════════════
+/hello_finenav/finenav_navigator:
+  ros__parameters:
+    finenav_navigator:
+      # Action Server 名称（客户端需向此名称发送目标）
+      action_name: "navigate_to_pose"
+      # 行为树 tick 频率 [Hz]
+      tick_frequency: 100
+      # BT 插件列表（格式: "package_name/subfolder"），空列表使用默认内置插件
+      plugins: []
+      # BT RosNodeParams 超时 [ms]
+      ros_plugins_timeout: 1000
+      # 子树 XML 文件列表（格式: "package_name/subfolder"）
+      behavior_trees: []
+
