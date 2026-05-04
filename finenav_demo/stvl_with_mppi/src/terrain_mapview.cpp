@@ -19,7 +19,7 @@ SimpleGridMapView::SimpleGridMapView(
     , terrain_analyzer_(terrain_analyzer)
     , local_map_helper_(std::move(local_map_helper))
 {
-    collision_model_ = std::make_unique<finenav::OBBCollisionModel>(finenav::Vector3D(0.3, 0.3, 0.3));
+    collision_model_ = std::make_unique<finenav::OBBCollisionModel>(finenav::Vector3D(0.8, 0.7, 0.3));
 }
 
 bool SimpleGridMapView::isTrackingUnknown() const {
