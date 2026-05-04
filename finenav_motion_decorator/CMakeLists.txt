@@ -8,6 +8,7 @@ if (NOT CMAKE_BUILD_TYPE)
 endif ()
 
 find_package(ament_cmake_auto REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 include_directories(include)
 
@@ -17,7 +18,11 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
     src/trim_by_count.cpp
     src/trim_by_duration.cpp
     src/trim_by_distance.cpp
+    src/seek_to_nearest_point.cpp
+    src/trim_by_aabb.cpp
 )
+
+target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)

@@ -29,6 +29,9 @@
 #include "finenav_util/cloud_publish_helper.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "trim_by_distance.hpp"
+#include "seek_to_nearest_point.hpp"
+#include "trim_by_aabb.hpp"
+#include "nav_msgs/msg/path.hpp"
 
 using namespace finenav;
 
@@ -47,13 +50,13 @@ int main(int argc, char** argv) {
 
     // ------------------------------ Launch Localization ----------------------------------
 
-    auto gt_pose_sub = node->create_subscription<geometry_msgs::msg::PoseStamped>(
-        "ground_truth_pose",
+    auto gt_pose_sub = node->create_subscription<nav_msgs::msg::Odometry>(
+        "odom",
         10,
-        [localizer, &node](const geometry_msgs::msg::PoseStamped& msg) {
+        [localizer](const nav_msgs::msg::Odometry& msg) {
             geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
             pose_msg.header = msg.header;
-            pose_msg.pose.pose = msg.pose;
+            pose_msg.pose.pose = msg.pose.pose;
 
             static bool localizer_initialized = false;      // TODO: automatically iniitailize when receive the first pose_msg
             if (!localizer_initialized) {
@@ -180,16 +183,46 @@ int main(int argc, char** argv) {
     // /cmd_vel publisher — 由 post_plan 回调驱动，在每次规划成功后取第一步速度指令
     auto cmd_vel_pub = node->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
 
+    // [DEBUG] 发布裁减后的参考轨迹，供 RViz 可视化验证
+    auto trimmed_path_pub = node->create_publisher<nav_msgs::msg::Path>("/trimmed_ref_path", 10);
+
+    Region3D map_bounds;
     {
-        auto map_size = map_server->getLockedReadView()->getSize();
-        my_control_layer->set_on_pre_plan(
-        [map_size](finenav::PrePlanContext& ctx) -> bool {
-                ctx.ref_traj | finenav::TrimByDistance(map_size.x());
-                return true;
-        });
+        map_bounds = map_server->getLockedReadView()->getWindowBounds();
     }
 
+    my_control_layer->set_on_pre_plan(
+    [map_bounds, map_server, localizer, node, trimmed_path_pub](finenav::PrePlanContext& ctx) -> bool {
+        // 1. Advance trajectory start to the waypoint nearest to the robot
+        const auto& rp = ctx.robot_state.pose.position;
+        ctx.ref_traj | finenav::SeekToNearestPoint({rp.x, rp.y, rp.z});
 
+        // 2. Trim trailing waypoints beyond the maximum tracking distance
+        //    (use the shorter dimension of the map as a conservative bound)
+        // const auto bounds_size = map_bounds.max() - map_bounds.min();
+        // const double max_dist = std::min(bounds_size.x(), bounds_size.y());
+        // ctx.ref_traj | finenav::TrimByDistance(max_dist);
+
+        // 3. Trim waypoints that fall outside the current map AABB
+        const auto current_bounds = map_server->getLockedReadView()->getWindowBounds();
+        ctx.ref_traj | finenav::TrimByAABB(current_bounds);
+
+        // [DEBUG] 发布裁减后的参考轨迹供 RViz 可视化验证
+        {
+            nav_msgs::msg::Path path_msg;
+            path_msg.header.stamp = node->now();
+            path_msg.header.frame_id = "map";
+            for (const auto& pose : ctx.ref_traj.poses) {
+                geometry_msgs::msg::PoseStamped ps;
+                ps.header = path_msg.header;
+                ps.pose = pose;
+                path_msg.poses.push_back(ps);
+            }
+            trimmed_path_pub->publish(path_msg);
+        }
+
+        return true;
+    });
 
     my_control_layer->set_on_post_plan(
         [cmd_vel_pub](finenav::PostPlanContext& ctx) -> bool {

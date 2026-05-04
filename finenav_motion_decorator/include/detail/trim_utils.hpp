@@ -30,5 +30,22 @@ inline double duration_to_sec(const builtin_interfaces::msg::Duration& d)
     return static_cast<double>(d.sec) + static_cast<double>(d.nanosec) * 1e-9;
 }
 
+/**
+ * @brief Erase the first n elements from all populated fields of a trajectory.
+ *        Caller is responsible for ensuring n <= current size.
+ */
+inline void erase_front(finenav_msgs::msg::Trajectory& traj, std::size_t n)
+{
+    using T = finenav_msgs::msg::Trajectory;
+    if (n == 0) return;
+    auto erase_n = [n](auto& vec) {
+        vec.erase(vec.begin(), vec.begin() + static_cast<std::ptrdiff_t>(n));
+    };
+    if (traj.valid_fields & T::TRAJ_POSE)  erase_n(traj.poses);
+    if (traj.valid_fields & T::TRAJ_VEL)   erase_n(traj.twists);
+    if (traj.valid_fields & T::TRAJ_ACCEL) erase_n(traj.accels);
+    if (traj.valid_fields & T::TRAJ_TIME)  erase_n(traj.time_from_start);
+}
+
 } // namespace finenav::motion_decorator::detail
 
