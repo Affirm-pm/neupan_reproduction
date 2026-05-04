@@ -6,15 +6,15 @@
 
 using namespace finenav;
 
-StvlManager::StvlManager(rclcpp::Node::SharedPtr node, Eigen::Isometry3d T_body_lidar)
-    : node_(std::move(node)), T_body_lidar_(std::move(T_body_lidar))
+StvlManager::StvlManager(rclcpp::Node::SharedPtr node)
+    : node_(std::move(node))
 {}
 
-bool StvlManager::isInFrustum(const Eigen::Isometry3d & T_map_lidar, const Position & p_world,
+bool StvlManager::isInFrustum(const Eigen::Isometry3d & T_map_body, const Position & p_world,
                                double min_range, double max_range,
                                double min_angle, double max_angle)
 {
-    const Eigen::Vector3d origin = T_map_lidar.translation();
+    const Eigen::Vector3d origin = T_map_body.translation();
     const Eigen::Vector3d v_world = p_world - origin;
 
     const double r = v_world.norm();
@@ -22,7 +22,7 @@ bool StvlManager::isInFrustum(const Eigen::Isometry3d & T_map_lidar, const Posit
         return false;
     }
 
-    const Eigen::Vector3d v_sensor = T_map_lidar.linear().transpose() * v_world;
+    const Eigen::Vector3d v_sensor = T_map_body.linear().transpose() * v_world;
     const double norm = v_sensor.norm();
     if (norm <= 0.0) {
         return false;
@@ -36,7 +36,6 @@ bool StvlManager::isInFrustum(const Eigen::Isometry3d & T_map_lidar, const Posit
 void StvlManager::PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3d & T_map_body)
 {
     const rclcpp::Time now = node_->get_clock()->now();
-    const Eigen::Isometry3d T_map_lidar = T_map_body * T_body_lidar_;
 
     constexpr double min_range = 0.0;
     constexpr double max_range = 50.0;
@@ -64,7 +63,7 @@ void StvlManager::PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3
             continue;
         }
 
-        const bool in_fov = isInFrustum(T_map_lidar, pos, min_range, max_range, min_angle, max_angle);
+        const bool in_fov = isInFrustum(T_map_body, pos, min_range, max_range, min_angle, max_angle);
         const double active_decay = in_fov ? decay_time_fov_sec_ : decay_time_sec_;
 
         if (age_sec > active_decay) {
@@ -79,15 +78,13 @@ void StvlManager::PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3
 
 void StvlManager::InsertPointCloud(const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map,
                                    const Eigen::Isometry3d & T_map_body) {
-    // 将雷达安装位姿合入，得到 lidar → map 的完整变换
-    const Eigen::Isometry3d T_map_lidar = T_map_body * T_body_lidar_;
     const rclcpp::Time now = node_->get_clock()->now();
     for (const auto & pt : cloud) {
         if (!std::isfinite(pt.x) || !std::isfinite(pt.y) || !std::isfinite(pt.z)) {
             continue;
         }
-        // 关键修正：将点从 lidar(base_link) 坐标系变换到 map(world) 坐标系
-        const Eigen::Vector3d p_world = T_map_lidar * Eigen::Vector3d(pt.x, pt.y, pt.z);
+        // 点云已在车体坐标系下，直接用 T_map_body 变换到 map 系
+        const Eigen::Vector3d p_world = T_map_body * Eigen::Vector3d(pt.x, pt.y, pt.z);
         const Position hit_pos(p_world.x(), p_world.y(), p_world.z());
         if (!map.isInside(hit_pos)) {
             continue;

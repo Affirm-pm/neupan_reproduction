@@ -46,10 +46,8 @@ using DynamicPosSet = std::unordered_set<Position, PositionHash, PositionEqual>;
 
 class StvlManager {
 public:
-    /// @param node       ROS节点
-    /// @param T_body_lidar  雷达在车体坐标系下的安装位姿（默认为 Identity，即雷达在车体原点）
-    explicit StvlManager(rclcpp::Node::SharedPtr node,
-                         Eigen::Isometry3d T_body_lidar = Eigen::Isometry3d::Identity());
+    /// @param node  ROS节点
+    explicit StvlManager(rclcpp::Node::SharedPtr node);
 
     /// @param T_map_body  当前车体在地图坐标系下的位姿，由外部定位模块提供
     void PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3d & T_map_body);
@@ -59,12 +57,11 @@ public:
                           const Eigen::Isometry3d & T_map_body);
 
 private:
-    static bool isInFrustum(const Eigen::Isometry3d & T_map_lidar, const Position & p_world,
+    static bool isInFrustum(const Eigen::Isometry3d & T_map_body, const Position & p_world,
                             double min_range, double max_range,
                             double min_angle, double max_angle);
 
     rclcpp::Node::SharedPtr node_;
-    Eigen::Isometry3d T_body_lidar_;
 
     DynamicPosSet dynamic_cells_;
     double decay_time_sec_     = 1000000.0;

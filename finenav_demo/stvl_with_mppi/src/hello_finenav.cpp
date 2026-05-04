@@ -42,11 +42,7 @@ int main(int argc, char** argv) {
 
     auto localizer = finenav_engine->getLocalizer();
 
-    // 雷达相对车体的安装位姿（外参）。默认 Identity 表示雷达与车体原点重合。
-    // TODO: 从 ROS 参数或 URDF 读取
-    Eigen::Isometry3d T_body_lidar = Eigen::Isometry3d::Identity();
-
-    auto stvl_manager = std::make_shared<StvlManager>(node, T_body_lidar);
+    auto stvl_manager = std::make_shared<StvlManager>(node);
 
     // ------------------------------ Launch Localization ----------------------------------
 
@@ -164,7 +160,6 @@ int main(int argc, char** argv) {
             stvl_manager->InsertPointCloud(cloud, map, T_map_body);
         });
 
-    // TODO: 输入点云默认在车体坐标系下，无需 TF 变换
     auto cloud_sub = node->create_subscription<sensor_msgs::msg::PointCloud2>(
         "/cloud_for_lio",
         10,
