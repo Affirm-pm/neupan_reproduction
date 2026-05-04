@@ -39,6 +39,10 @@ int main(int argc, char** argv) {
     auto node = rclcpp::Node::make_shared("hello_finenav", options); // TODO: inhirent options?
 
     auto finenav_engine = std::make_shared<FineNavEngine>(node);
+    // FineNavEngine 构造时已自动创建并初始化：
+    //   - FineNavLocalizer  (finenav_engine->getLocalizer())
+    //   - Navigator         (finenav_engine->getNavigator())
+    //   - NavStateManager   (finenav_engine->getNavStateManager())
 
     // 雷达相对车体的安装位姿（外参）。默认 Identity 表示雷达与车体原点重合。
     // TODO: 从 ROS 参数或 URDF 读取
@@ -46,19 +50,7 @@ int main(int argc, char** argv) {
 
     auto stvl_manager = std::make_shared<StvlManager>(node, T_body_lidar);
     // ------------------------------ Launch Localization ----------------------------------
-    LocalizerOptions localizer_options {
-        .update_rate_hz        = 100,
-        .max_delay_sec        = 0.05,
-        .pose_smoothing_steps = 1,
-        .twist_smoothing_steps = 1,
-        .pose_gate_dist = 1e9,
-        .twist_gate_dist = 1e9,
-        .model_opts = {
-            .vel_noise_std = 0.1,
-            .omega_noise_std = 0.1
-        }
-    };
-    finenav_engine->getLocalizer(localizer_options); // 【注意：目前存在小bug，必须将这个api在createMapResource前调用一次】
+    // Localizer 已由 FineNavEngine 自动创建。通过 getLocalizer() 直接使用。
     auto gt_pose_sub = node->create_subscription<geometry_msgs::msg::PoseStamped>(
         "ground_truth_pose",
         10,
@@ -196,31 +188,7 @@ int main(int argc, char** argv) {
         });
 
     // local_map_helper 捕获到 builder lambda，每次构造 SimpleGridMapView 时传入
-    // 注册机器人状态提供者：从 Localizer 的 NavState 转换为 RobotState（geometry_msgs 组合体）
-    my_control_layer->set_robot_state_provider( // TODO: 之后改成ControlLayer内自动组装
-        [&finenav_engine]() -> finenav_msgs::msg::RobotState {
-            const auto& state = finenav_engine->getLocalizer().getState();
-            finenav_msgs::msg::RobotState rs;
-            // pose
-            rs.pose.position.x = state.p.x();
-            rs.pose.position.y = state.p.y();
-            rs.pose.position.z = state.p.z();
-            const auto q = state.R.unit_quaternion();
-            rs.pose.orientation.w = q.w();
-            rs.pose.orientation.x = q.x();
-            rs.pose.orientation.y = q.y();
-            rs.pose.orientation.z = q.z();
-            // twist: linear in body frame (R^T * v), angular = omega (body frame)
-            const Eigen::Vector3d v_body = state.R.inverse() * state.v;
-            rs.twist.linear.x  = v_body.x();
-            rs.twist.linear.y  = v_body.y();
-            rs.twist.linear.z  = v_body.z();
-            rs.twist.angular.x = state.omega.x();
-            rs.twist.angular.y = state.omega.y();
-            rs.twist.angular.z = state.omega.z();
-            return rs;
-        });
-
+    // robot_state_provider 和 should_stop_predicate 已由 FineNavEngine::createControlLayer() 自动注入。
     my_control_layer->bind_map_view(
         map_server,
         [node, terrain_analyzer, local_map_helper](const GridMap<Voxel>& map) {

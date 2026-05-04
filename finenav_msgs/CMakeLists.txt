@@ -12,6 +12,7 @@ ament_auto_find_build_dependencies()
 rosidl_generate_interfaces(${PROJECT_NAME}
         msg/Trajectory.msg
         msg/RobotState.msg
+        msg/NavStatus.msg
         action/ComputePlan.action
         action/NavigateToPose.action
         DEPENDENCIES geometry_msgs std_msgs

@@ -112,6 +112,7 @@ public:
     using PrePlanCallback       = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback      = std::function<bool(PostPlanContext&)>;
     using RobotStateProvider    = std::function<finenav_msgs::msg::RobotState()>;
+    using ShouldStopPredicate   = std::function<bool()>;
 
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,
@@ -146,16 +147,13 @@ public:
 
     void set_on_pre_plan(PrePlanCallback cb) { on_pre_plan_ = std::move(cb); }
     void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
-
-    /**
-     * @brief 注册机器人状态提供者。
-     *
-     * 框架在每次 planOnce() 开始时调用此回调获取当前 RobotState，
-     * 取代原来基于 TF 查询的 getCurrentPose()。
-     * 典型实现：从 FineNavEngine Localizer 读取最新 NavState 并转换为 RobotState。
-     */
     void set_robot_state_provider(RobotStateProvider provider) {
         robot_state_provider_ = std::move(provider);
+    }
+    /** 由 FineNavEngine::createControlLayer() 自动注入；也可由用户覆盖。
+     *  TrackingPolicy 循环每帧检测：返回 true 时优雅退出并 succeed 当前 goal。 */
+    void set_should_stop_predicate(ShouldStopPredicate pred) {
+        should_stop_predicate_ = std::move(pred);
     }
 
     const std::string& get_active_planner_id() const { return active_planner_id_; }
@@ -165,6 +163,7 @@ protected:
     PrePlanCallback on_pre_plan_;
     PostPlanCallback on_post_plan_;
     RobotStateProvider robot_state_provider_;
+    ShouldStopPredicate should_stop_predicate_;
 
     rclcpp::Node::SharedPtr node_;
     rclcpp::Node::SharedPtr pnode_;
@@ -482,6 +481,13 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(TrackingPolicy& polic
         if (action_server_->is_cancel_requested()) {
             RCLCPP_INFO(pnode_->get_logger(), "Tracking: goal cancelled.");
             action_server_->terminate_all();
+            return;
+        }
+
+        // NavStateManager 注入的停止谓词（目标到达 / Stuck / Aborted 等）
+        if (should_stop_predicate_ && should_stop_predicate_()) {
+            RCLCPP_INFO(pnode_->get_logger(), "Tracking: stop predicate triggered — succeeding.");
+            action_server_->succeeded_current();
             return;
         }
 

@@ -63,6 +63,12 @@ ament_target_dependencies(finenav_compute_plan_behavior
 target_compile_definitions(finenav_compute_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Install
+install(TARGETS finenav_navigator
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
 install(TARGETS test_node
         RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
@@ -73,6 +79,7 @@ install(TARGETS finenav_compute_plan_behavior
         RUNTIME DESTINATION bin
 )
 
+install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
 
 #if (BUILD_TESTING)
@@ -83,10 +90,7 @@ install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
 
 # Export
 ament_export_include_directories(include)
-ament_export_libraries(
-        finenav_navigator
-        finenav_compute_plan_behavior
-)
+ament_export_libraries(finenav_navigator)
 ament_export_dependencies(${dependencies})
 
 ament_package()
