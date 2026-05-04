@@ -16,6 +16,11 @@ def generate_launch_description():
         'config',
         'mppi_params.yaml'
     )
+    finenav_params_file = os.path.join(
+        finenav_demo_pkg_dir,
+        'config',
+        'finenav_params.yaml'
+    )
 
     finenav_simulator_pkg_dir = get_package_share_directory('finenav_simulator')
     finenav_simulator_launch_file = os.path.join(
@@ -42,6 +47,7 @@ def generate_launch_description():
         parameters=[
             {'use_sim_time': True},
             mppi_params_file,
+            finenav_params_file,
         ]
     )
 
