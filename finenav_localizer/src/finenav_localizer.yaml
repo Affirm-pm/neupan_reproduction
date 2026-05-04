@@ -63,6 +63,14 @@ finenav_localizer:
       bounds<>: [1, 1024]
     }
   }
+  history_duration_sec: {
+    type: double,
+    default_value: 2.0,
+    description: "Duration [s] of the rolling NavStateBuffer history window for time-stamped state queries",
+    validation: {
+      bounds<>: [0.1, 60.0]
+    }
+  }
   model:
     vel_noise_std: {
       type: double,

@@ -52,6 +52,9 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
         static_cast<std::size_t>(std::max(int64_t{1}, params_.twist_smoothing_steps)),
         static_cast<std::size_t>(params_.max_obs_queue_size));
 
+    // ── State history buffer ──────────────────────────────────────────────────
+    state_buffer_ = std::make_shared<NavStateBuffer>(params_.history_duration_sec);
+
     // ── TF broadcaster ───────────────────────────────────────────────────────
     tf_br_ = std::make_shared<tf2_ros::TransformBroadcaster>(pnode_);
 
@@ -110,6 +113,9 @@ void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
         cached_time_       = rclcpp::Time(msg.header.stamp);
     }
 
+    state_buffer_->clear();
+    state_buffer_->push(rclcpp::Time(msg.header.stamp), init_state);
+
     is_initialized_.store(true, std::memory_order_release);
 
     RCLCPP_INFO(
@@ -156,6 +162,11 @@ rclcpp::Time FineNavLocalizer::getLastUpdateTime() const
 {
     std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);
     return cached_time_;
+}
+
+std::optional<NavStateD> FineNavLocalizer::getStateAt(const rclcpp::Time & query_time) const
+{
+    return state_buffer_->getStateAt(query_time);
 }
 
 // ============================================================================
@@ -276,6 +287,9 @@ void FineNavLocalizer::timerCallback()
         cached_covariance_ = eskf_.getCovariance();
         cached_time_       = now;
     }
+
+    // ── 5b. Append to history buffer ──────────────────────────────────────
+    state_buffer_->push(now, eskf_.getState());
 
     // ── 6. Broadcast TF: map → base_link ───────────────────────────────────
     const NavStateD & s = eskf_.getState();

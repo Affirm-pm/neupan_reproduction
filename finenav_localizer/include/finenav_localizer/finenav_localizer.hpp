@@ -18,6 +18,7 @@
 
 #include "eskf.hpp"
 #include "finenav_localizer/filter_model.hpp"
+#include "finenav_localizer/nav_state_buffer.hpp"
 #include "finenav_localizer/observation_queue.hpp"
 #include "finenav_util/node_thread.hpp"
 #include "finenav_localizer/localizer_params.hpp"
@@ -91,6 +92,24 @@ public:
     PMat         getCovariance()     const;
     rclcpp::Time getLastUpdateTime() const;
 
+    /**
+     * @brief Query the interpolated state at an arbitrary past timestamp.
+     *
+     * Delegates to the internal NavStateBuffer.  Returns std::nullopt when:
+     *   - The localizer has not been initialised yet.
+     *   - @p query_time is strictly newer than the latest buffered entry (future).
+     *   - @p query_time is older than the retained history window.
+     *
+     * @note Thread-safe.
+     */
+    std::optional<NavStateD> getStateAt(const rclcpp::Time & query_time) const;
+
+    /**
+     * @brief Direct access to the underlying NavStateBuffer for advanced use-cases.
+     * @note The buffer is always valid after construction.
+     */
+    NavStateBuffer::SharedPtr getStateBuffer() const { return state_buffer_; }
+
 private:
 
     // ── Timer callback ───────────────────────────────────────────────────────
@@ -135,6 +154,9 @@ private:
     NavStateD    cached_state_{};
     PMat         cached_covariance_ = PMat::Identity() * 1e-2;
     rclcpp::Time cached_time_{0, 0, RCL_ROS_TIME};
+
+    // ── Stamped-history buffer (thread-safe internally) ──────────────────────
+    NavStateBuffer::SharedPtr state_buffer_;
 
     rclcpp::Logger logger_;
 };
