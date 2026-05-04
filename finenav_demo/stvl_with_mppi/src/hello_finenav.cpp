@@ -28,6 +28,7 @@
 #include "terrain_mapview.hpp"
 #include "finenav_util/cloud_publish_helper.hpp"
 #include "geometry_msgs/msg/twist.hpp"
+#include "trim_by_distance.hpp"
 
 using namespace finenav;
 
@@ -178,6 +179,17 @@ int main(int argc, char** argv) {
 
     // /cmd_vel publisher — 由 post_plan 回调驱动，在每次规划成功后取第一步速度指令
     auto cmd_vel_pub = node->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
+
+    {
+        auto map_size = map_server->getLockedReadView()->getSize();
+        my_control_layer->set_on_pre_plan(
+        [map_size](finenav::PrePlanContext& ctx) -> bool {
+                ctx.ref_traj | finenav::TrimByDistance(map_size.x());
+                return true;
+        });
+    }
+
+
 
     my_control_layer->set_on_post_plan(
         [cmd_vel_pub](finenav::PostPlanContext& ctx) -> bool {

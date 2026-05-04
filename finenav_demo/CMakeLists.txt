@@ -19,6 +19,7 @@ set(dependencies
         finenav_mppi_controller
         finenav_core
         finenav_collision_model
+        finenav_motion_decorator
         nav_msgs
         geometry_msgs
         sensor_msgs

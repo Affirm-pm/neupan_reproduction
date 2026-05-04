@@ -161,7 +161,7 @@ private:
             return;
         }
 
-        // 生成直线参考轨迹并发布
+        // 生成直线参考轨迹并发布（裁剪由 control layer 的 prePlan 回调负责）
         auto ref_traj = generateStraightLineTrajectory(sx, sy, sz, gx, gy, gz);
         path_pub_->publish(ref_traj);
         line_path_nav_pub_->publish(convertTrajectoryToPath(ref_traj));
@@ -188,25 +188,15 @@ private:
         const double yaw = std::atan2(dy, dx);
         const auto   q   = quatFromYaw(yaw);
 
-        // 测试模式：仅发布终点单点，此时PathFollow和PathAlign Crititc 实际无效
-        {
+        for (int i = 0; i < num_points_; ++i) {
+            const double t = static_cast<double>(i) / static_cast<double>(num_points_ - 1);
             geometry_msgs::msg::Pose pose;
-            pose.position.x  = gx;
-            pose.position.y  = gy;
-            pose.position.z  = gz;
-            pose.orientation = q; // TODO: 应该使用goal_pose朝向才对，无所谓了
+            pose.position.x  = sx + t * dx;
+            pose.position.y  = sy + t * dy;
+            pose.position.z  = sz + t * dz;
+            pose.orientation = q;
             traj.poses.push_back(pose);
         }
-        // 完整直线路径（多点，用于正式导航）：
-        // for (int i = 0; i < num_points_; ++i) {
-        //     const double t = static_cast<double>(i) / static_cast<double>(num_points_ - 1);
-        //     geometry_msgs::msg::Pose pose;
-        //     pose.position.x  = sx + t * dx;
-        //     pose.position.y  = sy + t * dy;
-        //     pose.position.z  = sz + t * dz;
-        //     pose.orientation = q;
-        //     traj.poses.push_back(pose);
-        // }
         return traj;
     }
 
