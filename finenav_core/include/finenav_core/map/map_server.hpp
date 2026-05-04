@@ -50,7 +50,7 @@ public:
     using PostUpdateHook = std::function<void(const MapT& map)>;
 
     template <typename MsgT>
-    using Fuser = std::function<void(const MsgT& msg, MapT& map)>;
+    using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
 
     /**
      * @brief 构造 MapServer，初始化内部定时器以定期执行地图更新。

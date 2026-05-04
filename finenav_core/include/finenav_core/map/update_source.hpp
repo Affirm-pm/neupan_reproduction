@@ -41,7 +41,7 @@ public:
         double observation_keep_time_sec{0.0};
         double source_timeout_sec{0.0};
     };
-    using Fuser = std::function<void(const MsgT& msg, MapT& map)>;
+    using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
     UpdateSource(const std::string& source_name, SourceBufferPolicy policy, Fuser fuser);
     /** Thread-safe: 从任意线程推入一条消息。 */
     void enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp);
@@ -100,7 +100,7 @@ void UpdateSource<MapT, MsgT>::applyBuffered(MapT& map, const rclcpp::Time& now)
             << pending.size() << " buffered messages.");
     }
     for (const auto& item : pending) {
-        fuser_(item.msg, map);
+        fuser_(item.msg, item.stamp, map);
     }
 }
 template <MapConcept MapT, typename MsgT>

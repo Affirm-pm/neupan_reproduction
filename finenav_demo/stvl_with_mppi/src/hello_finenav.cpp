@@ -144,10 +144,22 @@ int main(int argc, char** argv) {
     auto laser_injector = map_server->addUpdateSource<pcl::PointCloud<pcl::PointXYZ>>(
         "front_laser",
         policy,
-        [stvl_manager, localizer](const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map) {
-            const auto & state = localizer->getState();
+        [stvl_manager, localizer](
+            const pcl::PointCloud<pcl::PointXYZ> & cloud,
+            const rclcpp::Time & stamp,       // 点云的原始采集时间戳
+            GridMap<Voxel> & map)
+        {
+            // 使用点云采集时刻的历史位姿，消除点云与位姿时间不同步导致的旋转漂移。
+            // 若该时刻已超出历史窗口或 localizer 尚未初始化，则降级到最新位姿。
+            const NavStateD state = [&]() -> NavStateD {
+                if (auto s = localizer->getStateAt(stamp)) {
+                    return *s;
+                }
+                return localizer->getState();
+            }();
+
             Eigen::Isometry3d T_map_body = Eigen::Isometry3d::Identity();
-            T_map_body.linear() = state.R.matrix();
+            T_map_body.linear()      = state.R.matrix();
             T_map_body.translation() = state.p;
             stvl_manager->InsertPointCloud(cloud, map, T_map_body);
         });

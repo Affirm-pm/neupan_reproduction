@@ -247,7 +247,7 @@ int main(int argc, char** argv) {
     auto laser_injector = map_server.addUpdateSource<Pointcloud>(
         "front_laser",
         policy,
-        [node](const Pointcloud& msg, GridMap<Voxel>& map) {
+        [node](const Pointcloud& msg, const rclcpp::Time& stamp, GridMap<Voxel>& map) {
             rclcpp::Time now = node->get_clock()->now();
             // 演示：假设激光击中地图中心 (0,0) 处的某个体素，只更新一次
             // 实际工程中应该根据传感器模型计算出命中位置
