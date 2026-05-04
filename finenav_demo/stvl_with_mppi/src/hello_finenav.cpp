@@ -39,36 +39,31 @@ int main(int argc, char** argv) {
     auto node = rclcpp::Node::make_shared("hello_finenav", options); // TODO: inhirent options?
 
     auto finenav_engine = std::make_shared<FineNavEngine>(node);
-    // FineNavEngine 构造时已自动创建并初始化：
-    //   - FineNavLocalizer  (finenav_engine->getLocalizer())
-    //   - Navigator         (finenav_engine->getNavigator())
-    //   - NavStateManager   (finenav_engine->getNavStateManager())
+
+    auto localizer = finenav_engine->getLocalizer();
 
     // 雷达相对车体的安装位姿（外参）。默认 Identity 表示雷达与车体原点重合。
     // TODO: 从 ROS 参数或 URDF 读取
     Eigen::Isometry3d T_body_lidar = Eigen::Isometry3d::Identity();
 
     auto stvl_manager = std::make_shared<StvlManager>(node, T_body_lidar);
+
     // ------------------------------ Launch Localization ----------------------------------
-    // Localizer 已由 FineNavEngine 自动创建。通过 getLocalizer() 直接使用。
+
     auto gt_pose_sub = node->create_subscription<geometry_msgs::msg::PoseStamped>(
         "ground_truth_pose",
         10,
-        [&finenav_engine, &node](const geometry_msgs::msg::PoseStamped& msg) {
-            // finenav_engine->getLocalizer().feedObservation(msg); // TODO: directly support odometry_msgs in the future
+        [localizer, &node](const geometry_msgs::msg::PoseStamped& msg) {
             geometry_msgs::msg::PoseWithCovarianceStamped pose_msg;
             pose_msg.header = msg.header;
             pose_msg.pose.pose = msg.pose;
 
-            // auto time = node->now() - msg.header.stamp;
-            // RCLCPP_INFO_STREAM(node->get_logger(), "Received GT pose with delay " << time.seconds() << " seconds.");
-
             static bool localizer_initialized = false;      // TODO: automatically iniitailize when receive the first pose_msg
             if (!localizer_initialized) {
-                finenav_engine->getLocalizer().setInitialPose(pose_msg);
+                localizer->setInitialPose(pose_msg);
                 localizer_initialized = true;
             } else {
-                finenav_engine->getLocalizer().feedObservation(pose_msg);
+                localizer->feedObservation(pose_msg);
             }
         }
     );
@@ -108,17 +103,17 @@ int main(int argc, char** argv) {
     auto terrain_analyzer = std::make_shared<TerrainAnalyzer>(
         map_server, node, passability_helper, costmap_helper);
 
-    map_server->registerPreUpdateHook([stvl_manager, &finenav_engine](GridMap<Voxel> & map) {
-        const auto & state = finenav_engine->getLocalizer().getState();
+    map_server->registerPreUpdateHook([stvl_manager, localizer](GridMap<Voxel> & map) {
+        const auto & state = localizer->getState();
         Eigen::Isometry3d T_map_body = Eigen::Isometry3d::Identity();
         T_map_body.linear() = state.R.matrix();
         T_map_body.translation() = state.p;
         stvl_manager->PruneExpiredCells(map, T_map_body);
     });
 
-    map_server->registerPostUpdateHook([node, map_cloud_helper, terrain_analyzer, finenav_engine](GridMap<Voxel> & map) {
+    map_server->registerPostUpdateHook([node, map_cloud_helper, terrain_analyzer, localizer](GridMap<Voxel> & map) {
 
-        terrain_analyzer->update(finenav_engine->getLocalizer().getState().p.z(), map);
+        terrain_analyzer->update(localizer->getState().p.z(), map);
 
         // /map_cloud 可视化：所有有效 Voxel，高度映射到颜色（蓝低红高，简化为白色）
         if (map_cloud_helper->hasSubscribers()) {
@@ -149,8 +144,8 @@ int main(int argc, char** argv) {
     auto laser_injector = map_server->addUpdateSource<pcl::PointCloud<pcl::PointXYZ>>(
         "front_laser",
         policy,
-        [stvl_manager, finenav_engine](const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map) {
-            const auto & state = finenav_engine->getLocalizer().getState();
+        [stvl_manager, localizer](const pcl::PointCloud<pcl::PointXYZ> & cloud, GridMap<Voxel> & map) {
+            const auto & state = localizer->getState();
             Eigen::Isometry3d T_map_body = Eigen::Isometry3d::Identity();
             T_map_body.linear() = state.R.matrix();
             T_map_body.translation() = state.p;
@@ -210,7 +205,7 @@ int main(int argc, char** argv) {
     auto nav_state_pub = node->create_publisher<nav_msgs::msg::Odometry>("nav_state", 10);
 
     while (rclcpp::ok()) {
-        auto robot_state = finenav_engine->getLocalizer().getState();
+        auto robot_state = localizer->getState();
 
         // Initialize with IIFE
         const auto nav_state_msg = [&node, &robot_state] {

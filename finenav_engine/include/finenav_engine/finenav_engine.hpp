@@ -17,25 +17,18 @@ class FineNavEngine {
 public:
 
     explicit FineNavEngine(const rclcpp::Node::SharedPtr& node) : node_(node) {
-        RCLCPP_INFO(node_->get_logger(), "[FineNavEngine] Initializing...");
+        RCLCPP_INFO(node_->get_logger(), "Initializing...");
 
-        // ── 1. Localizer ────────────────────────────────────────────────────
-        // TODO: 参数后续改为 generate_parameter_library 驱动
         localizer_ = std::make_unique<FineNavLocalizer>(node_);
-        RCLCPP_INFO(node_->get_logger(), "[FineNavEngine] Localizer ready.");
+        RCLCPP_INFO(node_->get_logger(), "Localizer ready.");
 
-        // ── 2. Navigator ────────────────────────────────────────────────────
-        // Navigator 遵循 NodeThread 模式，内部自建 pnode_ 并在独立线程中 spin。
-        // TODO: 参数后续改为 generate_parameter_library 驱动
         navigator_ = std::make_unique<Navigator>(node_);
-        RCLCPP_INFO(node_->get_logger(), "[FineNavEngine] Navigator ready.");
+        RCLCPP_INFO(node_->get_logger(), "Navigator ready.");
 
-        // ── 3. NavStateManager ──────────────────────────────────────────────
-        // TODO: Config 参数后续改为 generate_parameter_library 驱动
         nav_state_manager_ = std::make_unique<NavStateManager>(node_, *localizer_);
-        RCLCPP_INFO(node_->get_logger(), "[FineNavEngine] NavStateManager ready.");
+        RCLCPP_INFO(node_->get_logger(), "NavStateManager ready.");
 
-        RCLCPP_INFO(node_->get_logger(), "[FineNavEngine] All singletons initialized.");
+        RCLCPP_INFO(node_->get_logger(), "All singletons initialized.");
     }
 
     // 禁止复制，允许移动
@@ -46,17 +39,10 @@ public:
     ~FineNavEngine() = default;
 
     const rclcpp::Node::SharedPtr& getNode() const { return node_; }
+    FineNavLocalizer* getLocalizer() { return localizer_.get(); }
+    Navigator* getNavigator() { return navigator_.get(); }
+    NavStateManager* getNavStateManager() { return nav_state_manager_.get(); }
 
-    /** 返回全局唯一 Localizer 实例。 */
-    FineNavLocalizer& getLocalizer() { return *localizer_; }
-
-    /** 返回全局唯一 Navigator 实例。 */
-    Navigator& getNavigator() { return *navigator_; }
-
-    /** 返回全局唯一 NavStateManager 实例。 */
-    NavStateManager& getNavStateManager() { return *nav_state_manager_; }
-
-    // ── Map Resource ──────────────────────────────────────────────────────────
 
     template <typename MapT>
     [[nodiscard("Map resource was created but the handle was lost!")]]
@@ -93,7 +79,6 @@ public:
         return nullptr;
     }
 
-    // ── ControlLayer Factory ─────────────────────────────────────────────────
 
     /**
      * @brief 创建 ControlLayer 并自动注入框架回调：
@@ -143,7 +128,6 @@ public:
         return layer;
     }
 
-    // ── Pipeline Wiring ───────────────────────────────────────────────────────
 
     struct PipelineIO {
         std::string input_topic;
