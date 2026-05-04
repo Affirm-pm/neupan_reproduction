@@ -13,29 +13,18 @@
 
 #include "finenav_msgs/msg/nav_status.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
+#include "finenav_core/nav_state_manager_params.hpp"
 
 namespace finenav {
 
 /**
  * @brief NavStateManager — 系统唯一的导航状态管理实体。
  *
- * 宿主：Navigator 组件，通过 shared_ptr 与 ControlLayer 在进程内共享。
+ * 参数通过 generate_parameter_library 从 nav_state_manager.yaml 加载，
+ * 与 Navigator / FineNavLocalizer 保持一致的配置风格。
  *
- * 职责：
- *  1. 维护导航 FSM
- *  2. 通过内部定时器轮询 FineNavLocalizer，自主驱动状态转移
- *  3. 累积本次导航里程
- *  4. 向 /finenav/nav_status 发布 NavStatus 供外部监控
- *
- * FSM 转移：
- *  startEpisode(goal)  → NAVIGATING          （Navigator 在 BT 开始时调用）
- *  timer: dist < tol   → GOAL_REACHED        （自主检测）
- *  timer: 位移超时      → STUCK               （自主检测）
- *  timer: 定位异常      → LOCALIZATION_ERROR  （自主检测）
- *  setAborted()        → ABORTED             （Navigator 在 BT 整体 FAILURE 时调用）
- *  reset()             → IDLE               （Navigator 在 cancel / preempt 时调用）
- *
- * 线程安全：timerCallback() 与所有公开接口均受 mutex_ 保护。
+ * 构造时传入宿主节点，内部创建 ParamListener 读取参数（节点名须为
+ * "nav_state_manager"，与 yaml 顶层 key 一致）。
  */
 class NavStateManager {
 public:
@@ -48,22 +37,17 @@ public:
         LOCALIZATION_ERROR = finenav_msgs::msg::NavStatus::LOCALIZATION_ERROR,
     };
 
-    struct Config {
-        double goal_tolerance               = 0.25;
-        double stuck_dist_threshold         = 0.05;
-        double stuck_timeout_s              = 5.0;
-        double localization_cov_threshold   = 5.0;
-        double localization_stale_timeout_s = 1.0;
-        double monitor_rate_hz              = 10.0;
-        Config() = default;
-    };
+    /// Convenience alias for the generated parameter type.
+    using Params       = nav_state_manager::Params;
+    using ParamListener = nav_state_manager::ParamListener;
 
+    /**
+     * @brief 构造 NavStateManager。
+     * @param node      宿主节点（名称应为 "nav_state_manager"，与 yaml key 一致）
+     * @param localizer 依赖注入的定位器引用
+     */
     explicit NavStateManager(rclcpp::Node::SharedPtr node,
                              FineNavLocalizer&        localizer);
-
-    explicit NavStateManager(rclcpp::Node::SharedPtr node,
-                             FineNavLocalizer&        localizer,
-                             Config                   cfg);
 
     // ── Episode 边界接口（由 Navigator 调用）──────────────────────────────
 
@@ -99,7 +83,7 @@ public:
         RCLCPP_INFO(node_->get_logger(), "[NavStateManager] reset → IDLE.");
     }
 
-    // ── 查询接口（由 ControlLayer TrackingPolicy 轮询）────────────────────
+    // ── 查询接口 ──────────────────────────────────────────────────────────
 
     State getState() const {
         std::lock_guard<std::mutex> lk(mutex_);
@@ -124,12 +108,16 @@ private:
     // ── 内部定时器回调 ─────────────────────────────────────────────────────
 
     void timerCallback() {
-        // 在 mutex_ 外读取 localizer（localizer 有自己的读写锁）
         const auto robot_state = localizer_.getState();
         const auto covariance  = localizer_.getCovariance();
         const auto last_update = localizer_.getLastUpdateTime();
 
         std::lock_guard<std::mutex> lk(mutex_);
+
+        // 动态刷新参数
+        if (param_listener_->is_old(params_)) {
+            params_ = param_listener_->get_params();
+        }
 
         if (state_ != State::NAVIGATING) {
             publishLocked(robot_state);
@@ -145,18 +133,18 @@ private:
         last_pos_     = cur_pos;
         has_last_pos_ = true;
 
-        // ── 2. 定位异常检测 → LOCALIZATION_ERROR ────────────────────────
+        // ── 2. 定位异常检测 ──────────────────────────────────────────────
         const double pos_cov_trace = covariance.template block<3, 3>(0, 0).trace();
-        if (pos_cov_trace > cfg_.localization_cov_threshold) {
+        if (pos_cov_trace > params_.localization_cov_threshold) {
             state_ = State::LOCALIZATION_ERROR;
             RCLCPP_ERROR(node_->get_logger(),
                 "[NavStateManager] LOCALIZATION_ERROR: cov_trace=%.3f > %.3f",
-                pos_cov_trace, cfg_.localization_cov_threshold);
+                pos_cov_trace, params_.localization_cov_threshold);
             publishLocked(robot_state);
             return;
         }
         const double stale_s = (node_->now() - last_update).seconds();
-        if (stale_s > cfg_.localization_stale_timeout_s) {
+        if (stale_s > params_.localization_stale_timeout_s) {
             state_ = State::LOCALIZATION_ERROR;
             RCLCPP_ERROR(node_->get_logger(),
                 "[NavStateManager] LOCALIZATION_ERROR: localizer stale %.2f s", stale_s);
@@ -164,10 +152,10 @@ private:
             return;
         }
 
-        // ── 3. 目标到达检测 → GOAL_REACHED ──────────────────────────────
+        // ── 3. 目标到达检测 ──────────────────────────────────────────────
         const Eigen::Vector2d goal_pos(goal_pose_.position.x, goal_pose_.position.y);
         const double dist_to_goal = (cur_pos - goal_pos).norm();
-        if (dist_to_goal < cfg_.goal_tolerance) {
+        if (dist_to_goal < params_.goal_tolerance) {
             state_ = State::GOAL_REACHED;
             RCLCPP_INFO(node_->get_logger(),
                 "[NavStateManager] GOAL_REACHED. dist=%.3f m, traveled=%.2f m",
@@ -176,20 +164,20 @@ private:
             return;
         }
 
-        // ── 4. Stuck 检测 → STUCK ────────────────────────────────────────
+        // ── 4. Stuck 检测 ────────────────────────────────────────────────
         if (!stuck_ref_set_) {
             stuck_ref_pos_      = cur_pos;
             stuck_ref_set_      = true;
             stuck_window_start_ = node_->now();
         } else {
             const double moved = (cur_pos - stuck_ref_pos_).norm();
-            if (moved > cfg_.stuck_dist_threshold) {
+            if (moved > params_.stuck_dist_threshold) {
                 // 有足够移动，重置 stuck 检测窗口
                 stuck_ref_pos_      = cur_pos;
                 stuck_window_start_ = node_->now();
             } else {
                 const double elapsed = (node_->now() - stuck_window_start_).seconds();
-                if (elapsed > cfg_.stuck_timeout_s) {
+                if (elapsed > params_.stuck_timeout_s) {
                     state_ = State::STUCK;
                     RCLCPP_WARN(node_->get_logger(),
                         "[NavStateManager] STUCK: moved %.4f m in %.1f s.",
@@ -219,10 +207,11 @@ private:
     }
 
     // ── 数据成员 ──────────────────────────────────────────────────────────
-    rclcpp::Node::SharedPtr  node_;
-    FineNavLocalizer&         localizer_;
-    Config                    cfg_;
-    mutable std::mutex        mutex_;
+    rclcpp::Node::SharedPtr                    node_;
+    FineNavLocalizer&                          localizer_;
+    std::unique_ptr<ParamListener>             param_listener_;
+    Params                                     params_;
+    mutable std::mutex                         mutex_;
 
     State                     state_{State::IDLE};
     geometry_msgs::msg::Pose  goal_pose_;
@@ -243,26 +232,24 @@ private:
 
 } // namespace finenav
 
-// Out-of-class definitions to work around GCC bug #88165.
+// Out-of-class constructor definition
 inline finenav::NavStateManager::NavStateManager(
     rclcpp::Node::SharedPtr node,
     finenav::FineNavLocalizer& localizer)
-    : NavStateManager(std::move(node), localizer, Config{}) {}
-
-inline finenav::NavStateManager::NavStateManager(
-    rclcpp::Node::SharedPtr node,
-    finenav::FineNavLocalizer& localizer,
-    finenav::NavStateManager::Config cfg)
-    : node_(std::move(node)), localizer_(localizer), cfg_(cfg)
+    : node_(std::move(node)), localizer_(localizer)
 {
+    param_listener_ = std::make_unique<ParamListener>(node_);
+    params_ = param_listener_->get_params();
+
     status_pub_ = node_->create_publisher<finenav_msgs::msg::NavStatus>(
         "/finenav/nav_status", rclcpp::SystemDefaultsQoS());
 
     monitor_timer_ = node_->create_wall_timer(
-        std::chrono::duration<double>(1.0 / cfg_.monitor_rate_hz),
+        std::chrono::duration<double>(1.0 / params_.monitor_rate_hz),
         std::bind(&NavStateManager::timerCallback, this));
 
     RCLCPP_INFO(node_->get_logger(),
-        "[NavStateManager] initialized (monitor %.1f Hz).", cfg_.monitor_rate_hz);
+        "[NavStateManager] initialized (monitor %.1f Hz, goal_tol=%.2f m).",
+        params_.monitor_rate_hz, params_.goal_tolerance);
 }
 

@@ -71,14 +71,14 @@ protected:
     {
         node_ = rclcpp::Node::make_shared("localizer_unit_test");
 
-        fn::LocalizerOptions opts;
-        opts.update_rate_hz        = 100.0;
-        opts.pose_smoothing_steps  = 1;
-        opts.pose_gate_dist        = 20.0;
-        opts.model_opts.vel_noise_std   = 0.1;
-        opts.model_opts.omega_noise_std = 0.1;
+        rclcpp::NodeOptions pnode_opts;
+        pnode_opts.append_parameter_override("update_rate_hz",       100.0);
+        pnode_opts.append_parameter_override("pose_smoothing_steps", int64_t{1});
+        pnode_opts.append_parameter_override("pose_gate_dist",       20.0);
+        pnode_opts.append_parameter_override("model.vel_noise_std",   0.1);
+        pnode_opts.append_parameter_override("model.omega_noise_std", 0.1);
 
-        localizer_ = std::make_unique<fn::FineNavLocalizer>(node_, opts);
+        localizer_ = std::make_unique<fn::FineNavLocalizer>(node_, pnode_opts);
     }
 
     /// Build a minimal PoseMsg at (x, y, yaw) with diagonal σ² covariance.

@@ -18,50 +18,60 @@ namespace finenav {
 //  Constructor
 // ============================================================================
 FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
-                                   LocalizerOptions        opts)
+                                   rclcpp::NodeOptions pnode_overrides)
     : parent_node_(std::move(parent_node))
-    , opts_(opts)
-    // max_delay_step = ceil(max_delay_sec * update_rate_hz), minimum 1
-    , eskf_(opts.model_opts,
-            std::max(1, static_cast<int>(
-                std::ceil(opts.max_delay_sec * opts.update_rate_hz))))
-    , pose_queue_ (static_cast<std::size_t>(std::max(1, opts.pose_smoothing_steps)),
-                   opts.max_obs_queue_size)
-    , twist_queue_(static_cast<std::size_t>(std::max(1, opts.twist_smoothing_steps)),
-                   opts.max_obs_queue_size)
     , logger_(rclcpp::get_logger("finenav.FineNavLocalizer"))
 {
-    // Propagate use_sim_time so pnode_ shares the same clock domain as parent_node_.
-    // We forward only this one parameter — not the full NodeOptions — because the
-    // parent's options may carry overrides that do not belong on the child node.
-    rclcpp::NodeOptions pnode_opts;
-    pnode_opts.append_parameter_override(
+    // ── 创建私有子节点（参数前缀由 yaml 顶层 key "finenav_localizer" 决定）──
+    pnode_overrides.append_parameter_override(
         "use_sim_time",
         parent_node_->get_parameter("use_sim_time").as_bool());
     pnode_ = rclcpp::Node::make_shared(
         "finenav_localizer",
         parent_node_->get_name(),
-        pnode_opts);
-    pnode_thread_ = std::make_unique<NodeThread>(pnode_);
+        pnode_overrides);
 
+    // ── 读取参数 ──────────────────────────────────────────────────────────────
+    param_listener_ = std::make_unique<ParamListener>(pnode_);
+    params_ = param_listener_->get_params();
+
+    // ── 初始化 ESKF ──────────────────────────────────────────────────────────
+    NavigationModelD::Options model_opts;
+    model_opts.vel_noise_std   = params_.model.vel_noise_std;
+    model_opts.omega_noise_std = params_.model.omega_noise_std;
+
+    const int max_delay_step = static_cast<int>(std::max(
+        int64_t{1},
+        static_cast<int64_t>(std::ceil(params_.max_delay_sec * params_.update_rate_hz))));
+    eskf_ = ESKFd(model_opts, max_delay_step);
+
+    pose_queue_  = std::make_unique<PoseObsQueue>(
+        static_cast<std::size_t>(std::max(int64_t{1}, params_.pose_smoothing_steps)),
+        static_cast<std::size_t>(params_.max_obs_queue_size));
+    twist_queue_ = std::make_unique<TwistObsQueue>(
+        static_cast<std::size_t>(std::max(int64_t{1}, params_.twist_smoothing_steps)),
+        static_cast<std::size_t>(params_.max_obs_queue_size));
+
+    // ── TF broadcaster ───────────────────────────────────────────────────────
     tf_br_ = std::make_shared<tf2_ros::TransformBroadcaster>(pnode_);
 
+    // ── 更新定时器 ────────────────────────────────────────────────────────────
     const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::duration<double>(1.0 / opts_.update_rate_hz));
-
-    // Use pnode_'s own clock: timer fires on pnode_'s executor thread, so
-    // now() must also come from pnode_ to avoid stale-clock issues with sim time.
+        std::chrono::duration<double>(1.0 / params_.update_rate_hz));
     update_timer_ = rclcpp::create_timer(
         pnode_, pnode_->get_clock(), period,
         [this]() { timerCallback(); });
 
+    // ── 启动 spin 线程（最后执行，确保所有订阅/服务已注册）────────────────────
+    pnode_thread_ = std::make_unique<NodeThread>(pnode_);
+
     RCLCPP_INFO(
         logger_,
         "[FineNavLocalizer] Created. rate=%.1f Hz  max_delay=%.3f s  "
-        "max_delay_step=%d  pose_smooth=%d  twist_smooth=%d",
-        opts_.update_rate_hz, opts_.max_delay_sec,
+        "max_delay_step=%d  pose_smooth=%ld  twist_smooth=%ld",
+        params_.update_rate_hz, params_.max_delay_sec,
         eskf_.maxDelayStep(),
-        opts_.pose_smoothing_steps, opts_.twist_smoothing_steps);
+        params_.pose_smoothing_steps, params_.twist_smoothing_steps);
 }
 
 // ============================================================================
@@ -88,8 +98,8 @@ void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
         // reinitialize() resets nominal state + ALL delay slots in TimeDelayKF
         // and resets accumulated_delay_times_ to 1e15.
         eskf_.reinitialize(init_state, P);
-        pose_queue_.clear();
-        twist_queue_.clear();
+        pose_queue_->clear();
+        twist_queue_->clear();
         last_predict_time_.reset();
     }
 
@@ -113,18 +123,18 @@ void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
 // ============================================================================
 void FineNavLocalizer::feedObservation(const PoseMsg & msg)
 {
-    pose_queue_.push(msg);
+    pose_queue_->push(msg);
     RCLCPP_DEBUG(logger_,
         "[FineNavLocalizer] feedObservation<Pose>  queued (queue=%zu)",
-        pose_queue_.size());
+        pose_queue_->size());
 }
 
 void FineNavLocalizer::feedObservation(const TwistMsg & msg)
 {
-    twist_queue_.push(msg);
+    twist_queue_->push(msg);
     RCLCPP_DEBUG(logger_,
         "[FineNavLocalizer] feedObservation<Twist> queued (queue=%zu)",
-        twist_queue_.size());
+        twist_queue_->size());
 }
 
 // ============================================================================
@@ -164,7 +174,7 @@ void FineNavLocalizer::timerCallback()
     std::lock_guard<std::mutex> lk(filter_mutex_);
 
     // ── 1. Compute dt ──────────────────────────────────────────────────────
-    double dt = 1.0 / opts_.update_rate_hz;  // nominal fallback (first cycle)
+    double dt = 1.0 / params_.update_rate_hz;  // nominal fallback (first cycle)
     if (last_predict_time_.has_value()) {
         const double meas_dt = (now - *last_predict_time_).seconds();
         if (meas_dt < 0.0) {
@@ -174,11 +184,11 @@ void FineNavLocalizer::timerCallback()
             last_predict_time_ = now;
             return;
         }
-        if (meas_dt > opts_.max_dt_sec) {
+        if (meas_dt > params_.max_dt_sec) {
             RCLCPP_WARN(logger_,
                 "[FineNavLocalizer] Large dt (%.4f s > max %.4f s) — clamped.",
-                meas_dt, opts_.max_dt_sec);
-            dt = opts_.max_dt_sec;
+                meas_dt, params_.max_dt_sec);
+            dt = params_.max_dt_sec;
         } else {
             dt = meas_dt;
         }
@@ -196,12 +206,12 @@ void FineNavLocalizer::timerCallback()
     // back, but we process only the items that were present at the start of
     // this tick.
     {
-        const std::size_t n = pose_queue_.size();
+        const std::size_t n = pose_queue_->size();
         RCLCPP_DEBUG(logger_,
             "[FineNavLocalizer] pose observations this tick: %zu", n);
 
         for (std::size_t i = 0u; i < n; ++i) {
-            const PoseMsg pose = pose_queue_.pop_increment_age();
+            const PoseMsg pose = pose_queue_->pop_increment_age();
 
             double delay_time = (now - rclcpp::Time(pose.header.stamp)).seconds();
 
@@ -229,12 +239,12 @@ void FineNavLocalizer::timerCallback()
 
     // ── 4. Process twist observations ──────────────────────────────────────
     {
-        const std::size_t n = twist_queue_.size();
+        const std::size_t n = twist_queue_->size();
         RCLCPP_DEBUG(logger_,
             "[FineNavLocalizer] twist observations this tick: %zu", n);
 
         for (std::size_t i = 0u; i < n; ++i) {
-            const TwistMsg twist = twist_queue_.pop_increment_age();
+            const TwistMsg twist = twist_queue_->pop_increment_age();
 
             double delay_time = (now - rclcpp::Time(twist.header.stamp)).seconds();
 
@@ -303,7 +313,7 @@ void FineNavLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
     // processing steps less aggressive, resulting in a smooth correction
     // spread over N ticks.
     const Eigen::Matrix<double, 6, 6> R_eff =
-        R_raw * static_cast<double>(opts_.pose_smoothing_steps);
+        R_raw * static_cast<double>(params_.pose_smoothing_steps);
 
     // Linearise at the nominal state from the time of capture, not the
     // current nominal.  This gives the correct innovation z − h(x̂_{k−d})
@@ -318,10 +328,10 @@ void FineNavLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
 
-    if (d2 > opts_.pose_gate_dist) {
+    if (d2 > params_.pose_gate_dist) {
         RCLCPP_WARN(logger_,
             "[FineNavLocalizer] applyUpdate<Pose> rejected by Mahalanobis gate "
-            "(d²=%.4f > threshold=%.4f).", d2, opts_.pose_gate_dist);
+            "(d²=%.4f > threshold=%.4f).", d2, params_.pose_gate_dist);
         return;
     }
 
@@ -339,7 +349,7 @@ void FineNavLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
     auto [lin_vel, ang_vel, R_raw] = extractObservation(msg);
 
     const Eigen::Matrix<double, 6, 6> R_eff =
-        R_raw * static_cast<double>(opts_.twist_smoothing_steps);
+        R_raw * static_cast<double>(params_.twist_smoothing_steps);
 
     // Same as pose: linearise at the historical nominal from delay_step ticks ago.
     const auto obs = NavigationModelD::observeVelocity(
@@ -351,10 +361,10 @@ void FineNavLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
 
-    if (d2 > opts_.twist_gate_dist) {
+    if (d2 > params_.twist_gate_dist) {
         RCLCPP_WARN(logger_,
             "[FineNavLocalizer] applyUpdate<Twist> rejected by Mahalanobis gate "
-            "(d²=%.4f > threshold=%.4f).", d2, opts_.twist_gate_dist);
+            "(d²=%.4f > threshold=%.4f).", d2, params_.twist_gate_dist);
         return;
     }
 

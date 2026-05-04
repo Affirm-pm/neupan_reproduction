@@ -1,0 +1,85 @@
+finenav_localizer:
+  update_rate_hz: {
+    type: double,
+    default_value: 100.0,
+    description: "Timer frequency [Hz] for the ESKF update loop",
+    validation: {
+      bounds<>: [1.0, 1000.0]
+    }
+  }
+  max_delay_sec: {
+    type: double,
+    default_value: 0.5,
+    description: "Maximum tolerable observation delay [s]",
+    validation: {
+      bounds<>: [0.0, 5.0]
+    }
+  }
+  pose_smoothing_steps: {
+    type: int,
+    default_value: 1,
+    description: "Number of times a pose observation is reused; R is scaled by this factor",
+    validation: {
+      bounds<>: [1, 20]
+    }
+  }
+  twist_smoothing_steps: {
+    type: int,
+    default_value: 1,
+    description: "Number of times a twist observation is reused; R is scaled by this factor",
+    validation: {
+      bounds<>: [1, 20]
+    }
+  }
+  pose_gate_dist: {
+    type: double,
+    default_value: 12.59,
+    description: "Mahalanobis gate distance for pose observations (chi^2(6) 95%)",
+    validation: {
+      bounds<>: [0.0, 1000.0]
+    }
+  }
+  twist_gate_dist: {
+    type: double,
+    default_value: 12.59,
+    description: "Mahalanobis gate distance for twist observations (chi^2(6) 95%)",
+    validation: {
+      bounds<>: [0.0, 1000.0]
+    }
+  }
+  max_dt_sec: {
+    type: double,
+    default_value: 0.5,
+    description: "Upper bound clamp for dt [s]",
+    validation: {
+      bounds<>: [0.001, 5.0]
+    }
+  }
+  max_obs_queue_size: {
+    type: int,
+    default_value: 64,
+    description: "Per-type observation queue capacity",
+    validation: {
+      bounds<>: [1, 1024]
+    }
+  }
+  model:
+    vel_noise_std: {
+      type: double,
+      default_value: 0.10,
+      description: "Linear velocity process noise std [m/s/√s]",
+      validation: {
+        bounds<>: [0.000001, 100.0]
+      }
+    }
+    omega_noise_std: {
+      type: double,
+      default_value: 0.10,
+      description: "Angular velocity process noise std [rad/s/√s]",
+      validation: {
+        bounds<>: [0.000001, 100.0]
+      }
+    }
+
+
+
