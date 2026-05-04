@@ -71,6 +71,11 @@ finenav_localizer:
       bounds<>: [0.1, 60.0]
     }
   }
+  publish_tf: {
+    type: bool,
+    default_value: false,
+    description: "Whether to broadcast the map->base_link TF transform on each filter update tick",
+  }
   model:
     vel_noise_std: {
       type: double,

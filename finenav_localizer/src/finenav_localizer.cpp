@@ -55,8 +55,10 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     // ── State history buffer ──────────────────────────────────────────────────
     state_buffer_ = std::make_shared<NavStateBuffer>(params_.history_duration_sec);
 
-    // ── TF broadcaster ───────────────────────────────────────────────────────
-    tf_br_ = std::make_shared<tf2_ros::TransformBroadcaster>(pnode_);
+    // ── TF broadcaster (only if publish_tf is enabled) ───────────────────────
+    if (params_.publish_tf) {
+        tf_br_ = std::make_shared<tf2_ros::TransformBroadcaster>(pnode_);
+    }
 
     // ── 更新定时器 ────────────────────────────────────────────────────────────
     const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -294,22 +296,24 @@ void FineNavLocalizer::timerCallback()
     // ── 6. Broadcast TF: map → base_link ───────────────────────────────────
     const NavStateD & s = eskf_.getState();
 
-    geometry_msgs::msg::TransformStamped tf;
-    tf.header.stamp    = now;
-    tf.header.frame_id = "map";
-    tf.child_frame_id  = "base_link";
+    if (tf_br_) {
+        geometry_msgs::msg::TransformStamped tf;
+        tf.header.stamp    = now;
+        tf.header.frame_id = "map";
+        tf.child_frame_id  = "base_link";
 
-    tf.transform.translation.x = s.p.x();
-    tf.transform.translation.y = s.p.y();
-    tf.transform.translation.z = s.p.z();
+        tf.transform.translation.x = s.p.x();
+        tf.transform.translation.y = s.p.y();
+        tf.transform.translation.z = s.p.z();
 
-    const Eigen::Quaterniond q(s.R.matrix());
-    tf.transform.rotation.w = q.w();
-    tf.transform.rotation.x = q.x();
-    tf.transform.rotation.y = q.y();
-    tf.transform.rotation.z = q.z();
+        const Eigen::Quaterniond q(s.R.matrix());
+        tf.transform.rotation.w = q.w();
+        tf.transform.rotation.x = q.x();
+        tf.transform.rotation.y = q.y();
+        tf.transform.rotation.z = q.z();
 
-    tf_br_->sendTransform(tf);
+        tf_br_->sendTransform(tf);
+    }
 
     RCLCPP_DEBUG(logger_,
         "[FineNavLocalizer] tick  |p|=%.4f  |v|=%.4f  |ω|=%.4f",

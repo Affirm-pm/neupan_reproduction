@@ -131,7 +131,7 @@ private:
     rclcpp::Node::SharedPtr                        pnode_;
     std::unique_ptr<NodeThread>                    pnode_thread_;
     rclcpp::TimerBase::SharedPtr                   update_timer_;
-    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_;
+    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_;  // null when publish_tf is false
 
     // ── Parameters ──────────────────────────────────────────────────────────
     std::unique_ptr<ParamListener> param_listener_;
