@@ -12,10 +12,10 @@ namespace finenav {
 
 consteval uint32_t ProfileToMsgMask(const IOProfile& p) {
     uint32_t mask = 0;
-    if (p.pose)  mask = 1;
-    if (p.vel)   mask = 2;
-    if (p.accel) mask = 4;
-    if (p.time)  mask = 8;
+    if (p.pose)  mask |= 1;
+    if (p.vel)   mask |= 2;
+    if (p.accel) mask |= 4;
+    if (p.time)  mask |= 8;
     return mask;
 }
 
