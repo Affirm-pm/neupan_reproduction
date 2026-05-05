@@ -27,11 +27,7 @@ set(ros_dependencies
         finenav_util
 )
 
-# Generate parameter library for NavStateManager
-generate_parameter_library(
-        nav_state_manager_params
-        src/nav_state_manager.yaml
-)
+# Generate parameter library for NavStateManager — moved to finenav_navigator
 
 install(DIRECTORY include/
         DESTINATION include/
@@ -57,11 +53,6 @@ ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 install(TARGETS ${PROJECT_NAME}
         EXPORT ${PROJECT_NAME}Targets
         INCLUDES DESTINATION include
-)
-# Install the generated parameter header so downstream packages can find it
-install(
-        FILES ${CMAKE_CURRENT_BINARY_DIR}/include/finenav_core/nav_state_manager_params.hpp
-        DESTINATION include/finenav_core
 )
 ament_export_dependencies(
         fmt

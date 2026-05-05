@@ -7,7 +7,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include "finenav_core/plan/control_layer.hpp"
 #include "finenav_core/map/map_server.hpp"
-#include "finenav_core/nav_state_manager.hpp"
+#include "finenav_navigator/nav_state_manager.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/navigator.hpp"
 

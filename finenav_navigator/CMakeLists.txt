@@ -13,8 +13,11 @@ find_package(rclcpp_action REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(generate_parameter_library REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
 find_package(finenav_msgs REQUIRED)
 find_package(finenav_util REQUIRED)
+find_package(finenav_localizer REQUIRED)
 
 include_directories(include)
 
@@ -24,8 +27,10 @@ set(dependencies
         ament_index_cpp
         behaviortree_cpp
         generate_parameter_library
+        eigen3_cmake_module
         finenav_msgs
         finenav_util
+        finenav_localizer
 )
 
 # Library
@@ -34,15 +39,23 @@ generate_parameter_library(
         src/finenav_navigator.yaml
 )
 
+generate_parameter_library(
+        nav_state_manager_params
+        src/nav_state_manager.yaml
+)
+
 add_library(finenav_navigator STATIC
         src/naviagtor.cpp
         src/behavior_tree_engine.cpp
+        src/nav_state_manager.cpp
 )
 ament_target_dependencies(finenav_navigator
         ${dependencies}
 )
 target_link_libraries(finenav_navigator
         navigator_params
+        nav_state_manager_params
+        Eigen3::Eigen
 )
 
 # Plugins
@@ -69,6 +82,10 @@ install(TARGETS finenav_compute_plan_behavior
 
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
+install(
+        FILES ${CMAKE_CURRENT_BINARY_DIR}/include/finenav_navigator/nav_state_manager_params.hpp
+        DESTINATION include/finenav_navigator
+)
 
 #if (BUILD_TESTING)
 #    find_package(ament_cmake_gtest REQUIRED)
@@ -79,6 +96,6 @@ install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
 # Export
 ament_export_include_directories(include)
 ament_export_libraries(finenav_navigator)
-ament_export_dependencies(${dependencies})
+ament_export_dependencies(${dependencies} Eigen3)
 
 ament_package()
