@@ -203,13 +203,9 @@ private:
             return;
         }
 
-        // 取消上一个活跃目标
-        if (active_goal_handle_) {
-            RCLCPP_INFO(this->get_logger(), "Cancelling previous navigation goal.");
-            nav_action_client_->async_cancel_goal(active_goal_handle_);
-            active_goal_handle_ = nullptr;
-        }
-
+        // 直接发送新目标，SimpleActionServer 的 preempt 机制会处理抢断。
+        // 不要先 cancel 旧目标，否则 cancel 与新 goal 同时到达时，
+        // terminate_all() 会把 pending 一并 abort，导致新目标被丢弃。
         NavigateToPose::Goal goal_msg;
         goal_msg.pose          = goal_pose_stamped;
         goal_msg.behavior_tree = behavior_tree_;
