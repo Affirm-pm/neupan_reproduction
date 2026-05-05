@@ -49,7 +49,7 @@ public:
         constexpr const char* kPathTopic        = "/hello_finenav/line_path";
         constexpr const char* kNavStateTopic    = "/nav_state";
         constexpr const char* kMapFrame         = "map";
-        constexpr const char* kActionServer     = "navigate_to_pose";  // Navigator action server
+        constexpr const char* kActionServer     = "/hello_finenav/navigate_to_pose";  // Navigator action server
         constexpr const char* kBehaviorTree     = "NavigateToPose";    // BT id in navigate_to_pose.xml
         constexpr const char* kMppiPlanTopic    = "/hello_finenav/mppi_layer_plan";
         constexpr const char* kNavPathTopic     = "/mppi_path";
