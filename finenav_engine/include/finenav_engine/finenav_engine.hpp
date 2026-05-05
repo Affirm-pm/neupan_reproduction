@@ -37,6 +37,20 @@ public:
             p.orientation.z = q.z();
             return p;
         });
+
+        // 注入机器人速度提供函数，供 IsGoalReached 等条件节点读取
+        navigator_->set_robot_twist_provider([this]() -> geometry_msgs::msg::Twist {
+            const auto& state = localizer_->getState();
+            geometry_msgs::msg::Twist t;
+            const Eigen::Vector3d v_body = state.R.inverse() * state.v;
+            t.linear.x  = v_body.x();
+            t.linear.y  = v_body.y();
+            t.linear.z  = v_body.z();
+            t.angular.x = state.omega.x();
+            t.angular.y = state.omega.y();
+            t.angular.z = state.omega.z();
+            return t;
+        });
         RCLCPP_INFO(node_->get_logger(), "Navigator ready.");
 
 

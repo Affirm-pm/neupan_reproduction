@@ -78,9 +78,12 @@ void Navigator::execute()
             return;
         }
 
-        // 每 tick 前将最新机器人位姿注入 Blackboard，供条件节点读取
+        // 每 tick 前将最新机器人位姿和速度注入 Blackboard，供条件节点读取
         if (robot_pose_provider_) {
             blackboard->set<geometry_msgs::msg::Pose>("robot_pose", robot_pose_provider_());
+        }
+        if (robot_twist_provider_) {
+            blackboard->set<geometry_msgs::msg::Twist>("robot_twist", robot_twist_provider_());
         }
 
         auto status = tree_.tickExactlyOnce();

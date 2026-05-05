@@ -7,6 +7,7 @@
 #include <functional>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 
 #include "finenav_navigator/behavior_tree_engine.hpp"
 
@@ -36,6 +37,7 @@ public:
     using ActionT            = finenav_msgs::action::NavigateToPose;
     using ActionServer       = SimpleActionServer<ActionT>;
     using RobotPoseProvider  = std::function<geometry_msgs::msg::Pose()>;
+    using RobotTwistProvider = std::function<geometry_msgs::msg::Twist()>;
 
     explicit Navigator(rclcpp::Node::SharedPtr parent_node);
 
@@ -56,6 +58,17 @@ public:
         robot_pose_provider_ = std::move(provider);
     }
 
+    /**
+     * @brief 注入机器人速度提供函数。
+     *
+     * 每次 BT tick 前调用，将最新速度写入 Blackboard ("robot_twist")，
+     * 供 IsGoalReached 等条件节点读取。
+     * 由 FineNavEngine 在构造时自动注入。
+     */
+    void set_robot_twist_provider(RobotTwistProvider provider) {
+        robot_twist_provider_ = std::move(provider);
+    }
+
 private:
     void execute();
 
@@ -70,7 +83,8 @@ private:
     finenav_navigator::Params                         params_;
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;
 
-    RobotPoseProvider robot_pose_provider_;
+    RobotPoseProvider  robot_pose_provider_;
+    RobotTwistProvider robot_twist_provider_;
 
     BT::Tree tree_;
 };

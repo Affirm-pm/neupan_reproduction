@@ -17,8 +17,10 @@
     <BehaviorTree ID="NavigateToPose">
         <ReactiveFallback name="NavigateOrSucceed">
             <IsGoalReached  robot_pose="{robot_pose}"
+                            robot_twist="{robot_twist}"
                             goal="{goal}"
-                            tolerance="0.25"/>
+                            tolerance="0.25"
+                            speed_tolerance="0.1"/>
             <ComputePlan    action_name="/hello_finenav/mppi_layer"
                             goal="{goal}"
                             planner_id="finenav_mppi_controller"/>
@@ -29,8 +31,10 @@
     <BehaviorTree ID="NavigateWithStuckDetection">
         <ReactiveFallback name="NavigateOrSucceed">
             <IsGoalReached  robot_pose="{robot_pose}"
+                            robot_twist="{robot_twist}"
                             goal="{goal}"
-                            tolerance="0.25"/>
+                            tolerance="0.25"
+                            speed_tolerance="0.1"/>
             <ReactiveSequence name="TrackUnlessStuck">
                 <Inverter>
                     <IsStuck robot_pose="{robot_pose}"
