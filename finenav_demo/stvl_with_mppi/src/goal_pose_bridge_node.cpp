@@ -12,7 +12,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 
-#include "finenav_msgs/action/compute_plan.hpp"
+#include "finenav_msgs/action/navigate_to_pose.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <nav_msgs/msg/path.hpp>
@@ -39,8 +39,8 @@ geometry_msgs::msg::Quaternion quatFromYaw(double yaw)
 
 class GoalPoseLinePathTestNode : public rclcpp::Node {
 public:
-    using ComputePlan = finenav_msgs::action::ComputePlan;
-    using GoalHandleComputePlan = rclcpp_action::ClientGoalHandle<ComputePlan>;
+    using NavigateToPose        = finenav_msgs::action::NavigateToPose;
+    using GoalHandleNavigate    = rclcpp_action::ClientGoalHandle<NavigateToPose>;
 
     GoalPoseLinePathTestNode()
     : rclcpp::Node("goal_pose_bridge_node")
@@ -49,8 +49,8 @@ public:
         constexpr const char* kPathTopic        = "/hello_finenav/line_path";
         constexpr const char* kNavStateTopic    = "/nav_state";
         constexpr const char* kMapFrame         = "map";
-        constexpr const char* kActionServer     = "/hello_finenav/mppi_layer";
-        constexpr const char* kPlannerId        = "finenav_mppi_controller";
+        constexpr const char* kActionServer     = "navigate_to_pose";  // Navigator action server
+        constexpr const char* kBehaviorTree     = "NavigateToPose";    // BT id in navigate_to_pose.xml
         constexpr const char* kMppiPlanTopic    = "/hello_finenav/mppi_layer_plan";
         constexpr const char* kNavPathTopic     = "/mppi_path";
         constexpr const char* kLinePathNavTopic = "/line_path_nav";
@@ -59,7 +59,7 @@ public:
         path_topic_          = kPathTopic;
         map_frame_           = kMapFrame;
         action_server_name_  = kActionServer;
-        planner_id_          = kPlannerId;
+        behavior_tree_       = kBehaviorTree;
         mppi_plan_topic_     = kMppiPlanTopic;
         nav_path_topic_      = kNavPathTopic;
         line_path_nav_topic_ = kLinePathNavTopic;
@@ -70,10 +70,10 @@ public:
         nav_path_pub_      = this->create_publisher<nav_msgs::msg::Path>(nav_path_topic_, 10);
         line_path_nav_pub_ = this->create_publisher<nav_msgs::msg::Path>(line_path_nav_topic_, 10);
 
-        // Action 客户端
-        action_client_ = rclcpp_action::create_client<ComputePlan>(this, action_server_name_);
+        // NavigateToPose Action 客户端（指向 Navigator）
+        nav_action_client_ = rclcpp_action::create_client<NavigateToPose>(this, action_server_name_);
 
-        // 订阅 nav_state 获取机器人位姿（替代 TF lookup）
+        // 订阅 nav_state 获取机器人位姿
         nav_state_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
             kNavStateTopic, 10,
             [this](const nav_msgs::msg::Odometry::SharedPtr msg) {
@@ -82,25 +82,22 @@ public:
                 has_pose_ = true;
             });
 
-        // 直接订阅 /goal_pose（不再经过 MessageFilter）
+        // 订阅 /goal_pose
         goal_sub_raw_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
             kGoalTopic, 10,
             [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
                 this->onGoal(msg);
             });
 
-        // 订阅 MPPI 规划结果
+        // 订阅 MPPI 规划结果并可视化
         mppi_plan_sub_ = this->create_subscription<finenav_msgs::msg::Trajectory>(
             mppi_plan_topic_, 10,
             std::bind(&GoalPoseLinePathTestNode::mppiPlanCallback, this, std::placeholders::_1));
 
         RCLCPP_INFO(this->get_logger(),
-                    "Ready. goal_topic=%s  path_topic=%s  action_server=%s  planner_id=%s",
+                    "Ready. goal_topic=%s  path_topic=%s  nav_action_server=%s  bt=%s",
                     kGoalTopic, path_topic_.c_str(),
-                    action_server_name_.c_str(), planner_id_.c_str());
-        RCLCPP_INFO(this->get_logger(),
-                    "nav_state topic=%s  mppi_plan topic=%s  nav_path topic=%s",
-                    kNavStateTopic, mppi_plan_topic_.c_str(), nav_path_topic_.c_str());
+                    action_server_name_.c_str(), behavior_tree_.c_str());
     }
 
 private:
@@ -119,11 +116,10 @@ private:
         path.header.stamp    = this->now();
         path.header.frame_id = map_frame_;
         path.poses.reserve(traj.poses.size());
-        for (size_t i = 0; i < traj.poses.size(); ++i) {
+        for (const auto& p : traj.poses) {
             geometry_msgs::msg::PoseStamped ps;
-            ps.header.stamp    = path.header.stamp;
-            ps.header.frame_id = map_frame_;
-            ps.pose            = traj.poses[i];
+            ps.header = path.header;
+            ps.pose   = p;
             path.poses.push_back(ps);
         }
         return path;
@@ -131,14 +127,12 @@ private:
 
     void onGoal(const geometry_msgs::msg::PoseStamped::SharedPtr msg)
     {
-        // 从缓存的 nav_state 获取机器人起始位姿
         geometry_msgs::msg::Pose start_pose;
         {
             std::lock_guard<std::mutex> lk(pose_mutex_);
             if (!has_pose_) {
                 RCLCPP_WARN(this->get_logger(),
-                            "No nav_state received yet, cannot compute start pose. "
-                            "Waiting for /nav_state ...");
+                            "No nav_state received yet, cannot build reference path.");
                 return;
             }
             start_pose = latest_pose_;
@@ -157,19 +151,19 @@ private:
 
         const double dx = gx - sx, dy = gy - sy, dz = gz - sz;
         if (std::sqrt(dx*dx + dy*dy + dz*dz) < 1e-6) {
-            RCLCPP_WARN(this->get_logger(), "Start and goal coincide, skipping");
+            RCLCPP_WARN(this->get_logger(), "Start and goal coincide, skipping.");
             return;
         }
 
-        // 生成直线参考轨迹并发布（裁剪由 control layer 的 prePlan 回调负责）
+        // 1. 生成直线参考轨迹并发布到 line_path（ControlLayer prePlan 读取）
         auto ref_traj = generateStraightLineTrajectory(sx, sy, sz, gx, gy, gz);
         path_pub_->publish(ref_traj);
         line_path_nav_pub_->publish(convertTrajectoryToPath(ref_traj));
         RCLCPP_INFO(this->get_logger(),
                     "Published reference trajectory: %zu points", ref_traj.poses.size());
 
-        // 发送 Action Goal
-        sendActionGoal(msg->pose);
+        // 2. 向 Navigator 发送 NavigateToPose action goal
+        sendNavigateGoal(*msg);
     }
 
     finenav_msgs::msg::Trajectory generateStraightLineTrajectory(
@@ -200,50 +194,66 @@ private:
         return traj;
     }
 
-    void sendActionGoal(const geometry_msgs::msg::Pose& goal_pose)
+    void sendNavigateGoal(const geometry_msgs::msg::PoseStamped& goal_pose_stamped)
     {
-        if (!action_client_->wait_for_action_server(5s)) {
-            RCLCPP_ERROR(this->get_logger(), "Action server not available");
+        if (!nav_action_client_->wait_for_action_server(std::chrono::seconds(2))) {
+            RCLCPP_ERROR(this->get_logger(),
+                         "NavigateToPose action server '%s' not available.",
+                         action_server_name_.c_str());
             return;
         }
 
-        auto goal_msg        = ComputePlan::Goal();
-        goal_msg.planner_id  = planner_id_;
-        goal_msg.goal        = goal_pose;
+        // 取消上一个活跃目标
+        if (active_goal_handle_) {
+            RCLCPP_INFO(this->get_logger(), "Cancelling previous navigation goal.");
+            nav_action_client_->async_cancel_goal(active_goal_handle_);
+            active_goal_handle_ = nullptr;
+        }
+
+        NavigateToPose::Goal goal_msg;
+        goal_msg.pose          = goal_pose_stamped;
+        goal_msg.behavior_tree = behavior_tree_;
 
         RCLCPP_INFO(this->get_logger(),
-                    "Sending action goal: planner_id=%s target=(%.2f, %.2f, %.2f)",
-                    planner_id_.c_str(),
-                    goal_pose.position.x, goal_pose.position.y, goal_pose.position.z);
+                    "Sending NavigateToPose goal: (%.2f, %.2f)  bt='%s'",
+                    goal_pose_stamped.pose.position.x,
+                    goal_pose_stamped.pose.position.y,
+                    behavior_tree_.c_str());
 
-        auto opts = rclcpp_action::Client<ComputePlan>::SendGoalOptions();
+        auto opts = rclcpp_action::Client<NavigateToPose>::SendGoalOptions();
 
         opts.goal_response_callback =
-            [this](GoalHandleComputePlan::SharedPtr gh) {
-                if (!gh) { RCLCPP_ERROR(this->get_logger(), "Goal rejected"); return; }
-                goal_handle_ = gh;
-                RCLCPP_INFO(this->get_logger(), "Goal accepted");
+            [this](const GoalHandleNavigate::SharedPtr& gh) {
+                if (!gh) {
+                    RCLCPP_ERROR(this->get_logger(), "NavigateToPose goal rejected.");
+                    return;
+                }
+                active_goal_handle_ = gh;
+                RCLCPP_INFO(this->get_logger(), "NavigateToPose goal accepted.");
             };
 
         opts.result_callback =
-            [this](const GoalHandleComputePlan::WrappedResult& result) {
+            [this](const GoalHandleNavigate::WrappedResult& result) {
+                active_goal_handle_ = nullptr;
                 switch (result.code) {
                     case rclcpp_action::ResultCode::SUCCEEDED:
-                        RCLCPP_INFO(this->get_logger(), "Plan succeeded! time=%.3fs",
-                                    rclcpp::Duration(result.result->planning_time).seconds());
+                        RCLCPP_INFO(this->get_logger(),
+                                    "✅ Navigation SUCCEEDED (IsGoalReached triggered).");
+                        break;
+                    case rclcpp_action::ResultCode::CANCELED:
+                        RCLCPP_INFO(this->get_logger(),
+                                    "Navigation CANCELED (preempted by new goal or user).");
                         break;
                     case rclcpp_action::ResultCode::ABORTED:
-                        RCLCPP_ERROR(this->get_logger(), "Plan aborted"); break;
-                    case rclcpp_action::ResultCode::CANCELED:
-                        RCLCPP_INFO(this->get_logger(), "Plan canceled"); break;
+                        RCLCPP_WARN(this->get_logger(),
+                                    "⚠️  Navigation ABORTED (plan failed or BT returned FAILURE).");
+                        break;
                     default:
-                        RCLCPP_ERROR(this->get_logger(), "Unknown result code: %d",
-                                     static_cast<int>(result.code));
+                        RCLCPP_ERROR(this->get_logger(), "Navigation: unknown result code.");
                 }
-                goal_handle_.reset();
             };
 
-        action_client_->async_send_goal(goal_msg, opts);
+        nav_action_client_->async_send_goal(goal_msg, opts);
     }
 
     // ---------- publishers ----------
@@ -257,8 +267,8 @@ private:
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr nav_state_sub_;
 
     // ---------- action ----------
-    rclcpp_action::Client<ComputePlan>::SharedPtr action_client_;
-    GoalHandleComputePlan::SharedPtr goal_handle_;
+    rclcpp_action::Client<NavigateToPose>::SharedPtr nav_action_client_;
+    GoalHandleNavigate::SharedPtr active_goal_handle_;
 
     // ---------- robot pose cache ----------
     std::mutex pose_mutex_;
@@ -269,7 +279,7 @@ private:
     std::string path_topic_;
     std::string map_frame_;
     std::string action_server_name_;
-    std::string planner_id_;
+    std::string behavior_tree_;
     std::string mppi_plan_topic_;
     std::string nav_path_topic_;
     std::string line_path_nav_topic_;
