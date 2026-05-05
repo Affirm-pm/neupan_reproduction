@@ -7,7 +7,6 @@
 #include <rclcpp/rclcpp.hpp>
 #include "finenav_core/plan/control_layer.hpp"
 #include "finenav_core/map/map_server.hpp"
-#include "finenav_navigator/nav_state_manager.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/navigator.hpp"
 
@@ -23,10 +22,23 @@ public:
         RCLCPP_INFO(node_->get_logger(), "Localizer ready.");
 
         navigator_ = std::make_unique<Navigator>(node_);
+
+        // 注入机器人位姿提供函数，供 BT 条件节点（IsGoalReached、IsStuck 等）读取
+        navigator_->set_robot_pose_provider([this]() -> geometry_msgs::msg::Pose {
+            const auto& state = localizer_->getState();
+            geometry_msgs::msg::Pose p;
+            p.position.x = state.p.x();
+            p.position.y = state.p.y();
+            p.position.z = state.p.z();
+            const auto q = state.R.unit_quaternion();
+            p.orientation.w = q.w();
+            p.orientation.x = q.x();
+            p.orientation.y = q.y();
+            p.orientation.z = q.z();
+            return p;
+        });
         RCLCPP_INFO(node_->get_logger(), "Navigator ready.");
 
-        nav_state_manager_ = std::make_unique<NavStateManager>(node_, *localizer_);
-        RCLCPP_INFO(node_->get_logger(), "NavStateManager ready.");
 
         RCLCPP_INFO(node_->get_logger(), "All singletons initialized.");
     }
@@ -41,7 +53,6 @@ public:
     const rclcpp::Node::SharedPtr& getNode() const { return node_; }
     FineNavLocalizer* getLocalizer() { return localizer_.get(); }
     Navigator* getNavigator() { return navigator_.get(); }
-    NavStateManager* getNavStateManager() { return nav_state_manager_.get(); }
 
 
     template <typename MapT>
@@ -108,7 +119,6 @@ public:
             rs.pose.orientation.x = q.x();
             rs.pose.orientation.y = q.y();
             rs.pose.orientation.z = q.z();
-            // linear velocity in body frame: v_body = R^{-1} * v_world
             const Eigen::Vector3d v_body = state.R.inverse() * state.v;
             rs.twist.linear.x  = v_body.x();
             rs.twist.linear.y  = v_body.y();
@@ -119,10 +129,6 @@ public:
             return rs;
         });
 
-        // Auto-inject: stop signal from NavStateManager
-        layer->set_should_stop_predicate([this]() {
-            return nav_state_manager_->shouldStop();
-        });
 
         held_layers_.push_back(layer);
         return layer;
@@ -173,8 +179,7 @@ private:
 
     // ── Engine-level singletons ───────────────────────────────────────────────
     std::unique_ptr<FineNavLocalizer>    localizer_;
-    std::unique_ptr<Navigator>           navigator_;   // owns pnode_ + NodeThread internally
-    std::unique_ptr<NavStateManager>     nav_state_manager_;
+    std::unique_ptr<Navigator>           navigator_;
 
     // ── Held resources ────────────────────────────────────────────────────────
     std::vector<std::pair<std::string, std::any>> map_resources_;

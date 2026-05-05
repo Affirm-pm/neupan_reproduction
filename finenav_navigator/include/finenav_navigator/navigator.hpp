@@ -4,7 +4,9 @@
 
 #pragma once
 
+#include <functional>
 #include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose.hpp>
 
 #include "finenav_navigator/behavior_tree_engine.hpp"
 
@@ -24,12 +26,16 @@ namespace finenav {
  *  - pnode_ 由 NodeThread 在独立线程中 spin，对外部调用方完全透明
  *  - 构造函数完成全部初始化，无需二阶段 initialize()
  *
+ * 使用前须调用 set_robot_state_provider() 注入位姿提供函数；
+ * FineNavEngine::createControlLayer() 会自动完成注入。
+ *
  * @param parent_node  宿主节点（用于获取 use_sim_time 及命名空间继承）
  */
 class Navigator {
 public:
-    using ActionT      = finenav_msgs::action::NavigateToPose;
-    using ActionServer = SimpleActionServer<ActionT>;
+    using ActionT            = finenav_msgs::action::NavigateToPose;
+    using ActionServer       = SimpleActionServer<ActionT>;
+    using RobotPoseProvider  = std::function<geometry_msgs::msg::Pose()>;
 
     explicit Navigator(rclcpp::Node::SharedPtr parent_node);
 
@@ -38,6 +44,17 @@ public:
     Navigator& operator=(const Navigator&) = delete;
 
     ~Navigator() = default;
+
+    /**
+     * @brief 注入机器人位姿提供函数。
+     *
+     * 每次 BT tick 前调用，将最新位姿写入 Blackboard ("robot_pose")，
+     * 供 IsGoalReached、IsStuck 等条件节点读取。
+     * 由 FineNavEngine 在构造时自动注入。
+     */
+    void set_robot_pose_provider(RobotPoseProvider provider) {
+        robot_pose_provider_ = std::move(provider);
+    }
 
 private:
     void execute();
@@ -50,8 +67,10 @@ private:
     std::unique_ptr<BehaviorTreeEngine> bt_engine_;
     std::unique_ptr<ActionServer>       action_server_;
 
-    finenav_navigator::Params                    params_;
+    finenav_navigator::Params                         params_;
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;
+
+    RobotPoseProvider robot_pose_provider_;
 
     BT::Tree tree_;
 };

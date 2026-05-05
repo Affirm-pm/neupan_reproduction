@@ -58,7 +58,6 @@ public:
     using PrePlanCallback     = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback    = std::function<bool(PostPlanContext&)>;
     using RobotStateProvider  = std::function<finenav_msgs::msg::RobotState()>;
-    using ShouldStopPredicate = std::function<bool()>;
 
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,
@@ -90,9 +89,6 @@ public:
     void set_on_post_plan(PostPlanCallback cb)             { on_post_plan_          = std::move(cb); }
     void set_robot_state_provider(RobotStateProvider prov) { robot_state_provider_  = std::move(prov); }
 
-    /** 由 FineNavEngine::createControlLayer() 自动注入；也可由用户覆盖。
-     *  TrackingPolicy 循环每帧检测：返回 true 时优雅退出并 succeed 当前 goal。 */
-    void set_should_stop_predicate(ShouldStopPredicate pred) { should_stop_predicate_ = std::move(pred); }
 
     const std::string& get_active_planner_id() const { return active_planner_id_; }
 
@@ -101,7 +97,6 @@ protected:
     PrePlanCallback     on_pre_plan_;
     PostPlanCallback    on_post_plan_;
     RobotStateProvider  robot_state_provider_;
-    ShouldStopPredicate should_stop_predicate_;
 
     rclcpp::Node::SharedPtr      node_;
     rclcpp::Node::SharedPtr      pnode_;

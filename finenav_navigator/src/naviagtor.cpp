@@ -3,6 +3,7 @@
 // All rights reserved.
 
 #include "finenav_navigator/navigator.hpp"
+#include <geometry_msgs/msg/pose.hpp>
 
 namespace finenav {
 
@@ -75,6 +76,11 @@ void Navigator::execute()
             RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Preemption requested.");
             tree_.haltTree();
             return;
+        }
+
+        // 每 tick 前将最新机器人位姿注入 Blackboard，供条件节点读取
+        if (robot_pose_provider_) {
+            blackboard->set<geometry_msgs::msg::Pose>("robot_pose", robot_pose_provider_());
         }
 
         auto status = tree_.tickExactlyOnce();

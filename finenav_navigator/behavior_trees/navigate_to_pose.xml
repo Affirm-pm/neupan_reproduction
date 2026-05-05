@@ -1,0 +1,43 @@
+<!--
+  ~ Copyright (c) 2026.
+  ~ IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+  ~ All rights reserved.
+  -->
+
+<!--
+  Navigate to pose with goal-reached detection.
+  Uses ReactiveFallback: if IsGoalReached succeeds → tree succeeds and ComputePlan is halted.
+  -->
+<root BTCPP_format="4">
+
+    <!-- 基础导航：持续追踪，到达目标后自动停止 -->
+    <BehaviorTree ID="NavigateToPose">
+        <ReactiveFallback name="NavigateOrSucceed">
+            <IsGoalReached  robot_pose="{robot_pose}"
+                            goal="{goal}"
+                            tolerance="0.25"/>
+            <ComputePlan    goal="{goal}"
+                            planner_id="mppi"/>
+        </ReactiveFallback>
+    </BehaviorTree>
+
+    <!-- 带卡死检测的导航：卡死时整棵树 FAILURE，可在上层添加恢复子树 -->
+    <BehaviorTree ID="NavigateWithStuckDetection">
+        <ReactiveFallback name="NavigateOrSucceed">
+            <IsGoalReached  robot_pose="{robot_pose}"
+                            goal="{goal}"
+                            tolerance="0.25"/>
+            <ReactiveSequence name="TrackUnlessStuck">
+                <Inverter>
+                    <IsStuck robot_pose="{robot_pose}"
+                             dist_threshold="0.05"
+                             timeout_s="5.0"/>
+                </Inverter>
+                <ComputePlan goal="{goal}"
+                             planner_id="mppi"/>
+            </ReactiveSequence>
+        </ReactiveFallback>
+    </BehaviorTree>
+
+</root>
+

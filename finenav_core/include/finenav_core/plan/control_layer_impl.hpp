@@ -270,15 +270,10 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(TrackingPolicy& polic
 
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
-            RCLCPP_INFO(pnode_->get_logger(), "Tracking: goal cancelled.");
+            // BT 驱动的正常取消（如 IsGoalReached/IsStuck 触发），不代表错误。
+            RCLCPP_INFO(pnode_->get_logger(),
+                "Tracking: goal cancelled by BT (normal termination).");
             action_server_->terminate_all();
-            return;
-        }
-
-        // NavStateManager 注入的停止谓词（目标到达 / Stuck / Aborted 等）
-        if (should_stop_predicate_ && should_stop_predicate_()) {
-            RCLCPP_INFO(pnode_->get_logger(), "Tracking: stop predicate triggered — succeeding.");
-            action_server_->succeeded_current();
             return;
         }
 
@@ -288,9 +283,6 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(TrackingPolicy& polic
             return;
         }
 
-        // TODO: 接入目标到达判断。
-        // 推荐：通过 on_post_plan_ 回调返回 false 来触发退出，
-        // 或在此对比 getCurrentPose() 与 goal_pose 的距离阈值。
 
         rate.sleep();
     }

@@ -1,7 +1,6 @@
 # FineNav Engine Parameters
 #
-# 本文件统一管理 FineNavEngine 中三个全局单例的 generate_parameter_library 参数：
-#   - NavStateManager   （运行在主节点 /hello_finenav 上）
+# 本文件统一管理 FineNavEngine 中全局单例的 generate_parameter_library 参数：
 #   - FineNavLocalizer  （私有子节点 /hello_finenav/finenav_localizer）
 #   - Navigator         （私有子节点 /hello_finenav/finenav_navigator）
 #
@@ -9,28 +8,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ══════════════════════════════════════════════════════════════════════════════
-# NavStateManager
-# 参数直接声明在主节点 /hello_finenav 上，前缀为 nav_state_manager.*
-# ══════════════════════════════════════════════════════════════════════════════
-hello_finenav:
-  ros__parameters:
-    # 到达目标的距离阈值 [m]
-    goal_tolerance: 0.25
-    # Stuck 检测：在 stuck_timeout_s 内位移小于此值时判定为 Stuck [m]
-    stuck_dist_threshold: 0.05
-    # Stuck 判定超时时长 [s]
-    stuck_timeout_s: 5.0
-    # 定位协方差迹超过此阈值时触发 LOCALIZATION_ERROR
-    localization_cov_threshold: 5.0
-    # 定位输出超过此时长未更新时触发 LOCALIZATION_ERROR [s]
-    localization_stale_timeout_s: 1.0
-    # FSM 内部监控定时器频率 [Hz]
-    monitor_rate_hz: 10.0
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 # FineNavLocalizer
-# 私有子节点名: finenav_localizer，命名空间继承自 hello_finenav
 # 完整节点路径: /hello_finenav/finenav_localizer
 # ══════════════════════════════════════════════════════════════════════════════
 hello_finenav/finenav_localizer:
@@ -54,22 +32,22 @@ hello_finenav/finenav_localizer:
       omega_noise_std: 0.10
 
 
-## ══════════════════════════════════════════════════════════════════════════════
-## Navigator
-## 私有子节点名: finenav_navigator，命名空间继承自 hello_finenav
-## 完整节点路径: /hello_finenav/finenav_navigator
-## ══════════════════════════════════════════════════════════════════════════════
-#hello_finenav/finenav_navigator:
-#  ros__parameters:
-#    finenav_navigator:
-#      # Action Server 名称（客户端需向此名称发送目标）
-#      action_name: "navigate_to_pose"
-#      # 行为树 tick 频率 [Hz]
-#      tick_frequency: 100
-#      # BT 插件列表（格式: "package_name/subfolder"），空列表使用默认内置插件
-#      plugins: []
-#      # BT RosNodeParams 超时 [ms]
-#      ros_plugins_timeout: 1000
-#      # 子树 XML 文件列表（格式: "package_name/subfolder"）
-#      behavior_trees: []
-
+# ══════════════════════════════════════════════════════════════════════════════
+# Navigator
+# 完整节点路径: /hello_finenav/finenav_navigator
+# ══════════════════════════════════════════════════════════════════════════════
+hello_finenav/finenav_navigator:
+  ros__parameters:
+    # Action Server 名称（客户端向此名称发送 NavigateToPose 目标）
+    action_name: "navigate_to_pose"
+    # 行为树 tick 频率 [Hz]
+    tick_frequency: 50
+    # BT 插件库列表（格式: "package_name/subfolder"）
+    # finenav_navigator 的条件插件安装在 lib/plugins/
+    # TODO: ：generate_parameter_library 的 unique<>: null 验证器在收到显式传入的空数组 [] 时会触发 InvalidParameterValueException
+    plugins:
+      - "finenav_navigator/lib/plugins"
+    # 行为树 XML 文件目录（格式: "package_name/subfolder"）
+    # navigate_to_pose.xml 安装在 share/finenav_navigator/behavior_trees/
+    behavior_trees:
+      - "finenav_navigator/behavior_trees"
