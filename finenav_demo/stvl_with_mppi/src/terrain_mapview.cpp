@@ -33,7 +33,7 @@ bool SimpleGridMapView::considerFootprint() const {
 bool SimpleGridMapView::isCollision(float x, float y, float theta) const {
     int pose_cost = getCost(finenav::Position3D{x, y, 0.0});
     finenav::Pose pose = createPose2D(x, y, theta);
-    int possible_collision_cost = ComputeCost(collision_model_->getOuterDiameter() / map_.getResolution());
+    int possible_collision_cost = ComputeCost(collision_model_->getOuterDiameter() / 2 / map_.getResolution());
     if (pose_cost == 254) {
         return true;
     }
