@@ -86,6 +86,10 @@ public:
 
     /**
      * @brief Read-only access to the latest filter output.
+     *
+     * @note  The returned NavStateD has `v` expressed in the **body frame**
+     *        (R^T · v_world).  `p` and `R` are world-frame pose; `omega` is
+     *        body-frame angular velocity (unchanged).
      * @note  Thread-safe.
      */
     NavStateD    getState()          const;
@@ -95,12 +99,12 @@ public:
     /**
      * @brief Query the interpolated state at an arbitrary past timestamp.
      *
-     * Delegates to the internal NavStateBuffer.  Returns std::nullopt when:
-     *   - The localizer has not been initialised yet.
-     *   - @p query_time is strictly newer than the latest buffered entry (future).
-     *   - @p query_time is older than the retained history window.
+     * Returns std::nullopt when the localizer is uninitialised, query_time is
+     * in the future, or older than the retained history window.
      *
-     * @note Thread-safe.
+     * @note  `v` in the returned state is expressed in the **body frame**,
+     *        consistent with getState().
+     * @note  Thread-safe.
      */
     std::optional<NavStateD> getStateAt(const rclcpp::Time & query_time) const;
 

@@ -151,7 +151,11 @@ void FineNavLocalizer::feedObservation(const TwistMsg & msg)
 NavStateD FineNavLocalizer::getState() const
 {
     std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);
-    return cached_state_;
+    NavStateD s = cached_state_;
+    // External API contract: v is expressed in the body frame.
+    // Internally the ESKF propagates v in world frame; convert here.
+    s.v = s.R.inverse() * s.v;
+    return s;
 }
 
 FineNavLocalizer::PMat FineNavLocalizer::getCovariance() const
@@ -168,7 +172,12 @@ rclcpp::Time FineNavLocalizer::getLastUpdateTime() const
 
 std::optional<NavStateD> FineNavLocalizer::getStateAt(const rclcpp::Time & query_time) const
 {
-    return state_buffer_->getStateAt(query_time);
+    auto s = state_buffer_->getStateAt(query_time);
+    if (s) {
+        // Same contract as getState(): convert v from world → body frame.
+        s->v = s->R.inverse() * s->v;
+    }
+    return s;
 }
 
 // ============================================================================

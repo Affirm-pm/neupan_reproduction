@@ -42,10 +42,10 @@ public:
         navigator_->set_robot_twist_provider([this]() -> geometry_msgs::msg::Twist {
             const auto& state = localizer_->getState();
             geometry_msgs::msg::Twist t;
-            const Eigen::Vector3d v_body = state.R.inverse() * state.v;
-            t.linear.x  = v_body.x();
-            t.linear.y  = v_body.y();
-            t.linear.z  = v_body.z();
+            // getState() returns v in body frame
+            t.linear.x  = state.v.x();
+            t.linear.y  = state.v.y();
+            t.linear.z  = state.v.z();
             t.angular.x = state.omega.x();
             t.angular.y = state.omega.y();
             t.angular.z = state.omega.z();
@@ -133,10 +133,10 @@ public:
             rs.pose.orientation.x = q.x();
             rs.pose.orientation.y = q.y();
             rs.pose.orientation.z = q.z();
-            const Eigen::Vector3d v_body = state.R.inverse() * state.v;
-            rs.twist.linear.x  = v_body.x();
-            rs.twist.linear.y  = v_body.y();
-            rs.twist.linear.z  = v_body.z();
+            // getState() returns v in body frame
+            rs.twist.linear.x  = state.v.x();
+            rs.twist.linear.y  = state.v.y();
+            rs.twist.linear.z  = state.v.z();
             rs.twist.angular.x = state.omega.x();
             rs.twist.angular.y = state.omega.y();
             rs.twist.angular.z = state.omega.z();

@@ -197,12 +197,15 @@ static void fillEstimate(Row& row, fn::FineNavLocalizer& loc)
     const fn::NavStateD              est = loc.getState();
     const fn::NavigationModelD::PMat P   = loc.getCovariance();
 
-    // Primary 2-D dims
+    // Primary 2-D dims.
+    // getState() returns v in body frame; convert back to world frame so that
+    // est_vx/vy are directly comparable with the world-frame GT columns.
+    const Eigen::Vector3d v_world = est.R * est.v;
     row.est_x   = est.p.x();
     row.est_y   = est.p.y();
     row.est_yaw = yawFromState(est);
-    row.est_vx  = est.v.x();
-    row.est_vy  = est.v.y();
+    row.est_vx  = v_world.x();   ///< world-frame vx  (matches gt_vx)
+    row.est_vy  = v_world.y();   ///< world-frame vy  (matches gt_vy)
     row.est_wz  = est.omega.z();
 
     // Non-2D state values
