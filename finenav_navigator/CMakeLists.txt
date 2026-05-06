@@ -71,6 +71,15 @@ ament_target_dependencies(finenav_navigator_conditions
 )
 target_compile_definitions(finenav_navigator_conditions PRIVATE BT_PLUGIN_EXPORT)
 
+# PublishZeroCmdVel Plugin
+add_library(finenav_publish_zero_cmd_vel_behavior SHARED
+        src/plugins/action/publish_zero_cmd_vel.cpp
+)
+ament_target_dependencies(finenav_publish_zero_cmd_vel_behavior
+        ${dependencies}
+)
+target_compile_definitions(finenav_publish_zero_cmd_vel_behavior PRIVATE BT_PLUGIN_EXPORT)
+
 # Install
 install(TARGETS finenav_navigator
         ARCHIVE DESTINATION lib
@@ -78,7 +87,7 @@ install(TARGETS finenav_navigator
         RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions
+install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions finenav_publish_zero_cmd_vel_behavior
         ARCHIVE DESTINATION lib/plugins
         LIBRARY DESTINATION lib/plugins
         RUNTIME DESTINATION bin
