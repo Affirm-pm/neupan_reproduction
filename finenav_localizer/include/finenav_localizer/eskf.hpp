@@ -361,7 +361,7 @@ private:
     /// nominal_history_[0] = nominal one tick ago  (delay_step = 1)
     /// nominal_history_[d-1] = nominal d ticks ago (delay_step = d)
     /// Size is bounded to maxDelayStep()-1 by predict().
-    std::deque<NavStateT>   nominal_history_;
+    std::deque<NavStateT, Eigen::aligned_allocator<NavStateT>>   nominal_history_;
     TimeDelayKalmanFilter   tdkf_;             ///< extended error-state covariance
     typename Model::Options model_opts_;       ///< process-noise parameters
     std::vector<double>     accumulated_delay_times_;  ///< slot → elapsed time [s]

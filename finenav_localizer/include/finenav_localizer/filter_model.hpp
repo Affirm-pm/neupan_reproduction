@@ -22,6 +22,12 @@ inline constexpr int kNavStateDim = 12;
 // ============================================================================
 template <typename S = double>
 struct NavState {
+    // Sophus::SO3<S> internally holds an Eigen::Quaternion<S> which may
+    // require 16-byte (SSE) or 32-byte (AVX) alignment.  When NavState is
+    // stored in heap containers (std::deque, std::vector) the allocator must
+    // honour this requirement; the macro below ensures it does.
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
     using SO3T  = Sophus::SO3<S>;
     using Vec3T = Eigen::Matrix<S, 3, 1>;
 
