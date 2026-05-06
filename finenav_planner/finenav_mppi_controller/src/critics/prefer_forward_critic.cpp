@@ -40,7 +40,7 @@ void PreferForwardCritic::score(CriticData & data, const IMapView& map_view)
     xt::sum(
       std::move(
         backward_motion) * data.model_dt, {1}, immediate) * weight_, power_);
-    std::cout<<"[PreferForwardCritic]: Scored"<<std::endl;
+    RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics

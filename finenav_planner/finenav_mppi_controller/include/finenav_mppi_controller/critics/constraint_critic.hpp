@@ -42,7 +42,7 @@ public:
   void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
   void GetWeight() {
-    std::cout<<"[ConstraintCritic]: Weight = "<< weight_ << std::endl;
+    RCLCPP_DEBUG(logger_, "Weight = %f", weight_);
   }
 
   float getMaxVelConstraint() {return max_vel_;}

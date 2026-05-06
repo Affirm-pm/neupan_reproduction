@@ -49,7 +49,7 @@ void PathAlignCritic::score(CriticData & data, const IMapView& map_view)
   utils::setPathFurthestPointIfNotSet(data);
   const size_t path_segments_count = *data.furthest_reached_path_point;  // up to furthest only
   if (path_segments_count < offset_from_furthest_) {
-      std::cout<<"Warning"<<std::endl;
+      RCLCPP_DEBUG(logger_, "Warning");
     return;
   }
 
@@ -127,7 +127,7 @@ void PathAlignCritic::score(CriticData & data, const IMapView& map_view)
   }
 
   data.costs += xt::pow(std::move(cost) * weight_, power_);
-    std::cout<<"[PathAlignCritic]: Scored"<<std::endl;
+    RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics

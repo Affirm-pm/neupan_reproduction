@@ -37,7 +37,7 @@ void TwirlingCritic::score(CriticData & data, const IMapView& map_view)
 
   const auto wz = xt::abs(data.state.wz);
   data.costs += xt::pow(xt::mean(wz, {1}, immediate) * weight_, power_);
-    std::cout<<"[TwirlingCritic]: Scored"<<std::endl;
+    RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics

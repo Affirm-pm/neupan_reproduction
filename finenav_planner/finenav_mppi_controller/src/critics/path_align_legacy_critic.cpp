@@ -118,7 +118,7 @@ void PathAlignLegacyCritic::score(CriticData & data, const IMapView& map_view)
   }
 
   data.costs += xt::pow(std::move(cost) * weight_, power_);
-    std::cout<<"[PathAlignLegacyCritic]: Scored"<<std::endl;
+    RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics

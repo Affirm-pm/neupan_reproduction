@@ -106,10 +106,6 @@ public:
         nav_msgs::msg::Path path = convertDataPacketToPath(ctx.ref_traj, "map");
         this->setPlan(path);
 
-        std::cout << "[finenav_mppi_controller] Planning from ("
-                  << robot_state.pose.position.x << ", " << robot_state.pose.position.y << ") to ("
-                  << goal_pose.position.x << ", " << goal_pose.position.y << ")" << std::endl;
-
         geometry_msgs::msg::PoseStamped start_pose_stamped;
         start_pose_stamped.pose = robot_state.pose;
         start_pose_stamped.header.stamp = rclcpp::Clock().now();
@@ -242,7 +238,6 @@ protected:
 //  	std::lock_guard<std::mutex> param_lock(*parameters_handler_->getLock());
 //
 
-    std::cout<<"[nav2_mppi_controller] Computing velocity commands..."<<std::endl;
   	// geometry_msgs::msg::TwistStamped cmd =
     optimizer_.evalControl(robot_pose, robot_speed, path_ ,map_view);
 

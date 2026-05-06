@@ -24,7 +24,7 @@ void CriticManager::on_configure(
     const finenav_mppi_controller::Params & params)
 {
     critics_ = std::move(critics);
-    std::cout<<"[Critic Manager] Critic Manager configured;"<<std::endl;
+    RCLCPP_DEBUG(rclcpp::get_logger("Critic Manager"), "Critic Manager configured;");
     for (size_t q = 0; q < critics_.size(); q++) {
         critics_[q]->initialize(params);
     }
@@ -46,7 +46,7 @@ std::string CriticManager::getFullName(const std::string & name)
 void CriticManager::evalTrajectoriesScores(
   CriticData & data, const IMapView& map_view) const
 {
-    std::cout<<"[Critic Manager]: Scoring..."<<std::endl;
+    RCLCPP_DEBUG(rclcpp::get_logger("Critic Manager"), "Scoring...");
     for (size_t q = 0; q < critics_.size(); q++) {
         if (data.fail_flag) {
             break;

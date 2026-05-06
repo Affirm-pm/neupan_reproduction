@@ -34,14 +34,12 @@ void ConstraintCritic::initialize(const finenav_mppi_controller::Params & p)
   max_vel_ = sqrtf(vx_max * vx_max + vy_max * vy_max);
   min_vel_ = min_sgn * sqrtf(vx_min * vx_min + vy_max * vy_max);
 
-  std::cout << "[ConstraintCritic] Critic initialized" << std::endl;
+  RCLCPP_DEBUG(logger_, "Critic initialized");
 }
 
 void ConstraintCritic::score(CriticData & data, const IMapView& map_view)
 {
   using xt::evaluation_strategy::immediate;
-  std::cout<<"[ConstrainCritic]: Begin to score"<<std::endl;
-    std::cout<<"[ConstrainCritic]: Weight = "<< weight_ <<std::endl;
   if (!this->enabled_) {
     return;
   }
@@ -63,7 +61,8 @@ void ConstraintCritic::score(CriticData & data, const IMapView& map_view)
         std::move(out_of_min_bounds_motion) +
         std::move(out_of_turning_rad_motion)) *
         data.model_dt, {1}, immediate) * weight_, power_);
-      std::cout<<"[ConstraintCritic]: Scored"<<std::endl;
+      RCLCPP_DEBUG(logger_, "[ConstraintCritic]: Scored");
+
     return;
   }
 
@@ -72,7 +71,7 @@ void ConstraintCritic::score(CriticData & data, const IMapView& map_view)
       (std::move(out_of_max_bounds_motion) +
       std::move(out_of_min_bounds_motion)) *
       data.model_dt, {1}, immediate) * weight_, power_);
-    std::cout<<"[ConstraintCritic]: Scored"<<std::endl;
+    RCLCPP_DEBUG(logger_, "[ConstraintCritic]: Scored");
 }
 
 }  // namespace mppi::critics

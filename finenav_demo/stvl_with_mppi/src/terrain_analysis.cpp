@@ -47,7 +47,7 @@ int TerrainAnalyzer::ComputeCost(int distance) const {
 
 void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap<Voxel>& map) {
     const float ROBOT_HEIGHT = 1.0;
-    const float MAX_GRADIENT = 0.5;
+    const float MAX_GRADIENT = 0.8;
 
     int sizeX_min = map.getMinIndex().x();
     int sizeX_max = map.getMaxIndex().x();
@@ -196,11 +196,18 @@ void TerrainAnalyzer::publishMaps(const finenav::GridMap<Voxel>& map) {
                 const uint8_t val = costmap_image_.at<uint8_t>(
                     static_cast<int>(py), static_cast<int>(px));
                 // 绿(低代价) → 红(高代价)
+                if(val==254){
+                    costmap_helper_->addPoint(
+                        static_cast<float>(pos.x()),
+                        static_cast<float>(pos.y()),
+                        0.0f, {0, 0, 0}); // 障碍 → 红
+                }else{
                 const std::array<uint8_t, 3> color = {val, static_cast<uint8_t>(255 - val), 0};
                 costmap_helper_->addPoint(
                     static_cast<float>(pos.x()),
                     static_cast<float>(pos.y()),
                     0.0f, color);
+                }
             }
         }
         costmap_helper_->publish(stamp);

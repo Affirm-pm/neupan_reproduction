@@ -100,6 +100,7 @@ protected:
   bool enabled_;
   std::string name_, parent_name_;
   rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
+  rclcpp::Logger logger_{rclcpp::get_logger("CriticFunction")};
 
 };
 

@@ -75,10 +75,10 @@ void PathAngleCritic::score(CriticData & data, const IMapView& map_view)
     const auto corrected_yaws = xt::abs(
       utils::shortest_angular_distance(data.trajectories.yaws, yaws_between_points_corrected));
     data.costs += xt::pow(xt::mean(corrected_yaws, {1}, immediate) * weight_, power_);
-      std::cout<<"[PathAngleCritic]: Scored"<<std::endl;
+      RCLCPP_DEBUG(logger_, "Scored");
   } else {
     data.costs += xt::pow(xt::mean(yaws, {1}, immediate) * weight_, power_);
-      std::cout<<"[PathAngleCritic]: Scored"<<std::endl;
+      RCLCPP_DEBUG(logger_, "Scored");
   }
 }
 

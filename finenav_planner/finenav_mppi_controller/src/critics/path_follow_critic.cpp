@@ -65,7 +65,7 @@ void PathFollowCritic::score(CriticData & data, const IMapView& map_view)
     xt::pow(last_y - path_y, 2));
 
   data.costs += xt::pow(weight_ * std::move(dists), power_);
-    std::cout<<"[PathFollowCritic]: Scored"<<std::endl;
+    RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics

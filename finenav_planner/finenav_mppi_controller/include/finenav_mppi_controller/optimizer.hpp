@@ -150,22 +150,15 @@ public:
     {
     prepare(robot_pose, robot_speed, plan);
 
-  	std::cout<<"[nav2_mppi_controller] Optimizing Prepared"<<std::endl;
 
     do {
       optimize(map_view);
     } while (fallback(critics_data_.fail_flag));
-
-    std::cout<<"[nav2_mppi_controller] Optimization Complete"<<std::endl;
-
     // utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
     auto control = getControlFromSequenceAsTwist(plan.header.stamp, map_view);
     if (settings_.shift_control_sequence) {
       shiftControlSequence();
     }
-
-  	std::cout<<"[nav2_mppi_controller] Control Retrieved"<<std::endl;
-
     // return control;
 }
 

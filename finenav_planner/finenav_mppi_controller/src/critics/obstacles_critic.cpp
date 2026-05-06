@@ -33,7 +33,7 @@ void ObstaclesCritic::initialize(const finenav_mppi_controller::Params & p)
   inflation_scale_factor_ = static_cast<float>(c.cost_scaling_factor);
   inflation_radius_   = static_cast<float>(c.inflation_radius);
 
-  std::cout << "[ObstaclesCritic] Critic initialized" << std::endl;
+  RCLCPP_DEBUG(logger_, "Critic initialized");
 }
 
 //float ObstaclesCritic::findCircumscribedCost(

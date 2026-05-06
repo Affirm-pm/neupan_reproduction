@@ -92,7 +92,7 @@ void CostCritic::score(CriticData & data,const IMapView& map_view)
 
   data.costs += xt::pow((weight_ * repulsive_cost / traj_len), power_);
   data.fail_flag = all_trajectories_collide;
-  std::cout<<"[CostCritic]: Scored"<<std::endl;
+  RCLCPP_DEBUG(logger_, "Scored");
 }
 
 

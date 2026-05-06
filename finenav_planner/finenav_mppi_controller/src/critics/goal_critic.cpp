@@ -50,7 +50,7 @@ void GoalCritic::score(CriticData & data, const IMapView& map_view)
     xt::pow(traj_y - goal_y, 2));
 
   data.costs += xt::pow(xt::mean(dists, {1}, immediate) * weight_, power_);
-    std::cout<<"[GoalCritic]: Scored"<<std::endl;
+    RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics

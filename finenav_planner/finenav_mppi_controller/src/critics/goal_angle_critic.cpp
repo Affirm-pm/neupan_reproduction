@@ -40,7 +40,7 @@ void GoalAngleCritic::score(CriticData & data, const IMapView& map_view)
   data.costs += xt::pow(
     xt::mean(xt::abs(utils::shortest_angular_distance(data.trajectories.yaws, goal_yaw)), {1}) *
     weight_, power_);
-  std::cout<<"[GoalAngleCritic]: Scored"<<std::endl;
+  RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics
