@@ -49,6 +49,8 @@ public:
 
 
 private:
+    void ApplyGroundMeanFilter(Eigen::ArrayXXf& ground_array, int kernel_size);
+
     void TerrainAnalysis(float robot_pose_z, const finenav::GridMap<Voxel>& map);
     void MapInflation();
     cv::Mat DistanceTransform();

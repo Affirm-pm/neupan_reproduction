@@ -92,6 +92,8 @@ void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap
         }
     }
 
+    ApplyGroundMeanFilter(ground_array_, 3);
+
     for (size_t x = 0; x < size_x; ++x) {
         for (size_t y = 0; y < size_y; ++y) {
             int dx[4] = {0, 1, 0, -1};
@@ -117,6 +119,42 @@ void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap
             passability_image_.at<uchar>(y, x) = terrain_value;
         }
     }
+}
+
+void TerrainAnalyzer::ApplyGroundMeanFilter(Eigen::ArrayXXf& ground_array, int kernel_size) {
+    int rows = ground_array.rows();
+    int cols = ground_array.cols();
+    Eigen::ArrayXXf filtered_array = ground_array;
+    int half_k = kernel_size / 2;
+
+    for (int r = 0; r < rows; ++r) {
+        for (int c = 0; c < cols; ++c) {
+            if (std::isnan(ground_array(r, c))) continue;
+
+            float sum = 0.0f;
+            int count = 0;
+
+            for (int kr = -half_k; kr <= half_k; ++kr) {
+                for (int kc = -half_k; kc <= half_k; ++kc) {
+                    int nr = r + kr;
+                    int nc = c + kc;
+                    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+                        float val = ground_array(nr, nc);
+                        if (!std::isnan(val)) {
+                            sum += val;
+                            count++;
+                        }
+                    }
+                }
+            }
+
+            if (count > 0) {
+                filtered_array(r, c) = sum / count;
+            }
+        }
+    }
+
+    ground_array = filtered_array;
 }
 
 void TerrainAnalyzer::MapInflation() {
