@@ -5,7 +5,6 @@
 #pragma once
 
 #include <vector>
-#include <span>
 
 #include "finenav_map_grid_map/grid_map_params.hpp"
 #include "finenav_util/algo_configurator.hpp"
@@ -158,20 +157,18 @@ public:
      * @brief 访问某个(x,y)索引上的一串栅格数据
      * @param x x索引
      * @param y y索引
-     * @return 一串栅格数据的span
-     * @note 该函数的实现基于内部缓冲区z-y-x的存储顺序
+     * @return 深拷贝的栅格数据向量，正确处理滚动缓冲区的 z 轴环绕
      */
-    std::span<T> getVoxelsAlongZ(const int& x, const int& y);
+    std::vector<T> getVoxelsAlongZ(const int& x, const int& y);
 
 
     /**
      * @brief 访问某个(x,y)索引上的一串栅格数据（常量版本）
      * @param x x索引
      * @param y y索引
-     * @return 一串栅格数据的span
-     * @note 该函数的实现基于内部缓冲区z-y-x的存储顺序
+     * @return 深拷贝的栅格数据向量，正确处理滚动缓冲区的 z 轴环绕
      */
-    std::span<const T> getVoxelsAlongZ(const int& x, const int& y) const;
+    std::vector<T> getVoxelsAlongZ(const int& x, const int& y) const;
 
     /**
      * @brief 清空地图数据

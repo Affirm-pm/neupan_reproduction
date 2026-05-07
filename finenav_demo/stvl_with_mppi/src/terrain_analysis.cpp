@@ -62,10 +62,12 @@ void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap
 
     for (int x = sizeX_min; x <= sizeX_max; ++x) {
         for (int y = sizeY_min; y <= sizeY_max; ++y) {
-            std::span<const Voxel> voxels_along_z_indices = map.getVoxelsAlongZ(static_cast<int>(x), static_cast<int>(y));
+            // getVoxelsAlongZ now returns a deep-copied std::vector, safe across
+            // rolling-buffer shifts in z.
+            const std::vector<Voxel> voxels_along_z = map.getVoxelsAlongZ(static_cast<int>(x), static_cast<int>(y));
 
             std::vector<Voxel> valid_z_values;
-            for (const auto& voxel : voxels_along_z_indices) {
+            for (const auto& voxel : voxels_along_z) {
                 if (!std::isnan(voxel.z_height)) {
                     valid_z_values.push_back(voxel);
                 }

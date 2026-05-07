@@ -63,25 +63,33 @@ const T& GridMap<T>::at(const Index& index) const {
 }
 
 template <typename T>
-std::span<T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) {
+std::vector<T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) {
     if (std::abs(x) > half_size_.x() || std::abs(y) > half_size_.y()) {
         throw std::out_of_range("Accessing grid out of bounds");
     }
-
-    Index index_start(x, y, -half_size_.z());
-    int buffer_start = getBufferIndex(index_start, size_, half_size_, start_index_);
-    return std::span<T>(&data_[buffer_start], size_.z());
+    // Deep-copy each z-layer individually via at(), which correctly handles
+    // rolling-buffer wrap-around along z. A raw span over [buffer_start, +size_z)
+    // is unsafe when start_index_.z() != 0 because the z-block can spill past
+    // the end of data_.
+    std::vector<T> result;
+    result.reserve(size_.z());
+    for (int z = -half_size_.z(); z <= half_size_.z(); ++z) {
+        result.push_back(at(Index(x, y, z)));
+    }
+    return result;
 }
 
 template <typename T>
-std::span<const T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) const {
+std::vector<T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) const {
     if (std::abs(x) > half_size_.x() || std::abs(y) > half_size_.y()) {
         throw std::out_of_range("Accessing grid out of bounds");
     }
-
-    Index index_start(x, y, -half_size_.z());
-    int buffer_start = getBufferIndex(index_start, size_, half_size_, start_index_);
-    return std::span<const T>(&data_[buffer_start], size_.z());
+    std::vector<T> result;
+    result.reserve(size_.z());
+    for (int z = -half_size_.z(); z <= half_size_.z(); ++z) {
+        result.push_back(at(Index(x, y, z)));
+    }
+    return result;
 }
 
 template <typename T>
