@@ -66,6 +66,11 @@ private:
     DynamicPosSet dynamic_cells_;
     double decay_time_sec_     = 1000000.0;
     double decay_time_fov_sec_ = 1000000.0;
+    // FOV parameters
+    double min_range_ = 0.0;
+    double max_range_ = 50.0;
+    double min_angle_ = 0.0;
+    double max_angle_ = M_PI / 3.0;
 };
 
 } // namespace finenav

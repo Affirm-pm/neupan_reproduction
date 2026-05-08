@@ -8,7 +8,21 @@ using namespace finenav;
 
 StvlManager::StvlManager(rclcpp::Node::SharedPtr node)
     : node_(std::move(node))
-{}
+{
+    node_->declare_parameter<double>("stvl_manager.decay_time_sec", 1000000.0);
+    node_->declare_parameter<double>("stvl_manager.decay_time_fov_sec", 1000000.0);
+    node_->declare_parameter<double>("stvl_manager.min_range", 0.0);
+    node_->declare_parameter<double>("stvl_manager.max_range", 50.0);
+    node_->declare_parameter<double>("stvl_manager.min_angle", 0.0);
+    node_->declare_parameter<double>("stvl_manager.max_angle", M_PI / 3.0);
+
+    node_->get_parameter("stvl_manager.decay_time_sec", decay_time_sec_);
+    node_->get_parameter("stvl_manager.decay_time_fov_sec", decay_time_fov_sec_);
+    node_->get_parameter("stvl_manager.min_range", min_range_);
+    node_->get_parameter("stvl_manager.max_range", max_range_);
+    node_->get_parameter("stvl_manager.min_angle", min_angle_);
+    node_->get_parameter("stvl_manager.max_angle", max_angle_);
+}
 
 bool StvlManager::isInFrustum(const Eigen::Isometry3d & T_map_body, const Position & p_world,
                                double min_range, double max_range,
@@ -37,11 +51,6 @@ void StvlManager::PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3
 {
     const rclcpp::Time now = node_->get_clock()->now();
 
-    constexpr double min_range = 0.0;
-    constexpr double max_range = 50.0;
-    constexpr double min_angle = 0.0;
-    constexpr double max_angle = M_PI / 3.0;   // TODO: 改成成员变量，提供接口动态调整
-
     for (auto it = dynamic_cells_.begin(); it != dynamic_cells_.end();) {
         const Position & pos = *it;
 
@@ -63,7 +72,7 @@ void StvlManager::PruneExpiredCells(GridMap<Voxel> & map, const Eigen::Isometry3
             continue;
         }
 
-        const bool in_fov = isInFrustum(T_map_body, pos, min_range, max_range, min_angle, max_angle);
+        const bool in_fov = isInFrustum(T_map_body, pos, min_range_, max_range_, min_angle_, max_angle_);
         const double active_decay = in_fov ? decay_time_fov_sec_ : decay_time_sec_;
 
         if (age_sec > active_decay) {

@@ -51,3 +51,21 @@ hello_finenav/finenav_navigator:
     # navigate_to_pose.xml 安装在 share/finenav_navigator/behavior_trees/
     behavior_trees:
       - "finenav_navigator/behavior_trees"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HelloFinenav Main Node
+# 包含地形分析、STVL等模块参数
+# ══════════════════════════════════════════════════════════════════════════════
+hello_finenav:
+  ros__parameters:
+    terrain_analysis:
+      cost_scaling_factor: 1.0
+      robot_height: 1.0
+      max_gradient: 0.8
+    stvl_manager:
+      decay_time_sec: 0.1
+      decay_time_fov_sec: 0.01
+      min_range: 0.0
+      max_range: 50.0
+      min_angle: 0.0
+      max_angle: 1.047 # M_PI / 3.0

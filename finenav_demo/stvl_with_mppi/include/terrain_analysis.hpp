@@ -62,5 +62,7 @@ private:
     cv::Mat passability_image_;
     cv::Mat costmap_image_;
     double cost_scaling_factor_{1.0};
+    double robot_height_{1.0};
+    double max_gradient_{0.8};
     double cached_resolution_{0.1};
 };

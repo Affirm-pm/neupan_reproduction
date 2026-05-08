@@ -20,7 +20,14 @@ TerrainAnalyzer::TerrainAnalyzer(
     passability_image_ = cv::Mat::zeros(map_ro->getSize().x(), map_ro->getSize().y(), CV_8UC1);
     costmap_image_     = cv::Mat::zeros(map_ro->getSize().x(), map_ro->getSize().y(), CV_8UC1);
     cached_resolution_ = map_ro->getResolution();
-    cost_scaling_factor_ = 0.5;
+
+    node_->declare_parameter<double>("terrain_analysis.cost_scaling_factor", 0.5);
+    node_->declare_parameter<double>("terrain_analysis.robot_height", 1.0);
+    node_->declare_parameter<double>("terrain_analysis.max_gradient", 0.8);
+
+    node_->get_parameter("terrain_analysis.cost_scaling_factor", cost_scaling_factor_);
+    node_->get_parameter("terrain_analysis.robot_height", robot_height_);
+    node_->get_parameter("terrain_analysis.max_gradient", max_gradient_);
 }
 
 void TerrainAnalyzer::update(float robot_pose_z, const finenav::GridMap<Voxel>& map) {
@@ -46,9 +53,6 @@ int TerrainAnalyzer::ComputeCost(int distance) const {
 }
 
 void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap<Voxel>& map) {
-    const float ROBOT_HEIGHT = 1.0;
-    const float MAX_GRADIENT = 0.8;
-
     int sizeX_min = map.getMinIndex().x();
     int sizeX_max = map.getMaxIndex().x();
     int sizeY_min = map.getMinIndex().y();
@@ -76,7 +80,7 @@ void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap
             float nearest_ground = std::numeric_limits<float>::max();
             if (!valid_z_values.empty()) {
                 for (size_t i = 0; i < valid_z_values.size() - 1; ++i) {
-                    if(valid_z_values[i + 1].z_height - valid_z_values[i].z_height > ROBOT_HEIGHT) {
+                    if(valid_z_values[i + 1].z_height - valid_z_values[i].z_height > robot_height_) {
                         if (fabs(valid_z_values[i].z_height - robot_pose_z) < fabs(nearest_ground - robot_pose_z)) {
                             nearest_ground = valid_z_values[i].z_height;
                         }
@@ -109,7 +113,7 @@ void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap
                         ny < 0 || ny > static_cast<int>(size_y) - 1) continue;
                     float neighbor_ground = ground_array_(nx, ny);
                     if (!std::isnan(neighbor_ground)) {
-                        if (fabs(current_ground - neighbor_ground) > MAX_GRADIENT) {
+                        if (fabs(current_ground - neighbor_ground) > max_gradient_) {
                             terrain_value = 254;
                             break;
                         }
