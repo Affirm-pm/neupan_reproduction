@@ -24,10 +24,22 @@ TerrainAnalyzer::TerrainAnalyzer(
     node_->declare_parameter<double>("terrain_analysis.cost_scaling_factor", 0.5);
     node_->declare_parameter<double>("terrain_analysis.robot_height", 1.0);
     node_->declare_parameter<double>("terrain_analysis.max_gradient", 0.8);
+    node_->declare_parameter<std::string>("terrain_analysis.global_map_topic", "/map");
 
     node_->get_parameter("terrain_analysis.cost_scaling_factor", cost_scaling_factor_);
     node_->get_parameter("terrain_analysis.robot_height", robot_height_);
     node_->get_parameter("terrain_analysis.max_gradient", max_gradient_);
+
+    std::string global_map_topic;
+    node_->get_parameter("terrain_analysis.global_map_topic", global_map_topic);
+
+    global_map_sub_ = node_->create_subscription<nav_msgs::msg::OccupancyGrid>(
+        global_map_topic, rclcpp::QoS(1).transient_local(),
+        [this](const nav_msgs::msg::OccupancyGrid::SharedPtr msg) {
+            if (!global_map_) {
+                global_map_ = msg;
+            }
+        });
 }
 
 void TerrainAnalyzer::update(float robot_pose_z, const finenav::GridMap<Voxel>& map) {
@@ -121,6 +133,37 @@ void TerrainAnalyzer::TerrainAnalysis(float robot_pose_z, const finenav::GridMap
                 }
             }
             passability_image_.at<uchar>(y, x) = terrain_value;
+        }
+    }
+
+    // 融合全局占据地图 (0/100 二值图)
+    if (global_map_) {
+        const double map_res = global_map_->info.resolution;
+        const double origin_x = global_map_->info.origin.position.x;
+        const double origin_y = global_map_->info.origin.position.y;
+        const int map_w = global_map_->info.width;
+        const int map_h = global_map_->info.height;
+
+        for (size_t x = 0; x < size_x; ++x) {
+            for (size_t y = 0; y < size_y; ++y) {
+                finenav::Index idx(
+                    static_cast<int>(x) - static_cast<int>(half_size_x),
+                    static_cast<int>(y) - static_cast<int>(half_size_y),
+                    0);
+
+                if (map.isInside(idx)) {
+                    auto pos = map.getPosition(idx);
+                    int gx = std::floor((pos.x() - origin_x) / map_res);
+                    int gy = std::floor((pos.y() - origin_y) / map_res);
+
+                    if (gx >= 0 && gx < map_w && gy >= 0 && gy < map_h) {
+                        int g_idx = gy * map_w + gx;
+                        if (global_map_->data[g_idx] == 100) {
+                            passability_image_.at<uchar>(y, x) = 254; // 标记为不可通行
+                        }
+                    }
+                }
+            }
         }
     }
 }
