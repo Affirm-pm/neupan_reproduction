@@ -40,10 +40,18 @@ public:
         if (params.background.b == 255) { /* 复杂的分支控制逻辑 */}
     }
 
+    void reset() {
+        // SimpleTestPlanner 无跨 Episode 状态，空实现即可
+    }
+
     Result plan(const Context& ctx, const IMapView& map_view) {
-        auto start_pose = ctx.start_pose;
+        // 当前机器人状态（位姿 + 速度），由框架通过 RobotStateProvider 注入
+        const auto& robot_state = ctx.robot_state;
+        const auto& start_pose  = robot_state.pose;   // geometry_msgs::msg::Pose
+        const auto& start_twist = robot_state.twist;  // geometry_msgs::msg::Twist
+
         auto goal_pose = ctx.goal_pose;
-        auto ref_traj = ctx.ref_traj;
+        auto ref_traj  = ctx.ref_traj;
 
         // 执行规划算法，e.g. 生成一条直线路径
 

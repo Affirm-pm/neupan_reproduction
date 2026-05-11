@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
     auto laser_injector = map_server_ptr->addUpdateSource<DummyLaserScan>(
         "front_laser",
         policy,
-        [](const DummyLaserScan& msg, SimpleTestMap& map) {
+        [](const DummyLaserScan& msg, const rclcpp::Time& /*stamp*/, SimpleTestMap& map) {
             RCLCPP_INFO(LOGGER, "   [Fuser] Fusing DummyLaserScan data: Seq = %d, Range = %.2f", msg.seq, msg.range);
             (void)map; // 防止 unused parameter 警告
         }

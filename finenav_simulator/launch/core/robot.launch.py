@@ -5,7 +5,6 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
-from launch.conditions import IfCondition
 from launch.substitutions import PythonExpression
 from launch_ros.actions import Node
 
@@ -50,6 +49,7 @@ def _launch_setup(context):
     pkg = get_package_share_directory("finenav_simulator")
 
     sdf_xmacro_path = os.path.join(pkg, "resource", "robot", "model.sdf.xmacro")
+    lidar_support_mesh_uri = f"file://{os.path.join(pkg, 'resource', 'robot', 'meshes', 'lidar_support_tri_prism.obj')}"
     bridge_config = os.path.join(pkg, "config", "ros_gz_bridge.yaml")
     spawn_pose_config = os.path.join(pkg, "config", "world_spawn_poses.yaml")
 
@@ -63,7 +63,10 @@ def _launch_setup(context):
 
     remappings = [("/tf", "tf"), ("/tf_static", "tf_static")]
 
-    robot_xml = generate_robot_sdf_from_xmacro(sdf_xmacro_path)
+    robot_xml = generate_robot_sdf_from_xmacro(
+        sdf_xmacro_path,
+        mappings={"lidar_support_mesh_uri": lidar_support_mesh_uri},
+    )
     robot_urdf_xml = normalize_robot_urdf_for_rviz(generate_robot_urdf_from_sdf(robot_xml))
     sdf_config = load_robot_sdf_config_from_string(robot_xml)
 
@@ -95,14 +98,6 @@ def _launch_setup(context):
             "use_sim_time": True,
             "robot_description": robot_urdf_xml,
         }],
-    )
-
-    base_link_to_imu = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="base_link_to_imu",
-        arguments=build_tf_args("base_link", "imu", sdf_config["base_link_to_imu"]),
-        parameters=[{"use_sim_time": True}],
     )
 
     imu_sensor_alias = Node(
@@ -140,7 +135,7 @@ def _launch_setup(context):
             "max_angular_speed": 3.0,
             "enable_keyboard_teleop": True,
             "enable_path_publisher": True,
-            "enable_ground_truth_localizer": PythonExpression([
+            "enable_identity_map_to_odom": PythonExpression([
                 "'False' if '", LaunchConfiguration("lio_type"), "' == 'fast_lio' else 'True'"
             ]),
         }],
@@ -150,7 +145,6 @@ def _launch_setup(context):
         spawn_robot,
         robot_ign_bridge,
         robot_state_publisher,
-        base_link_to_imu,
         imu_sensor_alias,
         simulator_helper,
     ]

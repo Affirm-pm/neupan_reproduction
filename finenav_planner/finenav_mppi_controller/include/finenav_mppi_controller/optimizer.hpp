@@ -41,6 +41,7 @@
 //#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 #include "finenav_mppi_controller/map_view_def.hpp"
+#include "finenav_mppi_controller/finenav_mppi_controller_params.hpp"
 
 
 
@@ -77,15 +78,16 @@ public:
    * @param dynamic_parameter_handler Parameter handler object
    */
     void initialize(
-        const std::string & name, std::vector<std::unique_ptr<critics::CriticFunction>> & critics)
+        const std::string & name,
+        std::vector<std::unique_ptr<critics::CriticFunction>> & critics,
+        const finenav_mppi_controller::Params & params)
   	{
   	    name_ = name;
   	    critics_ = std::move(critics);
 
+  	    getParams(params);
 
-  	    getParams();
-
-  		critic_manager_.on_configure(critics_);
+  		critic_manager_.on_configure(critics_, params);
   	    noise_generator_.initialize(settings_, isHolonomic());
 
   	    reset();
@@ -101,38 +103,32 @@ public:
   	    noise_generator_.shutdown();
   	}
 
-    void getParams()
+    void getParams(const finenav_mppi_controller::Params & p)
   	{
-  	    // 使用硬编码值，移除 parameters_handler_ 依赖
-  	    std::string motion_model_name = std::string("DiffDrive");
-
   	    auto & s = settings_;
 
-  	    // ...hardcoded parameters (以前由 parameters_handler_ 提供)...
-  	    s.model_dt = 0.05f;
-  	    s.time_steps = 56;
-  	    s.batch_size = 1000;
-  	    s.iteration_count = 1;
-  	    s.temperature = 0.3f;
-  	    s.gamma = 0.015f;
+  	    s.model_dt        = static_cast<float>(p.model_dt);
+  	    s.time_steps      = static_cast<unsigned int>(p.time_steps);
+  	    s.batch_size      = static_cast<unsigned int>(p.batch_size);
+  	    s.iteration_count = static_cast<unsigned int>(p.iteration_count);
+  	    s.temperature     = static_cast<float>(p.temperature);
+  	    s.gamma           = static_cast<float>(p.gamma);
 
-  	    s.base_constraints.vx_max = 0.5;
-  	    s.base_constraints.vx_min = -0.35;
-  	    s.base_constraints.vy = 0.5;
-  	    s.base_constraints.wz = 1.9;
+  	    s.base_constraints.vx_max = p.vx_max;
+  	    s.base_constraints.vx_min = p.vx_min;
+  	    s.base_constraints.vy     = p.vy_max;
+  	    s.base_constraints.wz     = p.wz_max;
 
-  	    s.sampling_std.vx = 0.8;
-  	    s.sampling_std.vy = 0.8;
-  	    s.sampling_std.wz = 0.4;
+  	    s.sampling_std.vx = p.vx_std;
+  	    s.sampling_std.vy = p.vy_std;
+  	    s.sampling_std.wz = p.wz_std;
 
   	    s.retry_attempt_limit = 1;
 
-  	    // 保持原有流程：复制约束并设置 motion model（motion_model_name 可按需修改）
   	    s.constraints = s.base_constraints;
-  	    setMotionModel(motion_model_name);
+  	    setMotionModel(p.motion_model);
+
   		std::cout<<"[nav2_mppi_controller] Optimizing param prepared"<<std::endl;
-  	    // 不再使用 parameters_handler_->addPostCallback(...)
-  	    // 使用硬编码 controller_frequency（使 controller_period == model_dt，启用 shift 控制序列）
   	    double controller_frequency = 1.0 / static_cast<double>(s.model_dt);
   	    setOffset(controller_frequency);
   	}
@@ -154,22 +150,15 @@ public:
     {
     prepare(robot_pose, robot_speed, plan);
 
-  	std::cout<<"[nav2_mppi_controller] Optimizing Prepared"<<std::endl;
 
     do {
       optimize(map_view);
     } while (fallback(critics_data_.fail_flag));
-
-    std::cout<<"[nav2_mppi_controller] Optimization Complete"<<std::endl;
-
     // utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
     auto control = getControlFromSequenceAsTwist(plan.header.stamp, map_view);
     if (settings_.shift_control_sequence) {
       shiftControlSequence();
     }
-
-  	std::cout<<"[nav2_mppi_controller] Control Retrieved"<<std::endl;
-
     // return control;
 }
 
@@ -187,6 +176,23 @@ public:
    * @brief Get the optimal trajectory for a cycle for visualization
    * @return Optimal trajectory
    */
+    /**
+     * @brief Get the optimal control sequence (vx, vy, wz) for each time step
+     * @return xtensor of shape [time_steps, 3] with columns (vx, wz, vy) — or (vx, wz, 0) for DiffDrive
+     */
+    xt::xtensor<float, 2> getControlSequence() const
+    {
+        auto && seq = xt::xtensor<float, 2>::from_shape({settings_.time_steps, 3u});
+        xt::noalias(xt::view(seq, xt::all(), 0)) = control_sequence_.vx;
+        xt::noalias(xt::view(seq, xt::all(), 1)) = control_sequence_.wz;
+        if (isHolonomic()) {
+            xt::noalias(xt::view(seq, xt::all(), 2)) = control_sequence_.vy;
+        } else {
+            xt::noalias(xt::view(seq, xt::all(), 2)) = xt::zeros<float>({settings_.time_steps});
+        }
+        return seq;
+    }
+
     xt::xtensor<float, 2>getOptimizedTrajectory()
     {
         auto && sequence =

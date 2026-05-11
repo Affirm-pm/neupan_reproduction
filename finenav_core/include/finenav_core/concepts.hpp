@@ -11,6 +11,7 @@
 #include <Eigen/Dense>
 
 #include "finenav_msgs/msg/trajectory.hpp"
+#include "finenav_msgs/msg/robot_state.hpp"
 #include "finenav_core/plan/data_packet.hpp"
 
 namespace finenav {
@@ -45,11 +46,14 @@ concept MapConcept =
 
 /**
  * @brief PlanningContext (规划上下文)
- * @details 包含算法在“这一帧”规划所需的所有不可变数据。
+ * @details 包含算法在"这一帧"规划所需的所有不可变数据。
+ *
+ * robot_state 由框架从外部 RobotStateProvider 注入，算法开发者无需关心
+ * finenav_localizer 内部的数学表示（NavState<S>），直接使用 geometry_msgs 组合体即可。
  */
 template <typename PlannerT>
 struct PlanningContext {
-    geometry_msgs::msg::Pose start_pose;
+    finenav_msgs::msg::RobotState robot_state; ///< 当前机器人状态（pose / twist / accel）
     geometry_msgs::msg::Pose goal_pose;
     InputDataT<PlannerT> ref_traj; // TODO: 验证空轨迹的逻辑
 };
@@ -74,6 +78,9 @@ concept PlannerConcept = std::default_initializable<T> &&
 
         // --- 基本配置 ---
         { planner.configure(config) } -> std::same_as<void>;
+
+        // --- 重置接口（Episode 边界，由框架在新目标到来时调用）---
+        { planner.reset() } -> std::same_as<void>;
 
         // --- 规划接口 ---
         { planner.plan(ctx, map_view) } -> std::same_as<std::optional<OutputDataT<T>>>;

@@ -98,19 +98,19 @@ static double yawFromState(const fn::NavStateD& s)
                       1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z()));
 }
 
-/// Assemble LocalizerOptions from cfg:: constants.
-static fn::LocalizerOptions makeOpts()
+/// Assemble pnode parameter overrides from cfg:: constants.
+static rclcpp::NodeOptions makeOpts()
 {
-    fn::LocalizerOptions o;
-    o.update_rate_hz        = cfg::kUpdateRateHz;
-    o.max_delay_sec         = cfg::kMaxDelaySec;
-    o.pose_smoothing_steps  = cfg::kPoseSmoothingSteps;
-    o.twist_smoothing_steps = cfg::kTwistSmoothingSteps;
-    o.pose_gate_dist        = cfg::kPoseGateDist;
-    o.twist_gate_dist       = cfg::kTwistGateDist;
-    o.max_dt_sec            = cfg::kMaxDtSec;
-    o.model_opts.vel_noise_std   = cfg::kVelNoiseStd;
-    o.model_opts.omega_noise_std = cfg::kOmegaNoiseStd;
+    rclcpp::NodeOptions o;
+    o.append_parameter_override("update_rate_hz",        cfg::kUpdateRateHz);
+    o.append_parameter_override("max_delay_sec",         cfg::kMaxDelaySec);
+    o.append_parameter_override("pose_smoothing_steps",  int64_t{cfg::kPoseSmoothingSteps});
+    o.append_parameter_override("twist_smoothing_steps", int64_t{cfg::kTwistSmoothingSteps});
+    o.append_parameter_override("pose_gate_dist",        cfg::kPoseGateDist);
+    o.append_parameter_override("twist_gate_dist",       cfg::kTwistGateDist);
+    o.append_parameter_override("max_dt_sec",            cfg::kMaxDtSec);
+    o.append_parameter_override("model.vel_noise_std",   cfg::kVelNoiseStd);
+    o.append_parameter_override("model.omega_noise_std", cfg::kOmegaNoiseStd);
     return o;
 }
 
@@ -197,12 +197,15 @@ static void fillEstimate(Row& row, fn::FineNavLocalizer& loc)
     const fn::NavStateD              est = loc.getState();
     const fn::NavigationModelD::PMat P   = loc.getCovariance();
 
-    // Primary 2-D dims
+    // Primary 2-D dims.
+    // getState() returns v in body frame; convert back to world frame so that
+    // est_vx/vy are directly comparable with the world-frame GT columns.
+    const Eigen::Vector3d v_world = est.R * est.v;
     row.est_x   = est.p.x();
     row.est_y   = est.p.y();
     row.est_yaw = yawFromState(est);
-    row.est_vx  = est.v.x();
-    row.est_vy  = est.v.y();
+    row.est_vx  = v_world.x();   ///< world-frame vx  (matches gt_vx)
+    row.est_vy  = v_world.y();   ///< world-frame vy  (matches gt_vy)
     row.est_wz  = est.omega.z();
 
     // Non-2D state values

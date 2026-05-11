@@ -87,9 +87,6 @@ add_compile_options(-O3 -finline-limit=10000000 -ffp-contract=fast -ffast-math -
 add_library(mppi_controller SHARED
   src/controller.cpp
   src/critic_manager.cpp
-  src/trajectory_visualizer.cpp
-  src/path_handler.cpp
-  src/parameters_handler.cpp
   src/noise_generator.cpp
 )
 
@@ -116,6 +113,14 @@ foreach(lib IN LISTS libraries)
   target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd finenav_mppi_controller_params )
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
+
+install(
+  TARGETS ${libraries}
+  EXPORT export_${PROJECT_NAME}
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
 
 
 

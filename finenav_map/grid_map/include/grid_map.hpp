@@ -5,7 +5,6 @@
 #pragma once
 
 #include <vector>
-#include <span>
 
 #include "finenav_map_grid_map/grid_map_params.hpp"
 #include "finenav_util/algo_configurator.hpp"
@@ -44,10 +43,50 @@ public:
     GridMap(const Length& length, const double& resolution, const Position& origin = Position::Zero());
 
 
-    bool configure(const ConfigType& params) {
+    void configure(const ConfigType& params) {
         // TODO: 之后整，主要把 GridMap( Length, double, Poosition ) 的构造函数搬过来
         std::cout << "[GridMap] configure with params" << std::endl;
-        return true;
+
+    // ===== 固定测试参数 =====
+    resolution_ = 0.05;                     // 5cm
+    length_ = Length(5.0, 5.0, 5.0);     // 10m x 10m x 3m
+    origin_ = Position(0.0, 0.0, 0.0);
+
+    // ===== 派生量 =====
+    inv_resolution_ = 1.0 / resolution_;
+
+    size_ = (length_.array() * inv_resolution_).ceil().cast<int>();
+
+    // 保证是奇数（关键）
+    size_ = size_.unaryExpr([](int v) {
+        return (v % 2 == 0) ? v + 1 : v;
+    });
+
+    half_size_ = size_ / 2;
+
+    // ===== 分配内存（核心）=====
+    const size_t total_size =
+        static_cast<size_t>(size_.x()) *
+        static_cast<size_t>(size_.y()) *
+        static_cast<size_t>(size_.z());
+
+    data_.clear();
+    data_.resize(total_size);
+
+    // 初始化每个 voxel
+    for (auto& cell : data_) {
+        cell = T{};   // 你的 Voxel 默认是 NAN / false / 0
+    }
+
+    start_index_ = Index::Zero();
+
+    // ===== debug 输出 =====
+    std::cout << "[GridMap] resolution: " << resolution_ << std::endl;
+    std::cout << "[GridMap] size: "
+              << size_.x() << " x "
+              << size_.y() << " x "
+              << size_.z() << std::endl;
+        std::cout << "[GridMap] total cells: " << total_size << std::endl;
     }
 
     /**
@@ -118,20 +157,18 @@ public:
      * @brief 访问某个(x,y)索引上的一串栅格数据
      * @param x x索引
      * @param y y索引
-     * @return 一串栅格数据的span
-     * @note 该函数的实现基于内部缓冲区z-y-x的存储顺序
+     * @return 深拷贝的栅格数据向量，正确处理滚动缓冲区的 z 轴环绕
      */
-    std::span<T> getVoxelsAlongZ(const int& x, const int& y);
+    std::vector<T> getVoxelsAlongZ(const int& x, const int& y);
 
 
     /**
      * @brief 访问某个(x,y)索引上的一串栅格数据（常量版本）
      * @param x x索引
      * @param y y索引
-     * @return 一串栅格数据的span
-     * @note 该函数的实现基于内部缓冲区z-y-x的存储顺序
+     * @return 深拷贝的栅格数据向量，正确处理滚动缓冲区的 z 轴环绕
      */
-    std::span<const T> getVoxelsAlongZ(const int& x, const int& y) const;
+    std::vector<T> getVoxelsAlongZ(const int& x, const int& y) const;
 
     /**
      * @brief 清空地图数据
@@ -162,6 +199,12 @@ public:
      * @return 如果地图实际发生移动返回true，否则返回false
      */
     bool moveTo(const Position& position, const bool keep_removed, std::vector<std::pair<Position, T>>& removed_region);
+
+    /**
+     * @brief 将地图视窗平移到新的中心位置（MapConcept 要求）
+     * @param position 新的视窗中心位置（世界坐标）
+     */
+    void shiftWindowTo(const Position& position);
 
     /**
      * @brief 光线投射

@@ -72,7 +72,8 @@ public:
     * @param dynamic_parameter_handler Parameter handler object
     */
   void on_configure(
-     std::vector<std::unique_ptr<critics::CriticFunction>> & critics);
+     std::vector<std::unique_ptr<critics::CriticFunction>> & critics,
+     const finenav_mppi_controller::Params & params);
 
   /**
     * @brief Score trajectories by the set of loaded critic functions

@@ -39,7 +39,7 @@ public:
   /**
     * @brief Initialize critic
     */
-  void initialize() override;
+  void initialize(const finenav_mppi_controller::Params & params) override;
 
   /**
    * @brief Evaluate cost related to obstacle avoidance
@@ -97,8 +97,6 @@ protected:
   float weight_{0};
 
   float near_goal_distance_;
-  std::string inflation_layer_name_;
-
   unsigned int power_{0};
 };
 

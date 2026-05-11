@@ -12,8 +12,8 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "behaviortree_cpp/bt_factory.h"
-#include "thirdparty/ros_node_params.hpp"
-#include "thirdparty/plugins.hpp"
+#include "finenav_navigator/thirdparty/ros_node_params.hpp"
+#include "finenav_navigator/thirdparty/plugins.hpp"
 
 namespace finenav {
 

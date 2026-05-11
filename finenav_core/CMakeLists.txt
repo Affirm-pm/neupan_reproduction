@@ -13,6 +13,7 @@ find_package(finenav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(finenav_util REQUIRED)
+find_package(generate_parameter_library REQUIRED)
 
 set(ros_dependencies
         eigen3_cmake_module
@@ -26,6 +27,8 @@ set(ros_dependencies
         finenav_util
 )
 
+# Generate parameter library for NavStateManager — moved to finenav_navigator
+
 install(DIRECTORY include/
         DESTINATION include/
 )
@@ -33,6 +36,7 @@ install(DIRECTORY include/
 add_library(${PROJECT_NAME} INTERFACE)
 target_include_directories(${PROJECT_NAME} INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
 target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_20)
@@ -53,6 +57,7 @@ install(TARGETS ${PROJECT_NAME}
 ament_export_dependencies(
         fmt
         Eigen3
+        generate_parameter_library
         ${ros_dependencies}
 )
 

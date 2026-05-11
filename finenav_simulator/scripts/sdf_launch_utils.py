@@ -332,8 +332,6 @@ def load_robot_sdf_config_from_string(sdf_xml):
 
     base_link_pose = _resolve_entity_pose(entities, "base_link", cache)
     lidar_frame_pose = _resolve_entity_pose(entities, "lidar_frame", cache)
-    imu_pose = _resolve_entity_pose(entities, "imu_sensor", cache)
-
     lidar_parent_link, lidar_sensor = _find_link_sensor(model, "gpu_lidar")
     imu_parent_link, imu_sensor = _find_link_sensor(model, "imu_sensor")
 
@@ -349,7 +347,6 @@ def load_robot_sdf_config_from_string(sdf_xml):
 
     return {
         "base_link_to_lidar": _relative_pose(base_link_pose, lidar_frame_pose),
-        "base_link_to_imu": _relative_pose(base_link_pose, imu_pose),
         "lidar_parent_link": lidar_parent_link.get("name"),
         "lidar_sensor_name": lidar_sensor.get("name"),
         "imu_parent_link": imu_parent_link.get("name"),

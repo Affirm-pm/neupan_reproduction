@@ -63,25 +63,33 @@ const T& GridMap<T>::at(const Index& index) const {
 }
 
 template <typename T>
-std::span<T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) {
+std::vector<T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) {
     if (std::abs(x) > half_size_.x() || std::abs(y) > half_size_.y()) {
         throw std::out_of_range("Accessing grid out of bounds");
     }
-
-    Index index_start(x, y, -half_size_.z());
-    int buffer_start = getBufferIndex(index_start, size_, half_size_, start_index_);
-    return std::span<T>(&data_[buffer_start], size_.z());
+    // Deep-copy each z-layer individually via at(), which correctly handles
+    // rolling-buffer wrap-around along z. A raw span over [buffer_start, +size_z)
+    // is unsafe when start_index_.z() != 0 because the z-block can spill past
+    // the end of data_.
+    std::vector<T> result;
+    result.reserve(size_.z());
+    for (int z = -half_size_.z(); z <= half_size_.z(); ++z) {
+        result.push_back(at(Index(x, y, z)));
+    }
+    return result;
 }
 
 template <typename T>
-std::span<const T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) const {
+std::vector<T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) const {
     if (std::abs(x) > half_size_.x() || std::abs(y) > half_size_.y()) {
         throw std::out_of_range("Accessing grid out of bounds");
     }
-
-    Index index_start(x, y, -half_size_.z());
-    int buffer_start = getBufferIndex(index_start, size_, half_size_, start_index_);
-    return std::span<T>(&data_[buffer_start], size_.z());
+    std::vector<T> result;
+    result.reserve(size_.z());
+    for (int z = -half_size_.z(); z <= half_size_.z(); ++z) {
+        result.push_back(at(Index(x, y, z)));
+    }
+    return result;
 }
 
 template <typename T>
@@ -119,7 +127,8 @@ bool GridMap<T>::moveTo(const Position& position, const bool keep_removed, std::
         removed_region.emplace_back(getPosition(index), at(index));
         if (!keep_removed) {
             if (checkIfIndexValid(index, size_, half_size_)) {
-                data_[getBufferIndex(index, size_, half_size_, start_index_)] = NAN; // 清空数据
+                // 对于通用 DataType T（例如自定义 Voxel），使用默认构造来清空数据
+                data_[getBufferIndex(index, size_, half_size_, start_index_)] = T{}; // 清空数据
             }
         }
     }
@@ -130,6 +139,12 @@ bool GridMap<T>::moveTo(const Position& position, const bool keep_removed, std::
     start_index_ = wrapIndexToRange(start_index_ + index_shift, size_); // 地图移动时，逻辑原点在缓冲区中的位置同向移动
 
     return true;
+}
+
+template <typename T>
+void GridMap<T>::shiftWindowTo(const Position& position) {
+    // 视窗中心等价于地图原点，这里直接复用已有的滚动更新逻辑
+    moveTo(position);
 }
 
 template <typename T>

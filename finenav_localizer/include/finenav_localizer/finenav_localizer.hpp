@@ -18,28 +18,18 @@
 
 #include "eskf.hpp"
 #include "finenav_localizer/filter_model.hpp"
+#include "finenav_localizer/nav_state_buffer.hpp"
 #include "finenav_localizer/observation_queue.hpp"
 #include "finenav_util/node_thread.hpp"
+#include "finenav_localizer/localizer_params.hpp"
 
 namespace finenav {
 
 // ============================================================================
-//  LocalizerOptions  —  all tunable parameters for FineNavLocalizer
-// ============================================================================
-struct LocalizerOptions {
-    double      update_rate_hz        = 100.0;  ///< Timer frequency [Hz]
-    double      max_delay_sec         = 0.5;    ///< Max tolerable observation delay [s]
-    int         pose_smoothing_steps  = 1;      ///< Pose processed N times, R scaled ×N
-    int         twist_smoothing_steps = 1;      ///< Twist processed N times, R scaled ×N
-    double      pose_gate_dist        = 12.59;  ///< Mahalanobis gate  χ²(6) 95 %
-    double      twist_gate_dist       = 12.59;  ///< Mahalanobis gate  χ²(6) 95 %
-    double      max_dt_sec            = 0.5;    ///< dt clamp upper-bound [s]
-    std::size_t max_obs_queue_size    = 64;     ///< Per-type queue capacity
-    NavigationModelD::Options model_opts{};     ///< ESKF process-noise parameters
-};
-
-// ============================================================================
 //  FineNavLocalizer  —  timer-driven ESKF localizer with time-delay compensation
+//
+//  参数通过 generate_parameter_library 从 finenav_localizer.yaml 加载，
+//  与框架其他组件（Navigator、NavStateManager）保持一致的配置风格。
 //
 //  Internal threading model
 //  ─────────────────────────────────────────────────────────────────────────
@@ -54,24 +44,6 @@ struct LocalizerOptions {
 //
 //  getState() / getCovariance() / getLastUpdateTime() read from an output
 //  cache protected by cached_state_mutex_ (shared_mutex).
-//
-//  Time-delay handling
-//  ─────────────────────────────────────────────────────────────────────────
-//  Delayed observations are handled by the ESKF's TimeDelayKalmanFilter
-//  (state-expansion approach, following autoware EKFModule).
-//  Every timerCallback():
-//    1. predict(dt)  — slides delay slots, accumulates elapsed time
-//    2. For each observation popped from the queue:
-//         a. Compute delay_time = now − stamp (clamped to ≥ 0)
-//         b. delay_step = eskf_.findDelayStep(delay_time)
-//         c. Reject if delay_step ≥ maxDelayStep (too old)
-//         d. applyUpdate(msg, delay_step)  →  eskf_.update<6>(..., delay_step)
-//
-//  Smoothing (AgedObservationQueue)
-//  ─────────────────────────────────────────────────────────────────────────
-//  Each observation is processed smoothing_steps times (via pop_increment_age).
-//  Each processing uses R_eff = R_msg * smoothing_steps, distributing the
-//  correction gradually and preventing sharp jumps.
 // ============================================================================
 class FineNavLocalizer {
 public:
@@ -81,10 +53,19 @@ public:
     using PoseMsg  = geometry_msgs::msg::PoseWithCovarianceStamped;
     using TwistMsg = geometry_msgs::msg::TwistWithCovarianceStamped;
 
-    /// @param parent_node  Owning node (used for clock & namespace).
-    /// @param opts         Localizer configuration.
+    /// Convenience aliases for the generated parameter types.
+    using Params        = finenav_localizer::Params;
+    using ParamListener = finenav_localizer::ParamListener;
+
+    /**
+     * @brief 构造 FineNavLocalizer。
+     * @param parent_node     宿主节点（用于获取 use_sim_time 及命名空间继承）。
+     *                        内部会创建名为 "finenav_localizer" 的私有子节点来读取参数。
+     * @param pnode_overrides 可选的参数覆盖（测试/eval场景用），通过
+     *                        rclcpp::NodeOptions::append_parameter_override() 设置。
+     */
     explicit FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
-                              LocalizerOptions        opts = {});
+                              rclcpp::NodeOptions pnode_overrides = rclcpp::NodeOptions{});
 
     FineNavLocalizer(const FineNavLocalizer &)             = delete;
     FineNavLocalizer & operator=(const FineNavLocalizer &) = delete;
@@ -105,11 +86,33 @@ public:
 
     /**
      * @brief Read-only access to the latest filter output.
+     *
+     * @note  The returned NavStateD has `v` expressed in the **body frame**
+     *        (R^T · v_world).  `p` and `R` are world-frame pose; `omega` is
+     *        body-frame angular velocity (unchanged).
      * @note  Thread-safe.
      */
     NavStateD    getState()          const;
     PMat         getCovariance()     const;
     rclcpp::Time getLastUpdateTime() const;
+
+    /**
+     * @brief Query the interpolated state at an arbitrary past timestamp.
+     *
+     * Returns std::nullopt when the localizer is uninitialised, query_time is
+     * in the future, or older than the retained history window.
+     *
+     * @note  `v` in the returned state is expressed in the **body frame**,
+     *        consistent with getState().
+     * @note  Thread-safe.
+     */
+    std::optional<NavStateD> getStateAt(const rclcpp::Time & query_time) const;
+
+    /**
+     * @brief Direct access to the underlying NavStateBuffer for advanced use-cases.
+     * @note The buffer is always valid after construction.
+     */
+    NavStateBuffer::SharedPtr getStateBuffer() const { return state_buffer_; }
 
 private:
 
@@ -132,17 +135,20 @@ private:
     rclcpp::Node::SharedPtr                        pnode_;
     std::unique_ptr<NodeThread>                    pnode_thread_;
     rclcpp::TimerBase::SharedPtr                   update_timer_;
-    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_;
+    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_;  // null when publish_tf is false
+
+    // ── Parameters ──────────────────────────────────────────────────────────
+    std::unique_ptr<ParamListener> param_listener_;
+    Params                         params_;
 
     // ── Filter state  (protected by filter_mutex_) ───────────────────────────
     mutable std::mutex          filter_mutex_;
-    LocalizerOptions            opts_;
     ESKFd                       eskf_;
     std::optional<rclcpp::Time> last_predict_time_;
 
     // ── Observation queues (each internally mutex-protected) ─────────────────
-    PoseObsQueue  pose_queue_;
-    TwistObsQueue twist_queue_;
+    std::unique_ptr<PoseObsQueue>  pose_queue_;
+    std::unique_ptr<TwistObsQueue> twist_queue_;
 
     // ── Initialisation guard ─────────────────────────────────────────────────
     std::atomic<bool> is_initialized_{false};
@@ -152,6 +158,9 @@ private:
     NavStateD    cached_state_{};
     PMat         cached_covariance_ = PMat::Identity() * 1e-2;
     rclcpp::Time cached_time_{0, 0, RCL_ROS_TIME};
+
+    // ── Stamped-history buffer (thread-safe internally) ──────────────────────
+    NavStateBuffer::SharedPtr state_buffer_;
 
     rclcpp::Logger logger_;
 };

@@ -16,11 +16,14 @@
 
 #include <string>
 
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "pcl/point_cloud.h"
 #include "pcl/point_types.h"
 #include "pcl_conversions/pcl_conversions.h"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
 
 struct PointXYZIRT
 {
@@ -44,6 +47,12 @@ public:
 
 private:
   void lidarHandle(const sensor_msgs::msg::PointCloud2::SharedPtr pc_msg);
+  bool LookupOutputTransform(
+    const std::string & source_frame, const rclcpp::Time & stamp,
+    geometry_msgs::msg::TransformStamped & transform);
+  void ApplyFrameTransform(
+    pcl::PointCloud<PointXYZIRT>::Ptr & cloud,
+    const geometry_msgs::msg::TransformStamped & transform);
 
   template <typename T>
   void publishPoints(
@@ -70,5 +79,8 @@ private:
   std::string pcd_topic_;
   std::string output_topic_;
   std::string output_frame_id_;
+  bool transform_output_to_frame_;
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };
 }  // namespace ign_sim_pointcloud_tool

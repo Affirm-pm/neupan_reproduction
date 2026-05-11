@@ -7,7 +7,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_msgs/action/compute_plan.hpp"
-#include "thirdparty/bt_action_node.hpp"
+#include "finenav_navigator/thirdparty/bt_action_node.hpp"
 
 
 namespace finenav {

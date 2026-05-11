@@ -5,101 +5,42 @@
 namespace finenav_2d
 {
 
-GroundTruthMapLocalizer::GroundTruthMapLocalizer(rclcpp::Node * node, std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster)
-: node_(node), tf_broadcaster_(tf_broadcaster)
+namespace
 {
-  enable_ground_truth_localizer_ = node_->declare_parameter("enable_ground_truth_localizer", false);
-  
-  if (!enable_ground_truth_localizer_) {
-    return;
+
+template<typename T>
+T DeclareOrGetParameter(rclcpp::Node * node, const std::string & name, const T & default_value)
+{
+  if (node->has_parameter(name)) {
+    return node->get_parameter(name).get_value<T>();
   }
-
-  ground_truth_topic_ = node_->declare_parameter("ground_truth_topic", "/ground_truth_tf");
-  odom_tf_topic_ = node_->declare_parameter("odom_tf_topic", "/ground_truth_odom_tf");
-  robot_frame_ = node_->declare_parameter("robot_frame", "fine_robot");
-  map_frame_ = node_->declare_parameter("map_frame", "map");
-  base_frame_ = node_->declare_parameter("base_frame", "base_link");
-  odom_frame_ = node_->declare_parameter("odom_frame", "odom");
-
-  truth_sub_ = node_->create_subscription<tf2_msgs::msg::TFMessage>(
-    ground_truth_topic_, rclcpp::QoS(rclcpp::KeepLast(20)).reliable(),
-    std::bind(&GroundTruthMapLocalizer::OnGroundTruth, this, std::placeholders::_1));
-
-  odom_tf_sub_ = node_->create_subscription<tf2_msgs::msg::TFMessage>(
-    odom_tf_topic_, rclcpp::QoS(rclcpp::KeepLast(20)).reliable(),
-    std::bind(&GroundTruthMapLocalizer::OnOdomTf, this, std::placeholders::_1));
+  return node->declare_parameter<T>(name, default_value);
 }
 
-void GroundTruthMapLocalizer::OnOdomTf(const tf2_msgs::msg::TFMessage::SharedPtr msg)
+}  // namespace
+
+GroundTruthMapPublisher::GroundTruthMapPublisher(rclcpp::Node * node)
+: node_(node),
+  static_tf_broadcaster_(std::make_shared<tf2_ros::StaticTransformBroadcaster>(node))
 {
-  const geometry_msgs::msg::TransformStamped * odom_tf = nullptr;
-  for (const auto & transform : msg->transforms) {
-    if (transform.child_frame_id == base_frame_) {
-      odom_tf = &transform;
-      break;
-    }
-  }
+  enable_identity_map_to_odom_ =
+    DeclareOrGetParameter<bool>(node_, "enable_identity_map_to_odom", false);
+  map_frame_ = DeclareOrGetParameter<std::string>(node_, "map_frame", "map");
+  odom_frame_ = DeclareOrGetParameter<std::string>(node_, "odom_frame", "odom");
 
-  if (odom_tf == nullptr) {
-    RCLCPP_WARN_THROTTLE(
-      node_->get_logger(), *node_->get_clock(), 3000,
-      "No odometry transform targeting '%s' found on %s.",
-      base_frame_.c_str(), odom_tf_topic_.c_str());
-    return;
-  }
-
-  tf2::fromMsg(odom_tf->transform, latest_odom_to_base_);
-  latest_odom_frame_ = odom_frame_;
-  latest_stamp_ = odom_tf->header.stamp;
-  has_odom_tf_ = true;
-
-  if (has_ground_truth_tf_ && !map_frame_.empty()) {
-    PublishResolvedTransform();
+  if (enable_identity_map_to_odom_) {
+    PublishIdentityMapToOdom();
   }
 }
 
-void GroundTruthMapLocalizer::OnGroundTruth(const tf2_msgs::msg::TFMessage::SharedPtr msg)
+void GroundTruthMapPublisher::PublishIdentityMapToOdom() const
 {
-  const geometry_msgs::msg::TransformStamped * robot_tf = nullptr;
-  for (const auto & transform : msg->transforms) {
-    if (
-      transform.child_frame_id == robot_frame_ ||
-      transform.child_frame_id == "/" + robot_frame_)
-    {
-      robot_tf = &transform;
-      break;
-    }
-  }
-
-  if (robot_tf == nullptr) {
-    RCLCPP_WARN_THROTTLE(
-      node_->get_logger(), *node_->get_clock(), 3000,
-      "No ground-truth transform for '%s' found on %s.",
-      robot_frame_.c_str(), ground_truth_topic_.c_str());
-    return;
-  }
-
-  tf2::fromMsg(robot_tf->transform, latest_map_to_base_link_);
-  latest_ground_truth_stamp_ = robot_tf->header.stamp;
-  has_ground_truth_tf_ = true;
-
-  if (has_odom_tf_ && !map_frame_.empty()) {
-    PublishResolvedTransform();
-  }
-}
-
-void GroundTruthMapLocalizer::PublishResolvedTransform()
-{
-  const tf2::Transform map_to_odom = latest_map_to_base_link_ * latest_odom_to_base_.inverse();
-
   geometry_msgs::msg::TransformStamped transform;
-  transform.header.stamp = latest_ground_truth_stamp_.nanoseconds() > 0 ?
-    latest_ground_truth_stamp_ : latest_stamp_;
+  transform.header.stamp = node_->get_clock()->now();
   transform.header.frame_id = map_frame_;
   transform.child_frame_id = odom_frame_;
-  transform.transform = tf2::toMsg(map_to_odom);
-  tf_broadcaster_->sendTransform(transform);
-  has_map_to_odom_solution_ = true;
+  transform.transform.rotation.w = 1.0;
+  static_tf_broadcaster_->sendTransform(transform);
 }
 
 }  // namespace finenav_2d

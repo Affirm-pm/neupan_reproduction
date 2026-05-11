@@ -13,8 +13,12 @@ find_package(rclcpp_action REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
 find_package(generate_parameter_library REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(finenav_msgs REQUIRED)
 find_package(finenav_util REQUIRED)
+find_package(finenav_localizer REQUIRED)
 
 include_directories(include)
 
@@ -24,8 +28,11 @@ set(dependencies
         ament_index_cpp
         behaviortree_cpp
         generate_parameter_library
+        eigen3_cmake_module
+        geometry_msgs
         finenav_msgs
         finenav_util
+        finenav_localizer
 )
 
 # Library
@@ -43,17 +50,10 @@ ament_target_dependencies(finenav_navigator
 )
 target_link_libraries(finenav_navigator
         navigator_params
+        Eigen3::Eigen
 )
 
-# Executable
-add_executable(test_node
-        src/test_node.cpp
-)
-target_link_libraries(test_node
-        finenav_navigator
-)
-
-# Plugins
+# Action Plugins
 add_library(finenav_compute_plan_behavior SHARED
         src/plugins/action/compute_plan.cpp
 )
@@ -62,31 +62,43 @@ ament_target_dependencies(finenav_compute_plan_behavior
 )
 target_compile_definitions(finenav_compute_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
 
+# Condition Plugins (pure BT nodes, no ROS params needed)
+add_library(finenav_navigator_conditions SHARED
+        src/plugins/condition/conditions.cpp
+)
+ament_target_dependencies(finenav_navigator_conditions
+        ${dependencies}
+)
+target_compile_definitions(finenav_navigator_conditions PRIVATE BT_PLUGIN_EXPORT)
+
+# PublishZeroCmdVel Plugin
+add_library(finenav_publish_zero_cmd_vel_behavior SHARED
+        src/plugins/action/publish_zero_cmd_vel.cpp
+)
+ament_target_dependencies(finenav_publish_zero_cmd_vel_behavior
+        ${dependencies}
+)
+target_compile_definitions(finenav_publish_zero_cmd_vel_behavior PRIVATE BT_PLUGIN_EXPORT)
+
 # Install
-install(TARGETS test_node
+install(TARGETS finenav_navigator
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
         RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS finenav_compute_plan_behavior
+install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions finenav_publish_zero_cmd_vel_behavior
         ARCHIVE DESTINATION lib/plugins
         LIBRARY DESTINATION lib/plugins
         RUNTIME DESTINATION bin
 )
 
+install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
-
-#if (BUILD_TESTING)
-#    find_package(ament_cmake_gtest REQUIRED)
-#    ament_find_gtest()
-#    add_subdirectory(test)
-#endif ()
 
 # Export
 ament_export_include_directories(include)
-ament_export_libraries(
-        finenav_navigator
-        finenav_compute_plan_behavior
-)
-ament_export_dependencies(${dependencies})
+ament_export_libraries(finenav_navigator)
+ament_export_dependencies(${dependencies} Eigen3)
 
 ament_package()

@@ -22,6 +22,12 @@ inline constexpr int kNavStateDim = 12;
 // ============================================================================
 template <typename S = double>
 struct NavState {
+    // Sophus::SO3<S> internally holds an Eigen::Quaternion<S> which may
+    // require 16-byte (SSE) or 32-byte (AVX) alignment.  When NavState is
+    // stored in heap containers (std::deque, std::vector) the allocator must
+    // honour this requirement; the macro below ensures it does.
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
     using SO3T  = Sophus::SO3<S>;
     using Vec3T = Eigen::Matrix<S, 3, 1>;
 
@@ -125,8 +131,8 @@ public:
 
         Q.template block<3, 3>(0, 0) = Mat3T::Zero(); // no direct position noise in constant-velocity model
         Q.template block<3, 3>(3, 3) = Mat3T::Zero(); // no direct rotation noise in constant-velocity model
-        Q.template block<3, 3>(6, 6) = diag3(opts.vel_noise_std   * opts.vel_noise_std   * dt2);
-        Q.template block<3, 3>(9, 9) = diag3(opts.omega_noise_std * opts.omega_noise_std * dt2);
+        Q.template block<3, 3>(6, 6) = diag3(opts.vel_noise_std   * opts.vel_noise_std   * dt);
+        Q.template block<3, 3>(9, 9) = diag3(opts.omega_noise_std * opts.omega_noise_std * dt);
 
         return Q;
     }

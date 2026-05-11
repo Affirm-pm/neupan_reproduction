@@ -6,7 +6,7 @@ find_package(ament_cmake REQUIRED)
 set(finenav_dependencies
         finenav_core
         finenav_localizer
-#        finenav_navigator
+        finenav_navigator
         finenav_motion_decorator
         finenav_msgs
         finenav_util

@@ -21,14 +21,14 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-void PathFollowCritic::initialize()
+void PathFollowCritic::initialize(const finenav_mppi_controller::Params & p)
 {
-  // 直接赋默认值，不动态加载
-  threshold_to_consider_ = 1.4f;
-  offset_from_furthest_ = 6u;
-  power_ = 1;
-  weight_ = 5.0f;
-  enabled_ = true;
+  const auto & c = p.PathFollowCritic;
+  enabled_               = c.enabled;
+  power_                 = static_cast<unsigned int>(c.cost_power);
+  weight_                = static_cast<float>(c.cost_weight);
+  offset_from_furthest_  = static_cast<size_t>(c.offset_from_furthest);
+  threshold_to_consider_ = static_cast<float>(c.threshold_to_consider);
 }
 
 void PathFollowCritic::score(CriticData & data, const IMapView& map_view)
@@ -65,7 +65,7 @@ void PathFollowCritic::score(CriticData & data, const IMapView& map_view)
     xt::pow(last_y - path_y, 2));
 
   data.costs += xt::pow(weight_ * std::move(dists), power_);
-    std::cout<<"[PathFollowCritic]: Scored"<<std::endl;
+    RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics

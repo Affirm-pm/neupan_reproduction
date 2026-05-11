@@ -11,7 +11,7 @@
 
     <depend>finenav_core</depend>
     <depend>finenav_localizer</depend>
-<!--    <depend>finenav_navigator</depend>-->
+    <depend>finenav_navigator</depend>
     <depend>finenav_motion_decorator</depend>
     <depend>finenav_msgs</depend>
     <depend>finenav_util</depend>
