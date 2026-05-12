@@ -277,6 +277,18 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(TrackingPolicy& polic
             return;
         }
 
+        // 检测 BT 侧通过 shouldResendGoal() 发来的新 goal（进入 pending slot）。
+        // 原地切换 goal_pose，不调用 resetActivePlanner()，保留 MPPI 热启动状态。
+        if (action_server_->is_preempt_requested()) {
+            auto new_goal = action_server_->accept_pending_goal();
+            if (new_goal) {
+                goal_pose = new_goal->goal;
+                RCLCPP_INFO(pnode_->get_logger(),
+                    "Tracking: goal preempted in-loop (%.2f, %.2f) — MPPI warm-start preserved.",
+                    goal_pose.position.x, goal_pose.position.y);
+            }
+        }
+
         if (!planOnce(goal_pose)) {
             RCLCPP_ERROR(pnode_->get_logger(), "Tracking: plan() failed — aborting.");
             action_server_->terminate_all();

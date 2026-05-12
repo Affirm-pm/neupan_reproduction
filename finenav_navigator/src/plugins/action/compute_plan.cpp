@@ -18,16 +18,30 @@ bool ComputePlanAction::setGoal(Goal& goal) {
         RCLCPP_ERROR(logger(), "ComputePlan: missing input ports");
         return false;
     }
+    // Record the goal being sent so shouldResendGoal() can detect changes.
+    last_sent_goal_ = goal.goal;
     return true;
 }
-// TODO: different action server for different control layer?
+
+bool ComputePlanAction::shouldResendGoal() {
+    geometry_msgs::msg::Pose current_goal;
+    if (!getInput("goal", current_goal)) {
+        return false;
+    }
+    if (!posesEqual(current_goal, last_sent_goal_)) {
+        RCLCPP_INFO(logger(),
+            "ComputePlan: goal changed (%.2f,%.2f)->(%.2f,%.2f), resending.",
+            last_sent_goal_.position.x, last_sent_goal_.position.y,
+            current_goal.position.x,   current_goal.position.y); // TODO： 只输出2维变化，感觉也不太合理
+        return true;
+    }
+    return false;
+}
+
 BT::NodeStatus ComputePlanAction::onResultReceived(const WrappedResult& result) {
-
     if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
-        std:: cout << "ComputePlanAction of " << rclcpp_action::to_string(result.goal_id) << " succeeded." << std::endl;
-        // TODO: turn plannng_time into xxx.xxx seconds
-        result.result->planning_time;
-
+        std::cout << "ComputePlanAction of "
+                  << rclcpp_action::to_string(result.goal_id) << " succeeded." << std::endl;
         return BT::NodeStatus::SUCCESS;
     }
     return BT::NodeStatus::FAILURE;

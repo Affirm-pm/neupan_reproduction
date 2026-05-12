@@ -156,6 +156,23 @@ public:
     return NodeStatus::RUNNING;
   }
 
+  /**
+   * @brief Called once per tick while the node is RUNNING, after spin_some() and
+   * before feedback/result checks.
+   *
+   * Return true to trigger an in-place goal resend: the current goal on the server
+   * is NOT cancelled; a new goal is sent immediately via async_send_goal(), which
+   * lands in the server's pending slot and is accepted via preemption.
+   * The node remains RUNNING from the parent's perspective throughout.
+   *
+   * Typical use-case: goal changed on the blackboard (e.g. GoalUpdater BT node)
+   * and the underlying action server supports goal preemption (pending slot).
+   */
+  virtual bool shouldResendGoal()
+  {
+    return false;
+  }
+
   /** Callback invoked when something goes wrong.
    * The result is provided if it is available.
    * It must return either SUCCESS or FAILURE.
@@ -236,6 +253,11 @@ protected:
   std::string action_client_key_;
 
 private:
+  // Shared send logic: resets tracking state, calls setGoal(), fires async_send_goal().
+  // Used by both the IDLE branch (first send) and shouldResendGoal() resend path.
+  // Does NOT cancel the current goal — relies on the server's pending/preempt slot.
+  NodeStatus doSendGoal();
+
   std::shared_future<typename GoalHandle::SharedPtr> future_goal_handle_;
   typename GoalHandle::SharedPtr goal_handle_;
 
@@ -392,71 +414,26 @@ inline NodeStatus RosActionNode<T>::tick()
   if(status() == BT::NodeStatus::IDLE)
   {
     setStatus(NodeStatus::RUNNING);
-
-    goal_received_ = false;
-    future_goal_handle_ = {};
-    on_feedback_state_change_ = NodeStatus::RUNNING;
-    result_ = {};
-
-    Goal goal;
-
-    if(!setGoal(goal))
-    {
-      return CheckStatus(onFailure(INVALID_GOAL, {}));
-    }
-
-    typename ActionClient::SendGoalOptions goal_options;
-
-    //--------------------
-    goal_options.feedback_callback =
-        [this](typename GoalHandle::SharedPtr,
-               const std::shared_ptr<const Feedback> feedback) {
-          on_feedback_state_change_ = onFeedback(feedback);
-          if(on_feedback_state_change_ == NodeStatus::IDLE)
-          {
-            throw std::logic_error("onFeedback must not return IDLE");
-          }
-          emitWakeUpSignal();
-        };
-    //--------------------
-    goal_options.result_callback = [this](const WrappedResult& result) {
-      if(goal_handle_->get_goal_id() == result.goal_id)
-      {
-        RCLCPP_DEBUG(logger(), "result_callback");
-        result_ = result;
-        emitWakeUpSignal();
-      }
-    };
-    //--------------------
-    goal_options.goal_response_callback =
-        [this](typename GoalHandle::SharedPtr const future_handle) {
-          auto goal_handle_ = future_handle.get();
-          if(!goal_handle_)
-          {
-            RCLCPP_ERROR(logger(), "Goal was rejected by server");
-          }
-          else
-          {
-            RCLCPP_DEBUG(logger(), "Goal accepted by server, waiting for result");
-          }
-        };
-    //--------------------
-    // Check if server is ready
-    if(!action_client->action_server_is_ready())
-    {
-      return onFailure(SERVER_UNREACHABLE, {});
-    }
-
-    future_goal_handle_ = action_client->async_send_goal(goal, goal_options);
-    time_goal_sent_ = now();
-
-    return NodeStatus::RUNNING;
+    return doSendGoal();
   }
 
   if(status() == NodeStatus::RUNNING)
   {
     std::unique_lock<std::mutex> lock(getMutex());
     client_instance_->callback_executor.spin_some();
+
+    // RESEND case: subclass detected a goal change (e.g. GoalUpdater).
+    // Send new goal directly — no cancel — server's pending slot handles preemption.
+    if(goal_received_ && shouldResendGoal())
+    {
+      RCLCPP_DEBUG(logger(), "shouldResendGoal() == true, resending goal.");
+      auto resend_status = doSendGoal();
+      if(resend_status != NodeStatus::RUNNING)
+      {
+        return CheckStatus(resend_status);
+      }
+      return NodeStatus::RUNNING;
+    }
 
     // FIRST case: check if the goal request has a timeout
     if(!goal_received_)
@@ -574,6 +551,76 @@ inline void RosActionNode<T>::cancelGoal()
     RCLCPP_ERROR(logger(), "Failed to get result call failed :( for [%s]",
                  action_name_.c_str());
   }
+}
+
+//----------------------------------------------------------------
+// doSendGoal — shared send logic (first send + resend)
+//----------------------------------------------------------------
+
+template <class T>
+inline NodeStatus RosActionNode<T>::doSendGoal()
+{
+  auto& action_client = client_instance_->action_client;
+
+  goal_received_ = false;
+  future_goal_handle_ = {};
+  on_feedback_state_change_ = NodeStatus::RUNNING;
+  result_ = {};
+
+  Goal goal;
+  if(!setGoal(goal))
+  {
+    auto status = onFailure(INVALID_GOAL, {});
+    if(!isStatusCompleted(status))
+    {
+      throw LogicError("RosActionNode: onFailure must return SUCCESS or FAILURE");
+    }
+    return status;
+  }
+
+  typename ActionClient::SendGoalOptions goal_options;
+
+  goal_options.feedback_callback =
+      [this](typename GoalHandle::SharedPtr,
+             const std::shared_ptr<const Feedback> feedback) {
+        on_feedback_state_change_ = onFeedback(feedback);
+        if(on_feedback_state_change_ == NodeStatus::IDLE)
+        {
+          throw std::logic_error("onFeedback must not return IDLE");
+        }
+        emitWakeUpSignal();
+      };
+
+  goal_options.result_callback = [this](const WrappedResult& result) {
+    if(goal_handle_ && goal_handle_->get_goal_id() == result.goal_id)
+    {
+      RCLCPP_DEBUG(logger(), "result_callback");
+      result_ = result;
+      emitWakeUpSignal();
+    }
+  };
+
+  goal_options.goal_response_callback =
+      [this](typename GoalHandle::SharedPtr const future_handle) {
+        auto gh = future_handle.get();
+        if(!gh)
+        {
+          RCLCPP_ERROR(logger(), "Goal was rejected by server");
+        }
+        else
+        {
+          RCLCPP_DEBUG(logger(), "Goal accepted by server, waiting for result");
+        }
+      };
+
+  if(!action_client->action_server_is_ready())
+  {
+    return onFailure(SERVER_UNREACHABLE, {});
+  }
+
+  future_goal_handle_ = action_client->async_send_goal(goal, goal_options);
+  time_goal_sent_ = now();
+  return NodeStatus::RUNNING;
 }
 
 }  // namespace BT
