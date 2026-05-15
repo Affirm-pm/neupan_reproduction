@@ -401,9 +401,11 @@ void FineNavLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
         eskf_.getStateAtDelay(delay_step), pos_obs, rot_obs);
 
     // ── Mahalanobis gate ────────────────────────────────────────────────────
-    // Gate uses the CURRENT covariance (leading block of extended P).
+    // Gate uses the covariance of the delay slot that the observation maps to
+    // (P(d,d)), not the current leading block P(0,0).  This gives the correct
+    // innovation covariance:  S = H · P(d,d) · H^T + R_eff
     const Eigen::Matrix<double, 6, 6> S_mat =
-        obs.H * eskf_.getCovariance() * obs.H.transpose() + R_eff;
+        obs.H * eskf_.getCovarianceAtDelay(delay_step) * obs.H.transpose() + R_eff;
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
 
@@ -436,7 +438,7 @@ void FineNavLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
 
     // ── Mahalanobis gate ────────────────────────────────────────────────────
     const Eigen::Matrix<double, 6, 6> S_mat =
-        obs.H * eskf_.getCovariance() * obs.H.transpose() + R_eff;
+        obs.H * eskf_.getCovarianceAtDelay(delay_step) * obs.H.transpose() + R_eff;
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
 
@@ -483,7 +485,7 @@ FineNavLocalizer::extractObservation(const PoseMsg & msg)
 
     R = (R + R.transpose()) * 0.5;
     for (int i = 0; i < 6; ++i)
-        R(i, i) = std::max(R(i, i), 1e-9);
+        R(i, i) = std::max(R(i, i), 1e-6);
 
     return {pos, rot, R};
 }
@@ -510,7 +512,7 @@ FineNavLocalizer::extractObservation(const TwistMsg & msg)
 
     R = (R + R.transpose()) * 0.5;
     for (int i = 0; i < 6; ++i)
-        R(i, i) = std::max(R(i, i), 1e-9);
+        R(i, i) = std::max(R(i, i), 1e-6);
 
     return {lin, ang, R};
 }
