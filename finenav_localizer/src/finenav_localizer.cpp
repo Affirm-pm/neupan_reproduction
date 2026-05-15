@@ -51,6 +51,31 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     //
     // Minimum of 2 is enforced so that slot[1] always exists and the
     // copy_backward in accumulateDelayTime has a non-empty source range.
+    //
+    // ⚠ NOTE on parameter semantics:
+    //   The effective rejection threshold is maxTrackedDelaySec = (max_delay_step-1) * dt,
+    //   where dt = 1/update_rate_hz.  This means the smallest achievable threshold
+    //   is exactly one EKF period (dt).  Observations that arrived just after the
+    //   previous tick will have delay ≈ dt + transport_delay, which can slightly exceed
+    //   this threshold under system jitter.
+    //
+    //   Rule of thumb:  max_delay_sec  ≥  2 / update_rate_hz
+    //   (gives two full periods of headroom and absorbs typical transport delays)
+    const double min_recommended_delay_sec = 2.0 / params_.update_rate_hz;
+    if (params_.max_delay_sec < min_recommended_delay_sec) {
+        RCLCPP_WARN(
+            logger_,
+            "[FineNavLocalizer] max_delay_sec=%.4f s is less than the recommended minimum "
+            "%.4f s (= 2 / update_rate_hz).  "
+            "The effective rejection threshold equals one EKF period (%.4f s), so observations "
+            "that arrive just after a tick will be rejected under normal scheduling jitter.  "
+            "Consider setting max_delay_sec >= %.4f s.",
+            params_.max_delay_sec,
+            min_recommended_delay_sec,
+            1.0 / params_.update_rate_hz,
+            min_recommended_delay_sec);
+    }
+
     const int max_delay_step = static_cast<int>(std::max(
         int64_t{2},
         static_cast<int64_t>(std::ceil(params_.max_delay_sec * params_.update_rate_hz)) + 1));
