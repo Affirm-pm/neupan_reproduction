@@ -40,9 +40,20 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     model_opts.vel_noise_std   = params_.model.vel_noise_std;
     model_opts.omega_noise_std = params_.model.omega_noise_std;
 
+    // accumulated_delay_times_ slot layout (steady state):
+    //   slot[0] = 0.0  (always overwritten to 0 in accumulateDelayTime)
+    //   slot[i] = i * dt  (i = 1 … max_delay_step-1)
+    // → maxTrackedDelaySec = (max_delay_step - 1) * dt
+    //
+    // To guarantee maxTrackedDelaySec >= max_delay_sec we need:
+    //   (max_delay_step - 1) * dt >= max_delay_sec
+    //   max_delay_step >= ceil(max_delay_sec * update_rate_hz) + 1
+    //
+    // Minimum of 2 is enforced so that slot[1] always exists and the
+    // copy_backward in accumulateDelayTime has a non-empty source range.
     const int max_delay_step = static_cast<int>(std::max(
-        int64_t{1},
-        static_cast<int64_t>(std::ceil(params_.max_delay_sec * params_.update_rate_hz))));
+        int64_t{2},
+        static_cast<int64_t>(std::ceil(params_.max_delay_sec * params_.update_rate_hz)) + 1));
     eskf_ = ESKFd(model_opts, max_delay_step);
 
     pose_queue_  = std::make_unique<PoseObsQueue>(
