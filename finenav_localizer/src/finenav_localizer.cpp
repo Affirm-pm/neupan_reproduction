@@ -283,6 +283,7 @@ void FineNavLocalizer::timerCallback()
             delay_time = std::max(delay_time, 0.0);
 
             const std::size_t delay_step = eskf_.findDelayStep(delay_time);
+
             if (delay_step >= static_cast<std::size_t>(eskf_.maxDelayStep())) {
                 RCLCPP_WARN(logger_,
                     "[FineNavLocalizer] Pose obs too old (delay=%.4f s, "
@@ -408,6 +409,8 @@ void FineNavLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
         obs.H * eskf_.getCovarianceAtDelay(delay_step) * obs.H.transpose() + R_eff;
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
+
+    RCLCPP_INFO_THROTTLE(logger_, *pnode_->get_clock(), 2000, "Mahalanobis distance: %.1f", d2);
 
     if (d2 > params_.pose_gate_dist) {
         RCLCPP_WARN(logger_,
