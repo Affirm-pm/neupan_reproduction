@@ -342,6 +342,10 @@ void FineNavLocalizer::timerCallback()
     // ── 7. Overrun detection ───────────────────────────────────────────────
     const double elapsed_sec = (pnode_->now() - now).seconds();
     const double period_sec  = 1.0 / params_.update_rate_hz;
+    RCLCPP_INFO_THROTTLE(logger_, *pnode_->get_clock(), 2000,
+        "[FineNavLocalizer] tick complete  elapsed=%.1f ms  period=%.1f ms",
+        elapsed_sec * 1e3, period_sec * 1e3);
+
     if (elapsed_sec > period_sec) {
         RCLCPP_WARN_THROTTLE(logger_, *pnode_->get_clock(), 2000,
             "[FineNavLocalizer] Timer overrun: callback took %.1f ms but period is %.1f ms "
