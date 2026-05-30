@@ -228,18 +228,27 @@ void FineNavLocalizer::timerCallback()
         return;
     }
 
-    const rclcpp::Time now = pnode_->now();
+    // tick_time is the EKF reference epoch for this cycle.
+    // All observation delay calculations use tick_time as the reference baseline.
+    // Sensor stamps may be slightly later than tick_time due to concurrent scheduling;
+    // this is not a "future" observation — it belongs to the current tick (delay_step = 0).
+    const rclcpp::Time tick_time = pnode_->now();
     std::lock_guard<std::mutex> lk(filter_mutex_);
+
+    // The "from future" rejection threshold: one full tick period.
+    // Normal concurrent scheduling jitter never exceeds one tick period;
+    // anything beyond that indicates a genuine clock fault.
+    const double future_reject_threshold = -1.0 / params_.update_rate_hz;
 
     // ── 1. Compute dt ──────────────────────────────────────────────────────
     double dt = 1.0 / params_.update_rate_hz;  // nominal fallback (first cycle)
     if (last_predict_time_.has_value()) {
-        const double meas_dt = (now - *last_predict_time_).seconds();
+        const double meas_dt = (tick_time - *last_predict_time_).seconds();
         if (meas_dt < 0.0) {
             RCLCPP_WARN(logger_,
                 "[FineNavLocalizer] Time jumped backwards (dt=%.6f s) — skipping cycle.",
                 meas_dt);
-            last_predict_time_ = now;
+            last_predict_time_ = tick_time;
             return;
         }
         if (meas_dt > params_.max_dt_sec) {
@@ -251,7 +260,7 @@ void FineNavLocalizer::timerCallback()
             dt = meas_dt;
         }
     }
-    last_predict_time_ = now;
+    last_predict_time_ = tick_time;
 
     // ── 2. Predict ─────────────────────────────────────────────────────────
     // eskf_.predict() internally propagates the nominal state, slides the
@@ -271,13 +280,17 @@ void FineNavLocalizer::timerCallback()
         for (std::size_t i = 0u; i < n; ++i) {
             const PoseMsg pose = pose_queue_->pop_increment_age();
 
-            double delay_time = (now - rclcpp::Time(pose.header.stamp)).seconds();
+            double delay_time = (tick_time - rclcpp::Time(pose.header.stamp)).seconds();
 
-            // Tolerate small scheduler jitter: clamp near-zero negative delays.
-            if (delay_time < -0.003) {
+            // Clamp: negative delay means sensor stamp is slightly after tick_time
+            // due to concurrent scheduling — treat as delay_step = 0 (current tick).
+            // Only reject if the stamp exceeds one full tick period ahead, which
+            // indicates a genuine clock fault.
+            if (delay_time < future_reject_threshold) {
                 RCLCPP_WARN(logger_,
-                    "[FineNavLocalizer] Pose obs from future (delay=%.4f s) — skipping.",
-                    delay_time);
+                    "[FineNavLocalizer] Pose obs from future (delay=%.4f s, "
+                    "threshold=%.4f s) — skipping.",
+                    delay_time, future_reject_threshold);
                 continue;
             }
             delay_time = std::max(delay_time, 0.0);
@@ -305,12 +318,13 @@ void FineNavLocalizer::timerCallback()
         for (std::size_t i = 0u; i < n; ++i) {
             const TwistMsg twist = twist_queue_->pop_increment_age();
 
-            double delay_time = (now - rclcpp::Time(twist.header.stamp)).seconds();
+            double delay_time = (tick_time - rclcpp::Time(twist.header.stamp)).seconds();
 
-            if (delay_time < -0.003) {
+            if (delay_time < future_reject_threshold) {
                 RCLCPP_WARN(logger_,
-                    "[FineNavLocalizer] Twist obs from future (delay=%.4f s) — skipping.",
-                    delay_time);
+                    "[FineNavLocalizer] Twist obs from future (delay=%.4f s, "
+                    "threshold=%.4f s) — skipping.",
+                    delay_time, future_reject_threshold);
                 continue;
             }
             delay_time = std::max(delay_time, 0.0);
@@ -333,18 +347,18 @@ void FineNavLocalizer::timerCallback()
         std::unique_lock<std::shared_mutex> cache_lk(cached_state_mutex_);
         cached_state_      = eskf_.getState();
         cached_covariance_ = eskf_.getCovariance();
-        cached_time_       = now;
+        cached_time_       = tick_time;
     }
 
     // ── 5b. Append to history buffer ──────────────────────────────────────
-    state_buffer_->push(now, eskf_.getState());
+    state_buffer_->push(tick_time, eskf_.getState());
 
     // ── 6. Broadcast TF: map → base_link ───────────────────────────────────
     const NavStateD & s = eskf_.getState();
 
     if (tf_br_) {
         geometry_msgs::msg::TransformStamped tf;
-        tf.header.stamp    = now;
+        tf.header.stamp    = tick_time;
         tf.header.frame_id = "map";
         tf.child_frame_id  = "base_link";
 
@@ -366,7 +380,7 @@ void FineNavLocalizer::timerCallback()
         s.p.norm(), s.v.norm(), s.omega.norm());
 
     // ── 7. Overrun detection ───────────────────────────────────────────────
-    const double elapsed_sec = (pnode_->now() - now).seconds();
+    const double elapsed_sec = (pnode_->now() - tick_time).seconds();
     const double period_sec  = 1.0 / params_.update_rate_hz;
     RCLCPP_INFO_THROTTLE(logger_, *pnode_->get_clock(), 2000,
         "[FineNavLocalizer] tick complete  elapsed=%.1f ms  period=%.1f ms",
