@@ -20,6 +20,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
     src/trim_by_distance.cpp
     src/seek_to_nearest_point.cpp
     src/trim_by_aabb.cpp
+    src/smooth_path.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} Eigen3::Eigen)
