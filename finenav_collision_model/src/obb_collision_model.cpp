@@ -37,7 +37,11 @@ void OBBCollisionModel::precompute(const Pose& pose) {
         const int u_axis = (axis + 1) % 3;
         const int v_axis = (axis + 2) % 3;
 
-        for (const double side : {min_[axis], max_[axis]}) {
+        // 当某轴尺寸为 0 时 min==max，只需采样 1 个面而非 2 个
+        const double sides[2] = {min_[axis], max_[axis]};
+        const int num_sides = (min_[axis] == max_[axis]) ? 1 : 2;
+        for (int s = 0; s < num_sides; ++s) {
+            const double side = sides[s];
             for (double u = min_[u_axis]; u <= max_[u_axis]; u += step) {
                 for (double v = min_[v_axis]; v <= max_[v_axis]; v += step) {
                     Position3D local_pt;
