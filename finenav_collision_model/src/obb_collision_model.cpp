@@ -75,4 +75,45 @@ void OBBCollisionModel::precompute(const Pose& pose) {
     }
 }
 
+void OBBCollisionModel::precomputeEdge(const Pose& pose) {
+    edge_cached_points_.clear();
+
+    const double step = policy_.step;
+    const Pose body_to_world = pose * local_pose_;
+
+    // OBB 共 12 条棱：对每个轴 a，沿 a 方向的棱由另外两轴各取 min/max 交叉组合固定
+    // 轴旋转技巧：u = (a+1)%3，v = (a+2)%3
+    for (int a = 0; a < 3; ++a) {
+        const int u = (a + 1) % 3;
+        const int v = (a + 2) % 3;
+
+        const double u_sides[2] = {min_[u], max_[u]};
+        const double v_sides[2] = {min_[v], max_[v]};
+        // 当某垂直轴尺寸为 0 时 min==max，4 条棱退化为 2 条，避免重复采样
+        const int num_u = (min_[u] == max_[u]) ? 1 : 2;
+        const int num_v = (min_[v] == max_[v]) ? 1 : 2;
+
+        for (int su = 0; su < num_u; ++su) {
+            for (int sv = 0; sv < num_v; ++sv) {
+                for (double t = min_[a]; t <= max_[a]; t += step) {
+                    Position3D pt;
+                    pt[a] = t;
+                    pt[u] = u_sides[su];
+                    pt[v] = v_sides[sv];
+                    edge_cached_points_.push_back(body_to_world * pt);
+                }
+                // 补全终点（浮点步进可能漏掉 max_[a]）
+                // 当棱长为 0 时 min_[a]==max_[a]，主循环已覆盖该点，无需再补
+                if (min_[a] != max_[a]) {
+                    Position3D endpoint;
+                    endpoint[a] = max_[a];
+                    endpoint[u] = u_sides[su];
+                    endpoint[v] = v_sides[sv];
+                    edge_cached_points_.push_back(body_to_world * endpoint);
+                }
+            }
+        }
+    }
+}
+
 } // namespace finenav
