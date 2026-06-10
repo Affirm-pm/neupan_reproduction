@@ -80,6 +80,40 @@ ament_target_dependencies(finenav_publish_zero_cmd_vel_behavior
 )
 target_compile_definitions(finenav_publish_zero_cmd_vel_behavior PRIVATE BT_PLUGIN_EXPORT)
 
+# Control & Decorator Plugins (pure BT nodes, no ROS params needed)
+add_library(finenav_recovery_node SHARED
+        src/plugins/control/recovery_node.cpp
+)
+ament_target_dependencies(finenav_recovery_node
+        ${dependencies}
+)
+target_compile_definitions(finenav_recovery_node PRIVATE BT_PLUGIN_EXPORT)
+
+add_library(finenav_round_robin_node SHARED
+        src/plugins/control/round_robin_node.cpp
+)
+ament_target_dependencies(finenav_round_robin_node
+        ${dependencies}
+)
+target_compile_definitions(finenav_round_robin_node PRIVATE BT_PLUGIN_EXPORT)
+
+add_library(finenav_rate_controller SHARED
+        src/plugins/decorator/rate_controller.cpp
+)
+ament_target_dependencies(finenav_rate_controller
+        ${dependencies}
+)
+target_compile_definitions(finenav_rate_controller PRIVATE BT_PLUGIN_EXPORT)
+
+# DynamicGoalFollower Plugin (ROS node params needed)
+add_library(finenav_dynamic_goal_follower SHARED
+        src/plugins/decorator/dynamic_goal_follower.cpp
+)
+ament_target_dependencies(finenav_dynamic_goal_follower
+        ${dependencies}
+)
+target_compile_definitions(finenav_dynamic_goal_follower PRIVATE BT_PLUGIN_EXPORT)
+
 # Install
 install(TARGETS finenav_navigator
         ARCHIVE DESTINATION lib
@@ -87,7 +121,7 @@ install(TARGETS finenav_navigator
         RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions finenav_publish_zero_cmd_vel_behavior
+install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions finenav_publish_zero_cmd_vel_behavior finenav_recovery_node finenav_round_robin_node finenav_rate_controller finenav_dynamic_goal_follower
         ARCHIVE DESTINATION lib/plugins
         LIBRARY DESTINATION lib/plugins
         RUNTIME DESTINATION bin

@@ -56,5 +56,25 @@
         </Sequence>
     </BehaviorTree>
 
+    <!-- 动态目标跟随：通过话题订阅持续更新目标点，在目标后方 follow_distance 处跟随 -->
+    <BehaviorTree ID="DynamicFollowPose">
+        <ReactiveFallback name="NavigateOrSucceed">
+            <IsGoalReached  robot_pose="{robot_pose}"
+                            robot_twist="{robot_twist}"
+                            goal="{goal}"
+                            tolerance="0.25"
+                            speed_tolerance="0.1"/>
+            <DynamicGoalFollower topic_name="/target_pose"
+                                 robot_pose="{robot_pose}"
+                                 goal="{goal}"
+                                 follow_distance="0.5"
+                                 update_distance="0.1">
+                <ComputePlan   action_name="/hello_finenav/mppi_layer"
+                               goal="{goal}"
+                               planner_id="finenav_mppi_controller"/>
+            </DynamicGoalFollower>
+        </ReactiveFallback>
+    </BehaviorTree>
+
 </root>
 
