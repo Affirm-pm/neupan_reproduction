@@ -253,6 +253,12 @@ int main(int argc, char** argv) {
 
     // --------------------------------- Main Loop --------------------------------------------
 
+    // 用独立 OS 线程驱动 node 的 spin，彻底解耦回调执行与主循环调度。
+    // odom 回调由该线程立即分发，不受主线程 CPU 压力或调度窗口影响。
+    auto node_thread = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
+    node_thread->add_node(node);
+    std::thread spin_thread([&node_thread]() { node_thread->spin(); });
+
     rclcpp::Rate loop_rate(200); // 200Hz
     auto nav_state_pub = node->create_publisher<nav_msgs::msg::Odometry>("nav_state", 10);
 
@@ -288,9 +294,12 @@ int main(int argc, char** argv) {
         nav_state_pub->publish(nav_state_msg);
 
 
-        rclcpp::spin_some(node);
+  		// spin_some 已移至独立线程，主循环只做 nav_state 发布与限速
         loop_rate.sleep();
     }
+
+    node_thread->cancel();
+    spin_thread.join();
 
     rclcpp::shutdown();
     return 0;

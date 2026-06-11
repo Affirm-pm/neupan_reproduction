@@ -24,9 +24,12 @@ struct OBBCollisionPolicy {
  * @details
  * 碰撞判断完全由调用方通过 CollisionRule 提供，因此可适配任意地图类型
  * 碰撞检测分为两阶段以支持各种场景:
- *   - precompute(pose)：          在机器人位姿改变时调用一次，缓存世界系下的所有采样点。
- *   - checkCollision(rule)：      高频接口，直接遍历缓存点，零几何变换开销，需先调用 precompute。
- *   - checkCollision(pose, rule)：低频接口，内部自动 precompute，适用于普通调用。
+ *   - precompute(pose)：              在机器人位姿改变时调用一次，缓存世界系下的所有面采样点。
+ *   - checkCollision(rule)：          高频接口，直接遍历面缓存点，零几何变换开销，需先调用 precompute。
+ *   - checkCollision(pose, rule)：    低频接口，内部自动 precompute，适用于普通调用。
+ *   - precomputeEdge(pose)：          在机器人位姿改变时调用一次，缓存世界系下的所有棱线采样点。
+ *   - checkCollisionEdge(rule)：      高频接口，直接遍历棱线缓存点，需先调用 precomputeEdge。
+ *   - checkCollisionEdge(pose, rule)：低频接口，内部自动 precomputeEdge，适用于普通调用。
  */
 class OBBCollisionModel {
 public:
@@ -49,6 +52,14 @@ public:
      * @param pose 机器人在世界坐标系下的位姿
      */
     void precompute(const Pose& pose);
+
+    /**
+     * @brief 预计算并缓存世界坐标系下的所有棱线采样点
+     * @details OBB 共 12 条棱，每条棱沿其所在轴方向按 step 均匀采样。
+     *          只需在机器人位姿改变时调用一次，调用后可多次调用 checkCollisionEdge(rule)。
+     * @param pose 机器人在世界坐标系下的位姿
+     */
+    void precomputeEdge(const Pose& pose);
 
     /**
      * @brief 高频碰撞检测（使用缓存采样点）
@@ -95,6 +106,48 @@ public:
     int checkCost(const Pose& pose, CR&& rule);
 
     /**
+     * @brief 高频碰撞检测（使用棱线缓存采样点）
+     * @details 调用前须先调用 precomputeEdge(pose)，适用于需要极低延迟的场景。
+     * @tparam CR 满足 CollisionRule concept 的可调用对象
+     * @param rule 碰撞判断函数，由调用方提供
+     * @return 任意一个采样点触发 rule 返回 true 时，整体返回 true
+     */
+    template <CollisionRule CR>
+    bool checkCollisionEdge(CR&& rule) const;
+
+    /**
+     * @brief 低频碰撞检测（自动 precomputeEdge）
+     * @details 内部自动调用 precomputeEdge(pose) 后执行检测，适用于普通场景。
+     * @tparam CR 满足 CollisionRule concept 的可调用对象
+     * @param pose 机器人在世界坐标系下的位姿
+     * @param rule 碰撞判断函数
+     * @return 如果发生碰撞返回 true
+     */
+    template <CollisionRule CR>
+    bool checkCollisionEdge(const Pose& pose, CR&& rule);
+
+    /**
+     * @brief 高频代价检测（使用棱线缓存采样点）
+     * @details 调用前须先调用 precomputeEdge(pose)，遍历所有棱线采样点并返回最高代价值。
+     * @tparam CR 满足 CostRule concept 的可调用对象
+     * @param rule 代价计算函数，由调用方提供
+     * @return 所有棱线采样点中的最高代价值
+     */
+    template <CostRule CR>
+    int checkCostEdge(CR&& rule) const;
+
+    /**
+     * @brief 低频代价检测（自动 precomputeEdge）
+     * @details 内部自动调用 precomputeEdge(pose) 后执行代价计算，适用于普通场景。
+     * @tparam CR 满足 CostRule concept 的可调用对象
+     * @param pose 机器人在世界坐标系下的位姿
+     * @param rule 代价计算函数
+     * @return 所有棱线采样点中的最高代价值
+     */
+    template <CostRule CR>
+    int checkCostEdge(const Pose& pose, CR&& rule);
+
+    /**
      * @brief 获取 OBB 外径
      * @details 外径定义为包围该 OBB 的最小球直径，数值等于 OBB 空间对角线长度。
      * @return OBB 外径
@@ -109,7 +162,8 @@ private:
     Pose     local_pose_;     ///< OBB 在机器人本体坐标系下的位姿（旋转 + 偏移）
     Policy   policy_;         ///< 采样策略参数
 
-    std::vector<Position3D> cached_points_; ///< 缓存的世界系采样点（由 precompute 填充）
+    std::vector<Position3D> cached_points_;      ///< 缓存的世界系面采样点（由 precompute 填充）
+    std::vector<Position3D> edge_cached_points_; ///< 缓存的世界系棱线采样点（由 precomputeEdge 填充）
 };
 
 template <CollisionRule CR>
@@ -152,6 +206,48 @@ template <CostRule CR>
 int OBBCollisionModel::checkCost(const Pose& pose, CR&& rule) {
     precompute(pose);
     return checkCost(std::forward<CR>(rule));
+}
+
+template <CollisionRule CR>
+bool OBBCollisionModel::checkCollisionEdge(CR&& rule) const {
+    if (edge_cached_points_.empty()) {
+        throw std::logic_error(
+            "OBBCollisionModel::checkCollisionEdge called before precomputeEdge");
+    }
+    for (const auto& pt : edge_cached_points_) {
+        if (rule(pt)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template <CollisionRule CR>
+bool OBBCollisionModel::checkCollisionEdge(const Pose& pose, CR&& rule) {
+    precomputeEdge(pose);
+    return checkCollisionEdge(std::forward<CR>(rule));
+}
+
+template <CostRule CR>
+int OBBCollisionModel::checkCostEdge(CR&& rule) const {
+    if (edge_cached_points_.empty()) {
+        throw std::logic_error(
+            "OBBCollisionModel::checkCostEdge called before precomputeEdge");
+    }
+    int max_cost = 0;
+    for (const auto& pt : edge_cached_points_) {
+        int cost = rule(pt);
+        if (cost > max_cost) {
+            max_cost = cost;
+        }
+    }
+    return max_cost;
+}
+
+template <CostRule CR>
+int OBBCollisionModel::checkCostEdge(const Pose& pose, CR&& rule) {
+    precomputeEdge(pose);
+    return checkCostEdge(std::forward<CR>(rule));
 }
 
 } // namespace finenav

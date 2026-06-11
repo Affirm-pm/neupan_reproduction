@@ -38,7 +38,7 @@ bool SimpleGridMapView::isCollision(float x, float y, float theta) const {
         return true;
     }
     if (pose_cost >= possible_collision_cost) {
-        return collision_model_->checkCollision(pose, CollisionRule());
+        return collision_model_->checkCollisionEdge(pose, CollisionRule());
     }
     return false;
 }
@@ -53,7 +53,7 @@ float SimpleGridMapView::getRadius() const {
 
 float SimpleGridMapView::costAtPose(float x, float y, float theta) const {
     finenav::Pose pose = createPose2D(x, y, theta);
-    return collision_model_->checkCost(pose,[this](const finenav::Position3D& pos) {
+    return collision_model_->checkCostEdge(pose,[this](const finenav::Position3D& pos) {
         return this->getCost(pos);
     });
 }

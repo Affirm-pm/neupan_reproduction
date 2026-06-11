@@ -106,6 +106,16 @@ public:
         return x_.block(slot * dim_x_, 0, dim_x_, 1);
     }
 
+    /// Read the covariance block at a specific delay slot.
+    /// slot 0 = current time (same as getLatestP()), slot d = d ticks ago.
+    /// Returns P(d,d) — the covariance of the error-state at that delay slot.
+    /// Clamps to the last valid slot if slot >= max_delay_step_.
+    [[nodiscard]] Eigen::MatrixXd getPAtSlot(int slot) const
+    {
+        const int s = std::min(slot, max_delay_step_ - 1);
+        return P_.block(s * dim_x_, s * dim_x_, dim_x_, dim_x_);
+    }
+
     // ---- Time-delay predict ----------------------------------------------
 
     /// Slide all slots one step forward in time, then update covariance.

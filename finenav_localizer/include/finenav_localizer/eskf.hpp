@@ -307,6 +307,17 @@ public:
         return tdkf_.getLatestP().template cast<S>();
     }
 
+    /// Returns the covariance block for a specific delay slot.
+    ///   delay_step = 0  →  current covariance (same as getCovariance())
+    ///   delay_step = d  →  P(d,d): covariance of the error-state d ticks ago
+    ///
+    /// Use this for a correct Mahalanobis gate on a delayed observation:
+    ///   S = H · getCovarianceAtDelay(delay_step) · H^T + R
+    [[nodiscard]] PMat getCovarianceAtDelay(int delay_step) const
+    {
+        return tdkf_.getPAtSlot(delay_step).template cast<S>();
+    }
+
     // ---- Mutators ---------------------------------------------------------
 
     void setState(const NavStateT & state) { nominal_ = state; }

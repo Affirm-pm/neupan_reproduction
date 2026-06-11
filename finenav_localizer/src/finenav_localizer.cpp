@@ -40,9 +40,45 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     model_opts.vel_noise_std   = params_.model.vel_noise_std;
     model_opts.omega_noise_std = params_.model.omega_noise_std;
 
+    // accumulated_delay_times_ slot layout (steady state):
+    //   slot[0] = 0.0  (always overwritten to 0 in accumulateDelayTime)
+    //   slot[i] = i * dt  (i = 1 … max_delay_step-1)
+    // → maxTrackedDelaySec = (max_delay_step - 1) * dt
+    //
+    // To guarantee maxTrackedDelaySec >= max_delay_sec we need:
+    //   (max_delay_step - 1) * dt >= max_delay_sec
+    //   max_delay_step >= ceil(max_delay_sec * update_rate_hz) + 1
+    //
+    // Minimum of 2 is enforced so that slot[1] always exists and the
+    // copy_backward in accumulateDelayTime has a non-empty source range.
+    //
+    // ⚠ NOTE on parameter semantics:
+    //   The effective rejection threshold is maxTrackedDelaySec = (max_delay_step-1) * dt,
+    //   where dt = 1/update_rate_hz.  This means the smallest achievable threshold
+    //   is exactly one EKF period (dt).  Observations that arrived just after the
+    //   previous tick will have delay ≈ dt + transport_delay, which can slightly exceed
+    //   this threshold under system jitter.
+    //
+    //   Rule of thumb:  max_delay_sec  ≥  2 / update_rate_hz
+    //   (gives two full periods of headroom and absorbs typical transport delays)
+    const double min_recommended_delay_sec = 2.0 / params_.update_rate_hz;
+    if (params_.max_delay_sec < min_recommended_delay_sec) {
+        RCLCPP_WARN(
+            logger_,
+            "[FineNavLocalizer] max_delay_sec=%.4f s is less than the recommended minimum "
+            "%.4f s (= 2 / update_rate_hz).  "
+            "The effective rejection threshold equals one EKF period (%.4f s), so observations "
+            "that arrive just after a tick will be rejected under normal scheduling jitter.  "
+            "Consider setting max_delay_sec >= %.4f s.",
+            params_.max_delay_sec,
+            min_recommended_delay_sec,
+            1.0 / params_.update_rate_hz,
+            min_recommended_delay_sec);
+    }
+
     const int max_delay_step = static_cast<int>(std::max(
-        int64_t{1},
-        static_cast<int64_t>(std::ceil(params_.max_delay_sec * params_.update_rate_hz))));
+        int64_t{2},
+        static_cast<int64_t>(std::ceil(params_.max_delay_sec * params_.update_rate_hz)) + 1));
     eskf_ = ESKFd(model_opts, max_delay_step);
 
     pose_queue_  = std::make_unique<PoseObsQueue>(
@@ -192,18 +228,27 @@ void FineNavLocalizer::timerCallback()
         return;
     }
 
-    const rclcpp::Time now = pnode_->now();
+    // tick_time is the EKF reference epoch for this cycle.
+    // All observation delay calculations use tick_time as the reference baseline.
+    // Sensor stamps may be slightly later than tick_time due to concurrent scheduling;
+    // this is not a "future" observation — it belongs to the current tick (delay_step = 0).
+    const rclcpp::Time tick_time = pnode_->now();
     std::lock_guard<std::mutex> lk(filter_mutex_);
+
+    // The "from future" rejection threshold: one full tick period.
+    // Normal concurrent scheduling jitter never exceeds one tick period;
+    // anything beyond that indicates a genuine clock fault.
+    const double future_reject_threshold = -1.0 / params_.update_rate_hz;
 
     // ── 1. Compute dt ──────────────────────────────────────────────────────
     double dt = 1.0 / params_.update_rate_hz;  // nominal fallback (first cycle)
     if (last_predict_time_.has_value()) {
-        const double meas_dt = (now - *last_predict_time_).seconds();
+        const double meas_dt = (tick_time - *last_predict_time_).seconds();
         if (meas_dt < 0.0) {
             RCLCPP_WARN(logger_,
                 "[FineNavLocalizer] Time jumped backwards (dt=%.6f s) — skipping cycle.",
                 meas_dt);
-            last_predict_time_ = now;
+            last_predict_time_ = tick_time;
             return;
         }
         if (meas_dt > params_.max_dt_sec) {
@@ -215,7 +260,7 @@ void FineNavLocalizer::timerCallback()
             dt = meas_dt;
         }
     }
-    last_predict_time_ = now;
+    last_predict_time_ = tick_time;
 
     // ── 2. Predict ─────────────────────────────────────────────────────────
     // eskf_.predict() internally propagates the nominal state, slides the
@@ -235,18 +280,23 @@ void FineNavLocalizer::timerCallback()
         for (std::size_t i = 0u; i < n; ++i) {
             const PoseMsg pose = pose_queue_->pop_increment_age();
 
-            double delay_time = (now - rclcpp::Time(pose.header.stamp)).seconds();
+            double delay_time = (tick_time - rclcpp::Time(pose.header.stamp)).seconds();
 
-            // Tolerate small scheduler jitter: clamp near-zero negative delays.
-            if (delay_time < -0.003) {
+            // Clamp: negative delay means sensor stamp is slightly after tick_time
+            // due to concurrent scheduling — treat as delay_step = 0 (current tick).
+            // Only reject if the stamp exceeds one full tick period ahead, which
+            // indicates a genuine clock fault.
+            if (delay_time < future_reject_threshold) {
                 RCLCPP_WARN(logger_,
-                    "[FineNavLocalizer] Pose obs from future (delay=%.4f s) — skipping.",
-                    delay_time);
+                    "[FineNavLocalizer] Pose obs from future (delay=%.4f s, "
+                    "threshold=%.4f s) — skipping.",
+                    delay_time, future_reject_threshold);
                 continue;
             }
             delay_time = std::max(delay_time, 0.0);
 
             const std::size_t delay_step = eskf_.findDelayStep(delay_time);
+
             if (delay_step >= static_cast<std::size_t>(eskf_.maxDelayStep())) {
                 RCLCPP_WARN(logger_,
                     "[FineNavLocalizer] Pose obs too old (delay=%.4f s, "
@@ -268,12 +318,13 @@ void FineNavLocalizer::timerCallback()
         for (std::size_t i = 0u; i < n; ++i) {
             const TwistMsg twist = twist_queue_->pop_increment_age();
 
-            double delay_time = (now - rclcpp::Time(twist.header.stamp)).seconds();
+            double delay_time = (tick_time - rclcpp::Time(twist.header.stamp)).seconds();
 
-            if (delay_time < -0.003) {
+            if (delay_time < future_reject_threshold) {
                 RCLCPP_WARN(logger_,
-                    "[FineNavLocalizer] Twist obs from future (delay=%.4f s) — skipping.",
-                    delay_time);
+                    "[FineNavLocalizer] Twist obs from future (delay=%.4f s, "
+                    "threshold=%.4f s) — skipping.",
+                    delay_time, future_reject_threshold);
                 continue;
             }
             delay_time = std::max(delay_time, 0.0);
@@ -296,18 +347,18 @@ void FineNavLocalizer::timerCallback()
         std::unique_lock<std::shared_mutex> cache_lk(cached_state_mutex_);
         cached_state_      = eskf_.getState();
         cached_covariance_ = eskf_.getCovariance();
-        cached_time_       = now;
+        cached_time_       = tick_time;
     }
 
     // ── 5b. Append to history buffer ──────────────────────────────────────
-    state_buffer_->push(now, eskf_.getState());
+    state_buffer_->push(tick_time, eskf_.getState());
 
     // ── 6. Broadcast TF: map → base_link ───────────────────────────────────
     const NavStateD & s = eskf_.getState();
 
     if (tf_br_) {
         geometry_msgs::msg::TransformStamped tf;
-        tf.header.stamp    = now;
+        tf.header.stamp    = tick_time;
         tf.header.frame_id = "map";
         tf.child_frame_id  = "base_link";
 
@@ -327,6 +378,22 @@ void FineNavLocalizer::timerCallback()
     RCLCPP_DEBUG(logger_,
         "[FineNavLocalizer] tick  |p|=%.4f  |v|=%.4f  |ω|=%.4f",
         s.p.norm(), s.v.norm(), s.omega.norm());
+
+    // ── 7. Overrun detection ───────────────────────────────────────────────
+    const double elapsed_sec = (pnode_->now() - tick_time).seconds();
+    const double period_sec  = 1.0 / params_.update_rate_hz;
+    RCLCPP_INFO_THROTTLE(logger_, *pnode_->get_clock(), 2000,
+        "[FineNavLocalizer] tick complete  elapsed=%.1f ms  period=%.1f ms",
+        elapsed_sec * 1e3, period_sec * 1e3);
+
+    if (elapsed_sec > period_sec) {
+        RCLCPP_WARN_THROTTLE(logger_, *pnode_->get_clock(), 2000,
+            "[FineNavLocalizer] Timer overrun: callback took %.1f ms but period is %.1f ms "
+            "(%.0f%% over). Consider reducing update_rate_hz or max_delay_step "
+            "(max_delay_sec * update_rate_hz).",
+            elapsed_sec * 1e3, period_sec * 1e3,
+            (elapsed_sec / period_sec - 1.0) * 100.0);
+    }
 }
 
 // ============================================================================
@@ -349,11 +416,15 @@ void FineNavLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
         eskf_.getStateAtDelay(delay_step), pos_obs, rot_obs);
 
     // ── Mahalanobis gate ────────────────────────────────────────────────────
-    // Gate uses the CURRENT covariance (leading block of extended P).
+    // Gate uses the covariance of the delay slot that the observation maps to
+    // (P(d,d)), not the current leading block P(0,0).  This gives the correct
+    // innovation covariance:  S = H · P(d,d) · H^T + R_eff
     const Eigen::Matrix<double, 6, 6> S_mat =
-        obs.H * eskf_.getCovariance() * obs.H.transpose() + R_eff;
+        obs.H * eskf_.getCovarianceAtDelay(delay_step) * obs.H.transpose() + R_eff;
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
+
+    RCLCPP_INFO_THROTTLE(logger_, *pnode_->get_clock(), 2000, "Mahalanobis distance: %.1f", d2);
 
     if (d2 > params_.pose_gate_dist) {
         RCLCPP_WARN(logger_,
@@ -384,7 +455,7 @@ void FineNavLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
 
     // ── Mahalanobis gate ────────────────────────────────────────────────────
     const Eigen::Matrix<double, 6, 6> S_mat =
-        obs.H * eskf_.getCovariance() * obs.H.transpose() + R_eff;
+        obs.H * eskf_.getCovarianceAtDelay(delay_step) * obs.H.transpose() + R_eff;
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
 
@@ -431,7 +502,7 @@ FineNavLocalizer::extractObservation(const PoseMsg & msg)
 
     R = (R + R.transpose()) * 0.5;
     for (int i = 0; i < 6; ++i)
-        R(i, i) = std::max(R(i, i), 1e-9);
+        R(i, i) = std::max(R(i, i), 1e-6);
 
     return {pos, rot, R};
 }
@@ -458,7 +529,7 @@ FineNavLocalizer::extractObservation(const TwistMsg & msg)
 
     R = (R + R.transpose()) * 0.5;
     for (int i = 0; i < 6; ++i)
-        R(i, i) = std::max(R(i, i), 1e-9);
+        R(i, i) = std::max(R(i, i), 1e-6);
 
     return {lin, ang, R};
 }
