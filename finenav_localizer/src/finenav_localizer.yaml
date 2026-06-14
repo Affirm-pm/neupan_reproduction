@@ -71,6 +71,11 @@ finenav_localizer:
       bounds<>: [0.1, 60.0]
     }
   }
+  force_2d_mode: {
+    type: bool,
+    default_value: false,
+    description: "If true, force getState()/getStateAt() output to 2D: zero z, roll, and pitch",
+  }
   publish_tf: {
     type: bool,
     default_value: false,

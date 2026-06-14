@@ -191,6 +191,9 @@ NavStateD FineNavLocalizer::getState() const
     // External API contract: v is expressed in the body frame.
     // Internally the ESKF propagates v in world frame; convert here.
     s.v = s.R.inverse() * s.v;
+    if (params_.force_2d_mode) {
+        s = force2DOutput(s);
+    }
     return s;
 }
 
@@ -212,6 +215,9 @@ std::optional<NavStateD> FineNavLocalizer::getStateAt(const rclcpp::Time & query
     if (s) {
         // Same contract as getState(): convert v from world → body frame.
         s->v = s->R.inverse() * s->v;
+        if (params_.force_2d_mode) {
+            *s = force2DOutput(*s);
+        }
     }
     return s;
 }
@@ -532,6 +538,21 @@ FineNavLocalizer::extractObservation(const TwistMsg & msg)
         R(i, i) = std::max(R(i, i), 1e-6);
 
     return {lin, ang, R};
+}
+
+// ============================================================================
+//  force2DOutput  —  zero out z, roll, pitch; keep only x, y, yaw
+// ============================================================================
+NavStateD FineNavLocalizer::force2DOutput(const NavStateD& s) const
+{
+    NavStateD out = s;
+    out.p.z() = 0.0;
+    // Extract yaw from the projection of R's x-axis onto the XY plane.
+    // More robust than eulerAngles() — avoids gimbal-lock singularities.
+    const Eigen::Vector3d x_axis = s.R.matrix().col(0);
+    const double yaw = std::atan2(x_axis.y(), x_axis.x());
+    out.R = SO3d(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix());
+    return out;
 }
 
 }  // namespace finenav

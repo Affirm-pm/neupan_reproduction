@@ -153,6 +153,9 @@ private:
     // ── Initialisation guard ─────────────────────────────────────────────────
     std::atomic<bool> is_initialized_{false};
 
+    // ── 2D output masking ───────────────────────────────────────────────────
+    NavStateD force2DOutput(const NavStateD& s) const;
+
     // ── Output cache  (protected by cached_state_mutex_) ────────────────────
     mutable std::shared_mutex cached_state_mutex_;
     NavStateD    cached_state_{};
