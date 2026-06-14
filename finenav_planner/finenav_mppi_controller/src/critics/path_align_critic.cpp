@@ -45,6 +45,12 @@ void PathAlignCritic::score(CriticData & data, const IMapView& map_view)
     return;
   }
 
+  // Don't apply when near the goal
+  if (utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
+  {
+    return;
+  }
+
   // Don't apply when first getting bearing w.r.t. the path
   utils::setPathFurthestPointIfNotSet(data);
   const size_t path_segments_count = *data.furthest_reached_path_point;  // up to furthest only

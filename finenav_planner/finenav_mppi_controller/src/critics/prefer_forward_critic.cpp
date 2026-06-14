@@ -35,6 +35,12 @@ void PreferForwardCritic::score(CriticData & data, const IMapView& map_view)
     return;
   }
 
+  // Only activate when robot is near the goal (fine positioning)
+  if (!utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
+  {
+    return;
+  }
+
   auto backward_motion = xt::maximum(-data.state.vx, 0);
   data.costs += xt::pow(
     xt::sum(

@@ -44,6 +44,12 @@ void PathAlignLegacyCritic::score(CriticData & data, const IMapView& map_view)
     return;
   }
 
+  // Don't apply when near the goal
+  if (utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
+  {
+    return;
+  }
+
   // Don't apply when first getting bearing w.r.t. the path
   utils::setPathFurthestPointIfNotSet(data);
   if (*data.furthest_reached_path_point < offset_from_furthest_) {

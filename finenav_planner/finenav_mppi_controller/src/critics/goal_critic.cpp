@@ -37,6 +37,12 @@ void GoalCritic::score(CriticData & data, const IMapView& map_view)
     return;
   }
 
+  // Only activate when robot is near the goal
+  if (!utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
+  {
+    return;
+  }
+
   const auto goal_idx = data.path.x.shape(0) - 1;
 
   const auto goal_x = data.path.x(goal_idx);

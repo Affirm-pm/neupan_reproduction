@@ -29,7 +29,13 @@ void GoalAngleCritic::initialize(const finenav_mppi_controller::Params & p)
 
 void GoalAngleCritic::score(CriticData & data, const IMapView& map_view)
 {
-  if (!this->enabled_ )    //TODO:旧有的检查与距离的逻辑会触发，为什么
+  if (!this->enabled_ )
+  {
+    return;
+  }
+
+  // Only activate when robot is near the goal
+  if (!utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
   {
     return;
   }
