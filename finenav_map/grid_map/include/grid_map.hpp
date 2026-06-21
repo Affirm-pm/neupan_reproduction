@@ -171,6 +171,14 @@ public:
     std::vector<T> getVoxelsAlongZ(const int& x, const int& y) const;
 
     /**
+     * @brief 访问某个(x,y)索引上的一串栅格数据（低开销引用重载版本）
+     * @param x x索引
+     * @param y y索引
+     * @param result 用于存放结果的外部预分配容器
+     */
+    void getVoxelsAlongZ(const int& x, const int& y, std::vector<T>& result) const;
+
+    /**
      * @brief 清空地图数据
      */
     void clear();

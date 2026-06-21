@@ -93,6 +93,26 @@ std::vector<T> GridMap<T>::getVoxelsAlongZ(const int& x, const int& y) const {
 }
 
 template <typename T>
+void GridMap<T>::getVoxelsAlongZ(const int& x, const int& y, std::vector<T>& result) const {
+    if (std::abs(x) > half_size_.x() || std::abs(y) > half_size_.y()) {
+        throw std::out_of_range("Accessing grid out of bounds");
+    }
+    result.clear();
+    if (result.capacity() < static_cast<size_t>(size_.z())) {
+        result.reserve(size_.z());
+    }
+
+    const int wrapped_x = wrapIndexToRange(x + half_size_.x() + start_index_.x(), size_.x());
+    const int wrapped_y = wrapIndexToRange(y + half_size_.y() + start_index_.y(), size_.y());
+    const int base_offset = wrapped_y * size_.z() + wrapped_x * size_.y() * size_.z();
+
+    for (int z = -half_size_.z(); z <= half_size_.z(); ++z) {
+        const int wrapped_z = wrapIndexToRange(z + half_size_.z() + start_index_.z(), size_.z());
+        result.push_back(data_[base_offset + wrapped_z]);
+    }
+}
+
+template <typename T>
 void GridMap<T>::clear() {
     data_.clear();
     data_.resize(size_.x() * size_.y() * size_.z(), T{});
