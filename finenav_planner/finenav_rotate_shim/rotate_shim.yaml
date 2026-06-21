@@ -1,0 +1,14 @@
+# RotateShim Planner Parameters
+finenav_rotate_shim:
+  forward_sampling_distance:
+    type: double
+    default_value: 0.5
+    description: "Distance ahead on the reference path to sample the rotation target point [m]"
+  angular_speed:
+    type: double
+    default_value: 0.8
+    description: "Constant angular speed for pure rotation [rad/s]"
+  angular_dist_threshold:
+    type: double
+    default_value: 0.1
+    description: "Heading error below which rotation is considered complete [rad]"
