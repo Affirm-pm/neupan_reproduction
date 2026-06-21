@@ -235,14 +235,6 @@ protected:
     return rclcpp::Clock(RCL_ROS_TIME).now();
   }
 
-  using ClientsRegistry =
-      std::unordered_map<std::string, std::weak_ptr<ActionClientInstance>>;
-  // contains the fully-qualified name of the node and the name of the client
-  static ClientsRegistry& getRegistry()
-  {
-    static ClientsRegistry action_clients_registry;
-    return action_clients_registry;
-  }
 
   std::weak_ptr<rclcpp::Node> node_;
   std::shared_ptr<ActionClientInstance> client_instance_;
@@ -250,7 +242,6 @@ protected:
   bool action_name_should_be_checked_ = false;
   const std::chrono::milliseconds server_timeout_;
   const std::chrono::milliseconds wait_for_server_timeout_;
-  std::string action_client_key_;
 
 private:
   // Shared send logic: resets tracking state, calls setGoal(), fires async_send_goal().
@@ -336,19 +327,8 @@ inline bool RosActionNode<T>::createClient(const std::string& action_name)
     throw RuntimeError("The ROS node went out of scope. RosNodeParams doesn't take the "
                        "ownership of the node.");
   }
-  action_client_key_ = std::string(node->get_fully_qualified_name()) + "/" + action_name;
 
-  auto& registry = getRegistry();
-  auto it = registry.find(action_client_key_);
-  if(it == registry.end() || it->second.expired())
-  {
-    client_instance_ = std::make_shared<ActionClientInstance>(node, action_name);
-    registry.insert_or_assign(action_client_key_, client_instance_);
-  }
-  else
-  {
-    client_instance_ = it->second.lock();
-  }
+  client_instance_ = std::make_shared<ActionClientInstance>(node, action_name);
 
   action_name_ = action_name;
 
@@ -497,11 +477,19 @@ inline NodeStatus RosActionNode<T>::tick()
 template <class T>
 inline void RosActionNode<T>::halt()
 {
-  if(status() == BT::NodeStatus::RUNNING)
+  // Always cancel the goal if one exists — even if status is not RUNNING,
+  // there may be residual callbacks registered with the action client.
+  if(goal_handle_ || future_goal_handle_.valid())
   {
     cancelGoal();
+  }
+  if(status() == BT::NodeStatus::RUNNING)
+  {
     onHalt();
   }
+  // Reset internal state to prevent stale references
+  goal_handle_.reset();
+  future_goal_handle_ = {};
 }
 
 template <class T>

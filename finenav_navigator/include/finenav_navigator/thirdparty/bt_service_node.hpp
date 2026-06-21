@@ -179,14 +179,8 @@ protected:
     return rclcpp::Clock(RCL_ROS_TIME).now();
   }
 
-  using ClientsRegistry =
-      std::unordered_map<std::string, std::weak_ptr<ServiceClientInstance>>;
-  // contains the fully-qualified name of the node and the name of the client
-  static ClientsRegistry& getRegistry()
-  {
-    static ClientsRegistry clients_registry;
-    return clients_registry;
-  }
+
+
 
   std::weak_ptr<rclcpp::Node> node_;
   std::string service_name_;
@@ -276,22 +270,8 @@ inline bool RosServiceNode<T>::createClient(const std::string& service_name)
     throw RuntimeError("The ROS node went out of scope. RosNodeParams doesn't take the "
                        "ownership of the node.");
   }
-  auto client_key = std::string(node->get_fully_qualified_name()) + "/" + service_name;
 
-  auto& registry = getRegistry();
-  auto it = registry.find(client_key);
-  if(it == registry.end() || it->second.expired())
-  {
-    srv_instance_ = std::make_shared<ServiceClientInstance>(node, service_name);
-    registry.insert_or_assign(client_key, srv_instance_);
-
-    RCLCPP_INFO(logger(), "Node [%s] created service client [%s]", name().c_str(),
-                service_name.c_str());
-  }
-  else
-  {
-    srv_instance_ = it->second.lock();
-  }
+  srv_instance_ = std::make_shared<ServiceClientInstance>(node, service_name);
   service_name_ = service_name;
 
   bool found = srv_instance_->service_client->wait_for_service(wait_for_service_timeout_);
