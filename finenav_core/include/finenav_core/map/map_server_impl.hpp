@@ -95,10 +95,33 @@ MapServer<MapT>::addUpdateSource(
 // ==============================================================================
 template <MapConcept MapT>
 void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
+    using Clock = std::chrono::steady_clock;
+    using Ms    = std::chrono::duration<double, std::milli>;
+
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
+
+    auto t0 = Clock::now();
     for (auto& hook : pre_update_hooks_)  hook(*map_instance_);
+    auto t1 = Clock::now();
     for (auto& src  : update_sources_)   src->applyBuffered(*map_instance_, now);
+    auto t2 = Clock::now();
     for (auto& hook : post_update_hooks_) hook(*map_instance_);
+    auto t3 = Clock::now();
+
+    const double ms_pre    = Ms(t1 - t0).count();
+    const double ms_fuse   = Ms(t2 - t1).count();
+    const double ms_post   = Ms(t3 - t2).count();
+    const double ms_total  = Ms(t3 - t0).count();
+
+    RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+        "\n[MapServer: %s] update cycle timing\n"
+        "  preUpdateHook  : %7.2f ms\n"
+        "  applyBuffered  : %7.2f ms\n"
+        "  postUpdateHook : %7.2f ms\n"
+        "  ─────────────────────────\n"
+        "  Total          : %7.2f ms",
+        server_name_.c_str(),
+        ms_pre, ms_fuse, ms_post, ms_total);
 }
 template <MapConcept MapT>
 void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
