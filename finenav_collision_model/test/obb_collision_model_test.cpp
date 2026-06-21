@@ -370,3 +370,116 @@ TEST(OBBCollisionModelTest, CheckCostMixedPositiveNegative) {
     int max_cost = model.checkCost(pose, mixed_cost);
     EXPECT_EQ(max_cost, 100);  // x 最大值 1.0
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 非对称 OBB 构造函数测试 (min, max)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── 24. 非对称构造：外径等于 (max-min) 的范数 ────────────────────────────
+TEST(OBBCollisionModelTest, AsymmetricConstructorOuterDiameter) {
+    // min=(-1, -2, 0), max=(3, 1, 0) → 对角线 = (4, 3, 0), 范数=5
+    OBBCollisionModel model({-1.0, -2.0, 0.0}, {3.0, 1.0, 0.0});
+    EXPECT_DOUBLE_EQ(model.getOuterDiameter(), 5.0);
+}
+
+// ─── 25. 非对称 OBB 表面采样点覆盖非对称范围 ─────────────────────────────
+TEST(OBBCollisionModelTest, AsymmetricBoundsSurfaceCoverage) {
+    // min=(-0.2, -0.5, 0), max=(1.0, 0.5, 0)  →  模拟差速机器人：前 1.0m,
+    // 后 0.2m, 左右各 0.5m
+    OBBCollisionModel model({-0.2, -0.5, 0.0}, {1.0, 0.5, 0.0});
+    Pose pose = Pose::Identity();
+    model.precompute(pose);
+
+    // X 面：前方 x=1.0，后方 x=-0.2
+    auto front_face = [](const Position3D& p) {
+        return std::abs(p.x() - 1.0) < 1e-9;
+    };
+    EXPECT_TRUE(model.checkCollision(front_face))
+        << "Front face at x=1.0 should have sampling points";
+
+    auto back_face = [](const Position3D& p) {
+        return std::abs(p.x() + 0.2) < 1e-9;
+    };
+    EXPECT_TRUE(model.checkCollision(back_face))
+        << "Back face at x=-0.2 should have sampling points";
+
+    // X 方向不应有超出范围的采样点
+    auto x_out = [](const Position3D& p) {
+        return p.x() > 1.01 || p.x() < -0.21;
+    };
+    EXPECT_FALSE(model.checkCollision(x_out))
+        << "No points should exist outside [−0.2, 1.0] in X";
+}
+
+// ─── 26. 非对称 OBB 与对称 OBB 构造的等价性验证 ──────────────────────────
+TEST(OBBCollisionModelTest, AsymmetricAndSymmetricEquivalence) {
+    // 对称 size={2.0, 3.0, 0.0} 等价于 min={-1,-1.5,0}, max={1,1.5,0}
+    OBBCollisionModel sym({2.0, 3.0, 0.0});
+    OBBCollisionModel asym({-1.0, -1.5, 0.0}, {1.0, 1.5, 0.0});
+
+    EXPECT_DOUBLE_EQ(sym.getOuterDiameter(), asym.getOuterDiameter());
+
+    Pose pose = Pose::Identity();
+    sym.precompute(pose);
+    asym.precompute(pose);
+
+    // 两个模型对同样规则应返回相同结果
+    auto corner_rule = [](const Position3D& p) {
+        return (p - Vector3D(1.0, 1.5, 0.0)).norm() < 1e-9;
+    };
+    EXPECT_EQ(sym.checkCollision(corner_rule), asym.checkCollision(corner_rule));
+}
+
+// ─── 27. 非法边界：max < min 抛出异常 ─────────────────────────────────────
+TEST(OBBCollisionModelTest, AsymmetricInvalidBoundsThrows) {
+    // max.x < min.x
+    EXPECT_THROW(OBBCollisionModel({2.0, 0.0, 0.0}, {1.0, 1.0, 1.0}),
+                 std::invalid_argument);
+    // max.y < min.y
+    EXPECT_THROW(OBBCollisionModel({0.0, 2.0, 0.0}, {1.0, 1.0, 1.0}),
+                 std::invalid_argument);
+    // max.z < min.z
+    EXPECT_THROW(OBBCollisionModel({0.0, 0.0, 2.0}, {1.0, 1.0, 1.0}),
+                 std::invalid_argument);
+}
+
+// ─── 28. 非对称 OBB 带 local_pose 偏移 ────────────────────────────────────
+TEST(OBBCollisionModelTest, AsymmetricWithLocalPose) {
+    // 差速机器人：OBB 前 1.5m 后 0.3m，OBB 自身在 body 系下向前偏移 0.6m
+    // 使 OBB 中心更靠近前方
+    Pose local_pose = Pose::Identity();
+    local_pose.translation() = Vector3D(0.6, 0.0, 0.0);
+
+    OBBCollisionModel model({-0.3, -0.5, 0.0}, {1.5, 0.5, 0.0}, local_pose);
+    Pose robot_pose = Pose::Identity();
+    model.precompute(robot_pose);
+
+    // OBB min/max = (-0.3, 1.5) in OBB frame
+    // OBB 原点在 body 系 (0.6, 0, 0)
+    // world 系: min = -0.3 + 0.6 = 0.3, max = 1.5 + 0.6 = 2.1
+    auto front_world = [](const Position3D& p) {
+        return std::abs(p.x() - 2.1) < 1e-9;
+    };
+    EXPECT_TRUE(model.checkCollision(front_world))
+        << "Front face should be at x=2.1 in world frame";
+
+    auto back_world = [](const Position3D& p) {
+        return std::abs(p.x() - 0.3) < 1e-9;
+    };
+    EXPECT_TRUE(model.checkCollision(back_world))
+        << "Back face should be at x=0.3 in world frame";
+}
+
+// ─── 29. 非对称 OBB 代价检测 ──────────────────────────────────────────────
+TEST(OBBCollisionModelTest, AsymmetricCheckCost) {
+    // 前 2m 后 0.5m，左右各 0.5m
+    OBBCollisionModel model({-0.5, -0.5, 0.0}, {2.0, 0.5, 0.0});
+    Pose pose = Pose::Identity();
+
+    auto x_cost = [](const Position3D& pt) -> int {
+        return static_cast<int>(pt.x() * 100);
+    };
+
+    int max_cost = model.checkCost(pose, x_cost);
+    EXPECT_EQ(max_cost, 200);  // x 最大值 2.0 * 100 = 200
+}

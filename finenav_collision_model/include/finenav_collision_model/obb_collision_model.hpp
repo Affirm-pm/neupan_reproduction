@@ -36,12 +36,25 @@ public:
     using Policy = OBBCollisionPolicy;
 
     /**
-     * @brief 构造函数
+     * @brief 构造函数（对称 OBB，由尺寸推导边界）
      * @param size      OBB 在三个轴方向的尺寸 (L, W, H)
      * @param local_pose OBB 在机器人本体坐标系下的位姿（含旋转和偏移），默认为单位变换
      * @param policy    采样策略参数
      */
     explicit OBBCollisionModel(const Vector3D& size,
+                               const Pose& local_pose = Pose::Identity(),
+                               const Policy& policy   = Policy{});
+
+    /**
+     * @brief 构造函数（非对称 OBB，直接指定边界）
+     * @param min       OBB 自身坐标系下的最小边界 (x_min, y_min, z_min)
+     * @param max       OBB 自身坐标系下的最大边界 (x_max, y_max, z_max)
+     * @param local_pose OBB 在机器人本体坐标系下的位姿（含旋转和偏移），默认为单位变换
+     * @param policy    采样策略参数
+     * @throws std::invalid_argument 若 max < min（按元素比较）或 policy.step <= 0
+     */
+    explicit OBBCollisionModel(const Vector3D& min,
+                               const Vector3D& max,
                                const Pose& local_pose = Pose::Identity(),
                                const Policy& policy   = Policy{});
 
