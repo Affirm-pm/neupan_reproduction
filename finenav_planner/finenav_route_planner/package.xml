@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<!--
+  ~ Copyright (c) 2026.
+  ~ IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+  ~ All rights reserved.
+  -->
+
+<package format="3">
+    <name>finenav_route_planner</name>
+    <version>0.1.0</version>
+    <description>
+        FineNav-Engine planners: grid A* (AstarPathSearch), grid BFS (BfsPathSearch),
+        and topological route (RoutePathSearch). Self-contained with no intra-finenav_planner
+        cross-package dependencies.
+    </description>
+
+    <maintainer email="wangjinghui@sjtu.edu.cn">Jinghui Wang</maintainer>
+    <license>MPL 2.0</license>
+
+    <buildtool_depend>ament_cmake_auto</buildtool_depend>
+
+    <depend>std_msgs</depend>
+    <depend>finenav_msgs</depend>
+    <depend>nav_msgs</depend>
+    <depend>geometry_msgs</depend>
+    <depend>rclcpp</depend>
+    <depend>finenav_util</depend>
+    <depend>finenav_core</depend>
+    <depend>finenav_map_occ_grid_2d</depend>
+    <depend>finenav_collision_model</depend>
+    <depend>generate_parameter_library</depend>
+    <depend>opencv</depend>
+    <depend>nlohmann-json-dev</depend>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>
+
