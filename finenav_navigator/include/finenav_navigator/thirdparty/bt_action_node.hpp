@@ -477,9 +477,14 @@ inline NodeStatus RosActionNode<T>::tick()
 template <class T>
 inline void RosActionNode<T>::halt()
 {
-  // Always cancel the goal if one exists — even if status is not RUNNING,
-  // there may be residual callbacks registered with the action client.
-  if(goal_handle_ || future_goal_handle_.valid())
+  // Cancel the goal only when it is still active (no result received yet).
+  // If a result has already been processed (result_.code != UNKNOWN), the
+  // action client has already removed the goal from its internal tracking,
+  // so calling cancelGoal() would throw "Goal handle is not known to this client".
+  // Also guard: doSendGoal() resets result_ to {}, so resends are still cancellable.
+  const bool goal_still_active = (result_.code == rclcpp_action::ResultCode::UNKNOWN);
+
+  if((goal_handle_ || future_goal_handle_.valid()) && goal_still_active)
   {
     cancelGoal();
   }
@@ -512,6 +517,12 @@ inline void RosActionNode<T>::cancelGoal()
       {
         goal_handle_ = future_goal_handle_.get();
         future_goal_handle_ = {};
+        // Goal may have been rejected by the server (null handle)
+        if(!goal_handle_)
+        {
+          RCLCPP_WARN(logger(), "cancelGoal: goal was rejected by server, nothing to cancel.");
+          return;
+        }
       }
     }
     else
@@ -523,21 +534,33 @@ inline void RosActionNode<T>::cancelGoal()
 
   auto& action_client = client_instance_->action_client;
 
-  auto future_result = action_client->async_get_result(goal_handle_);
-  auto future_cancel = action_client->async_cancel_goal(goal_handle_);
-
-  constexpr auto SUCCESS = rclcpp::FutureReturnCode::SUCCESS;
-
-  if(executor.spin_until_future_complete(future_cancel, server_timeout_) != SUCCESS)
+  try
   {
-    RCLCPP_ERROR(logger(), "Failed to cancel action server for [%s]",
-                 action_name_.c_str());
+    auto future_result = action_client->async_get_result(goal_handle_);
+    auto future_cancel = action_client->async_cancel_goal(goal_handle_);
+
+    constexpr auto SUCCESS = rclcpp::FutureReturnCode::SUCCESS;
+
+    if(executor.spin_until_future_complete(future_cancel, server_timeout_) != SUCCESS)
+    {
+      RCLCPP_ERROR(logger(), "Failed to cancel action server for [%s]",
+                   action_name_.c_str());
+    }
+
+    if(executor.spin_until_future_complete(future_result, server_timeout_) != SUCCESS)
+    {
+      RCLCPP_ERROR(logger(), "Failed to get result call failed :( for [%s]",
+                   action_name_.c_str());
+    }
   }
-
-  if(executor.spin_until_future_complete(future_result, server_timeout_) != SUCCESS)
+  catch(const std::exception& ex)
   {
-    RCLCPP_ERROR(logger(), "Failed to get result call failed :( for [%s]",
-                 action_name_.c_str());
+    // Defensive: goal may have become stale due to race conditions during
+    // preemption / resend. Log a warning rather than crashing.
+    RCLCPP_WARN(logger(),
+                "cancelGoal: goal handle no longer known to client [%s] (%s). "
+                "Goal was likely already completed by the server.",
+                action_name_.c_str(), ex.what());
   }
 }
 
@@ -550,7 +573,12 @@ inline NodeStatus RosActionNode<T>::doSendGoal()
 {
   auto& action_client = client_instance_->action_client;
 
+  // Reset ALL goal tracking state for the resend.
+  // goal_handle_ must be cleared because the old goal may already be completed
+  // (server preempted it when it accepted the new goal).  Keeping it would cause
+  // halt()→cancelGoal() to throw "Goal handle is not known to this client".
   goal_received_ = false;
+  goal_handle_.reset();
   future_goal_handle_ = {};
   on_feedback_state_change_ = NodeStatus::RUNNING;
   result_ = {};
