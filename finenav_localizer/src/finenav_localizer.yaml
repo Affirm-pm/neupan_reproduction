@@ -1,4 +1,9 @@
 finenav_localizer:
+  passthrough: {
+    type: bool,
+    default_value: false,
+    description: "If true, bypass ESKF and output latest Pose/Twist directly (Zero calculation)",
+  }
   update_rate_hz: {
     type: double,
     default_value: 100.0,
@@ -59,6 +64,30 @@ finenav_localizer:
     type: int,
     default_value: 64,
     description: "Per-type observation queue capacity",
+    validation: {
+      bounds<>: [1, 1024]
+    }
+  }
+  rel_pose_smoothing_steps: {
+    type: int,
+    default_value: 1,
+    description: "Number of times a relative-pose obs is reused; R is scaled by this factor",
+    validation: {
+      bounds<>: [1, 20]
+    }
+  }
+  rel_pose_gate_dist: {
+    type: double,
+    default_value: 1000000000.0,
+    description: "Mahalanobis gate distance for relative-pose observations; set large to disable",
+    validation: {
+      bounds<>: [0.0, 1000000000.0]
+    }
+  }
+  max_rel_pose_queue_size: {
+    type: int,
+    default_value: 64,
+    description: "Relative-pose observation queue capacity",
     validation: {
       bounds<>: [1, 1024]
     }

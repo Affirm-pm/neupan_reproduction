@@ -158,6 +158,72 @@ public:
             static_cast<double>(nominal_.omega.norm()));
     }
 
+    // ---- Dual-epoch observation update  (relative-pose / odometry) --------
+    //
+    //  For a measurement whose observation function spans TWO state epochs
+    //  (e.g. odometry: z = T_from^{-1} · T_to), the Jacobian decomposes into
+    //  two blocks:
+    //    H_to   — ∂z/∂δx at the "to"   epoch (delay_step_to   ticks ago)
+    //    H_from — ∂z/∂δx at the "from" epoch (delay_step_from ticks ago)
+    //
+    //  Both blocks are placed in the extended C_ex passed to the TDKF, so the
+    //  cross-covariance P(slot_to, slot_from) is naturally exploited.
+    //
+    //  @param innovation     z − h(x̂)                        (ObsDim × 1)
+    //  @param H_to           Jacobian for the "to"   epoch    (ObsDim × kDim)
+    //  @param H_from         Jacobian for the "from" epoch    (ObsDim × kDim)
+    //  @param R_noise        Observation-noise covariance     (ObsDim × ObsDim)
+    //  @param delay_step_to  Delay slot for the "to"   frame  (≥ 0)
+    //  @param delay_step_from Delay slot for the "from" frame (≥ delay_step_to)
+    template <int ObsDim>
+    bool update(const Eigen::Matrix<S, ObsDim, 1>      & innovation,
+                const Eigen::Matrix<S, ObsDim, kDim>   & H_to,
+                const Eigen::Matrix<S, ObsDim, kDim>   & H_from,
+                const Eigen::Matrix<S, ObsDim, ObsDim> & R_noise,
+                int                                      delay_step_to,
+                int                                      delay_step_from)
+    {
+        // ── 1. Dual-slot KF update ──────────────────────────────────────────
+        if (!tdkf_.updateWithTwoSlots(
+                innovation.template cast<double>(),
+                H_to.template cast<double>(),   delay_step_to,
+                H_from.template cast<double>(), delay_step_from,
+                R_noise.template cast<double>())) {
+            return false;
+        }
+
+        // ─��� 2–5. Identical post-update logic as single-block update ─────────
+        const ErrorVec dx     = tdkf_.getLatestX().template cast<S>();
+        const S        dx_norm = dx.norm();
+
+        nominal_ = Model::applyErrorState(nominal_, dx);
+
+        const int n_hist = std::min(
+            tdkf_.maxDelayStep() - 1,
+            static_cast<int>(nominal_history_.size()));
+        for (int i = 0; i < n_hist; ++i) {
+            const ErrorVec dx_i = tdkf_.getXAtSlot(i + 1).template cast<S>();
+            if (dx_i.squaredNorm() > static_cast<S>(1e-20)) {
+                nominal_history_[static_cast<std::size_t>(i)] =
+                    Model::applyErrorState(
+                        nominal_history_[static_cast<std::size_t>(i)], dx_i);
+            }
+        }
+
+        const PMat P_lead      = tdkf_.getLatestP().template cast<S>();
+        const PMat P_projected = Model::projectCovariance(P_lead, dx);
+        tdkf_.setLeadingCovariance(P_projected.template cast<double>());
+        tdkf_.resetState();
+
+        RCLCPP_DEBUG(logger_,
+            "[ESKF] dual update  ObsDim=%d  slot_to=%d  slot_from=%d  "
+            "|innov|=%.4f  |dx|=%.4f",
+            ObsDim, delay_step_to, delay_step_from,
+            static_cast<double>(innovation.norm()),
+            static_cast<double>(dx_norm));
+        return true;
+    }
+
     // ---- Generic observation update  (compile-time observation dimension) -
     //
     //  @tparam ObsDim    Observation vector length.

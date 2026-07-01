@@ -10,6 +10,9 @@
 #include <mutex>
 #include <queue>
 
+#include <Eigen/Core>
+#include <sophus/so3.hpp>
+#include <rclcpp/time.hpp>
 #include <rclcpp/logging.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
@@ -123,5 +126,26 @@ private:
 // ── Concrete type aliases ─────────────────────────────────────────────────────
 using PoseObsQueue  = AgedObservationQueue<geometry_msgs::msg::PoseWithCovarianceStamped>;
 using TwistObsQueue = AgedObservationQueue<geometry_msgs::msg::TwistWithCovarianceStamped>;
+
+// ── Relative-pose (odometry) observation ─────────────────────────────────────
+//
+//  Stores the raw body-frame displacement increment from two consecutive
+//  odometry frames, plus both timestamps so that the ESKF can map each
+//  epoch to its exact delay slot independently.
+//
+//  NO state snapshot is stored here — both nominal states (from_state and
+//  to_state) are retrieved from the ESKF inside applyUpdate() using the
+//  two delay steps computed from stamp_from and stamp_to.
+struct RelativePoseObs {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    Eigen::Vector3d             delta_p_body_obs;  ///< body-frame translation from odometry (m)
+    Sophus::SO3d                delta_R_obs;       ///< relative rotation from odometry
+    Eigen::Matrix<double, 6, 6> R_noise;           ///< displacement covariance (m², rad²)
+    rclcpp::Time                stamp_to;          ///< timestamp of the "to"   (newer) frame
+    rclcpp::Time                stamp_from;        ///< timestamp of the "from" (older) frame
+};
+
+using RelativePoseObsQueue = AgedObservationQueue<RelativePoseObs>;
 
 }  // namespace finenav

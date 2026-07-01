@@ -85,6 +85,24 @@ public:
     void feedObservation(const TwistMsg & msg);
 
     /**
+     * @brief Enqueue a relative-pose (odometry) observation.
+     *
+     * Provide the raw body-frame displacement and relative rotation measured
+     * from two consecutive odometry frames, with DISPLACEMENT covariance
+     * (units: m² and rad²) and the timestamps of BOTH frames.
+     *
+     * Supplying stamp_from (the older frame) allows the filter to map each
+     * epoch to its own delay slot precisely — avoiding the linearisation error
+     * that would arise from using only the "to" frame timestamp.
+     *
+     * Both nominal states are retrieved internally from the ESKF at
+     * applyUpdate() time — no external state snapshot is needed.
+     *
+     * @note Thread-safe.
+     */
+    void feedRelativePose(const RelativePoseObs & obs);
+
+    /**
      * @brief Read-only access to the latest filter output.
      *
      * @note  The returned NavStateD has `v` expressed in the **body frame**
@@ -120,8 +138,9 @@ private:
     void timerCallback();
 
     // ── Observation update (called inside timerCallback, single-threaded) ────
-    void applyUpdate(const PoseMsg  & msg, int delay_step);
-    void applyUpdate(const TwistMsg & msg, int delay_step);
+    void applyUpdate(const PoseMsg         & msg, int delay_step);
+    void applyUpdate(const TwistMsg        & msg, int delay_step);
+    void applyUpdate(const RelativePoseObs & obs, int delay_step_to, int delay_step_from);
 
     // ── Message extraction helpers ───────────────────────────────────────────
     static std::tuple<Vec3d, SO3d, Eigen::Matrix<double, 6, 6>>
@@ -147,8 +166,9 @@ private:
     std::optional<rclcpp::Time> last_predict_time_;
 
     // ── Observation queues (each internally mutex-protected) ─────────────────
-    std::unique_ptr<PoseObsQueue>  pose_queue_;
-    std::unique_ptr<TwistObsQueue> twist_queue_;
+    std::unique_ptr<PoseObsQueue>         pose_queue_;
+    std::unique_ptr<TwistObsQueue>        twist_queue_;
+    std::unique_ptr<RelativePoseObsQueue> rel_pose_queue_;
 
     // ── Initialisation guard ─────────────────────────────────────────────────
     std::atomic<bool> is_initialized_{false};

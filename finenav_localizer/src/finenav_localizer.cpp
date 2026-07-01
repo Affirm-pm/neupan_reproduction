@@ -87,6 +87,9 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     twist_queue_ = std::make_unique<TwistObsQueue>(
         static_cast<std::size_t>(std::max(int64_t{1}, params_.twist_smoothing_steps)),
         static_cast<std::size_t>(params_.max_obs_queue_size));
+    rel_pose_queue_ = std::make_unique<RelativePoseObsQueue>(
+        static_cast<std::size_t>(std::max(int64_t{1}, params_.rel_pose_smoothing_steps)),
+        static_cast<std::size_t>(params_.max_rel_pose_queue_size));
 
     // ── State history buffer ──────────────────────────────────────────────────
     state_buffer_ = std::make_shared<NavStateBuffer>(params_.history_duration_sec);
@@ -141,6 +144,7 @@ void FineNavLocalizer::setInitialPose(const PoseMsg & msg)
         eskf_.reinitialize(init_state, P);
         pose_queue_->clear();
         twist_queue_->clear();
+        rel_pose_queue_->clear();
         last_predict_time_.reset();
     }
 
@@ -179,6 +183,14 @@ void FineNavLocalizer::feedObservation(const TwistMsg & msg)
     RCLCPP_DEBUG(logger_,
         "[FineNavLocalizer] feedObservation<Twist> queued (queue=%zu)",
         twist_queue_->size());
+}
+
+void FineNavLocalizer::feedRelativePose(const RelativePoseObs & obs)
+{
+    rel_pose_queue_->push(obs);
+    RCLCPP_DEBUG(logger_,
+        "[FineNavLocalizer] feedRelativePose queued (queue=%zu)",
+        rel_pose_queue_->size());
 }
 
 // ============================================================================
@@ -227,6 +239,89 @@ std::optional<NavStateD> FineNavLocalizer::getStateAt(const rclcpp::Time & query
 // ============================================================================
 void FineNavLocalizer::timerCallback()
 {
+    // 1. 检查参数更新
+    if (param_listener_->is_old(params_)) {
+        params_ = param_listener_->get_params();
+    }
+
+    const rclcpp::Time now = pnode_->now();
+
+    // ==========================================
+    // 情况 A: 透传模式 (Zero Calculation)
+    // ==========================================
+    if (params_.passthrough) {
+        bool has_new_data = false;
+        NavStateD next_state;
+
+        // 获取锁，保护 cached_state_ 和 eskf_ (虽然不运行eskf，但为了线程安全需要同步)
+        std::lock_guard<std::mutex> lk(filter_mutex_);
+        {
+            std::unique_lock<std::shared_mutex> cache_lk(cached_state_mutex_);
+            next_state = cached_state_; // 以旧状态为基础
+
+            // A1. 提取最新位姿 (Pose)
+            if (!pose_queue_->empty()) {
+                PoseMsg latest_pose;
+                while (!pose_queue_->empty()) {
+                    latest_pose = pose_queue_->pop_increment_age();
+                }
+                auto [pos, rot, R_pose] = extractObservation(latest_pose);
+                next_state.p = pos;
+                next_state.R = rot;
+                cached_covariance_.block<6, 6>(0, 0) = R_pose; // 更新位姿协方差
+                has_new_data = true;
+            }
+
+            // A2. 提取最新速度 (Twist/Odometry)
+            if (!twist_queue_->empty()) {
+                TwistMsg latest_twist;
+                while (!twist_queue_->empty()) {
+                    latest_twist = twist_queue_->pop_increment_age();
+                }
+                auto [lin_v_body, ang_v_body, R_twist] = extractObservation(latest_twist);
+
+                // 注意：Twist消息里通常是 Body Frame。
+                // 内部缓存要求 v 是 World Frame，以便 getState() 统一转换。
+                next_state.v = next_state.R * lin_v_body;
+                next_state.omega = ang_v_body;
+                cached_covariance_.block<6, 6>(6, 6) = R_twist; // 更新速度协方差
+                has_new_data = true;
+            }
+
+            if (has_new_data || is_initialized_.load(std::memory_order_acquire)) {
+                cached_state_ = next_state;
+                cached_time_  = now;
+                // 将透传状态同步给 ESKF，防止切回 NORMAL 模式时状态跳变太大
+                eskf_.setState(next_state);
+            }
+        }
+
+        if (is_initialized_.load(std::memory_order_acquire)) {
+            state_buffer_->push(now, next_state);
+            // 广播 TF (复用原有逻辑)
+            if (tf_br_) {
+                geometry_msgs::msg::TransformStamped tf;
+                tf.header.stamp = now;
+                tf.header.frame_id = "map";
+                tf.child_frame_id = "base_link";
+                tf.transform.translation.x = next_state.p.x();
+                tf.transform.translation.y = next_state.p.y();
+                tf.transform.translation.z = next_state.p.z();
+                const Eigen::Quaterniond q(next_state.R.matrix());
+                tf.transform.rotation.w = q.w();
+                tf.transform.rotation.x = q.x();
+                tf.transform.rotation.y = q.y();
+                tf.transform.rotation.z = q.z();
+                tf_br_->sendTransform(tf);
+            }
+        }
+        return; // 透传结束，直接返回，不执行下方 ESKF 逻辑
+    }
+
+    // ==========================================
+    // 情况 B: 正常 ESKF 模式 (原逻辑)
+    // ==========================================
+    
     if (!is_initialized_.load(std::memory_order_acquire)) {
         RCLCPP_WARN_THROTTLE(
             logger_, *pnode_->get_clock(), 2000,
@@ -345,6 +440,63 @@ void FineNavLocalizer::timerCallback()
             }
 
             applyUpdate(twist, static_cast<int>(delay_step));
+        }
+    }
+
+    // ── 4.5 Process relative-pose (odometry) observations ──────────────────
+    // Both stamp_to and stamp_from are used to map each epoch to its own
+    // ESKF delay slot independently, avoiding linearisation error from the
+    // Δt_odom offset between the two frames.
+    {
+        const std::size_t n = rel_pose_queue_->size();
+        RCLCPP_DEBUG(logger_,
+            "[FineNavLocalizer] rel-pose observations this tick: %zu", n);
+
+        for (std::size_t i = 0u; i < n; ++i) {
+            const RelativePoseObs obs = rel_pose_queue_->pop_increment_age();
+
+            // ── Compute delay for the "to" (newer) frame ──────────────────
+            double delay_to = (tick_time - obs.stamp_to).seconds();
+            if (delay_to < future_reject_threshold) {
+                RCLCPP_WARN(logger_,
+                    "[FineNavLocalizer] RelPose 'to' stamp from future "
+                    "(delay=%.4f s, threshold=%.4f s) — skipping.",
+                    delay_to, future_reject_threshold);
+                continue;
+            }
+            delay_to = std::max(delay_to, 0.0);
+
+            // ── Compute delay for the "from" (older) frame ────────────────
+            double delay_from = (tick_time - obs.stamp_from).seconds();
+            if (delay_from < future_reject_threshold) {
+                RCLCPP_WARN(logger_,
+                    "[FineNavLocalizer] RelPose 'from' stamp from future "
+                    "(delay=%.4f s, threshold=%.4f s) — skipping.",
+                    delay_from, future_reject_threshold);
+                continue;
+            }
+            delay_from = std::max(delay_from, 0.0);
+
+            const std::size_t ds_to   = eskf_.findDelayStep(delay_to);
+            const std::size_t ds_from = eskf_.findDelayStep(delay_from);
+
+            if (ds_to >= static_cast<std::size_t>(eskf_.maxDelayStep())) {
+                RCLCPP_WARN(logger_,
+                    "[FineNavLocalizer] RelPose 'to' frame too old "
+                    "(delay=%.4f s) — rejecting.", delay_to);
+                continue;
+            }
+            if (ds_from >= static_cast<std::size_t>(eskf_.maxDelayStep())) {
+                RCLCPP_WARN(logger_,
+                    "[FineNavLocalizer] RelPose 'from' frame too old "
+                    "(delay=%.4f s, max=%.4f s) — rejecting.",
+                    delay_from, eskf_.maxTrackedDelaySec());
+                continue;
+            }
+
+            applyUpdate(obs,
+                        static_cast<int>(ds_to),
+                        static_cast<int>(ds_from));
         }
     }
 
@@ -479,6 +631,56 @@ void FineNavLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
         "|δv|=%.4f  |δω|=%.4f",
         delay_step, d2,
         obs.innovation.head<3>().norm(), obs.innovation.tail<3>().norm());
+}
+
+void FineNavLocalizer::applyUpdate(const RelativePoseObs & obs,
+                                   int                     delay_step_to,
+                                   int                     delay_step_from)
+{
+    const Eigen::Matrix<double, 6, 6> R_eff =
+        obs.R_noise * static_cast<double>(params_.rel_pose_smoothing_steps);
+
+    // Retrieve both nominal states from the ESKF using their respective
+    // delay slots.  Using the correct historical slot for the "from" epoch
+    // is the key fix vs. the naive approach of using only the "to" stamp.
+    const NavStateD from_state = eskf_.getStateAtDelay(delay_step_from);
+    const NavStateD to_state   = eskf_.getStateAtDelay(delay_step_to);
+
+    const auto dual_obs = NavigationModelD::observeRelativePose(
+        from_state, to_state, obs.delta_p_body_obs, obs.delta_R_obs);
+
+    // ── Mahalanobis gate ─────────────────────────────────────────────────────
+    // Conservative: diagonal-block approximation (ignores cross-cov P(to,from)).
+    // Full S = H_to P(to,to) H_to^T + H_to P(to,from) H_from^T
+    //        + H_from P(from,to) H_to^T + H_from P(from,from) H_from^T + R
+    const Eigen::Matrix<double, 6, 6> S_approx =
+        dual_obs.H_to   * eskf_.getCovarianceAtDelay(delay_step_to)   * dual_obs.H_to.transpose()
+      + dual_obs.H_from * eskf_.getCovarianceAtDelay(delay_step_from) * dual_obs.H_from.transpose()
+      + R_eff;
+
+    const double d2 = static_cast<double>(
+        dual_obs.innovation.transpose() * S_approx.inverse() * dual_obs.innovation);
+
+    if (d2 > params_.rel_pose_gate_dist) {
+        RCLCPP_WARN(logger_,
+            "[FineNavLocalizer] applyUpdate<RelPose> rejected by Mahalanobis gate "
+            "(d²=%.4f > threshold=%.4f).", d2, params_.rel_pose_gate_dist);
+        return;
+    }
+
+    eskf_.update<6>(dual_obs.innovation,
+                    dual_obs.H_to,
+                    dual_obs.H_from,
+                    R_eff,
+                    delay_step_to,
+                    delay_step_from);
+
+    RCLCPP_DEBUG(logger_,
+        "[FineNavLocalizer] applyUpdate<RelPose>  ds_to=%d  ds_from=%d  "
+        "d²=%.4f  |δΔp|=%.4f  |δΔR|=%.4f",
+        delay_step_to, delay_step_from, d2,
+        dual_obs.innovation.head<3>().norm(),
+        dual_obs.innovation.tail<3>().norm());
 }
 
 // ============================================================================

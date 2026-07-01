@@ -167,6 +167,14 @@ public:
         Eigen::Matrix<S, Dim, 1>            innovation;  ///< z − h(x̂)
     };
 
+    /// Typed aggregate returned by dual-epoch observation helpers.
+    template <int Dim>
+    struct DualObsData {
+        Eigen::Matrix<S, Dim, kNavStateDim> H_to;        ///< Jacobian w.r.t. "to"   epoch error state
+        Eigen::Matrix<S, Dim, kNavStateDim> H_from;      ///< Jacobian w.r.t. "from" epoch error state
+        Eigen::Matrix<S, Dim, 1>            innovation;
+    };
+
     // ---- Observe 6-DOF pose  [p_world, R_world←body]  --------------------
     //
     //  h_p(x) = p,    ∂h_p/∂δp = I₃
@@ -224,6 +232,60 @@ public:
         innov.template tail<3>() = ang_vel_obs_body - nominal.omega;
 
         return {H, innov};
+    }
+    // ---- Observe relative pose [Δp_body, ΔR] spanning two epochs  ----------
+    //
+    //  Implements the Stochastic-Cloning dual-epoch observation model.
+    //  Both the "from" and "to" nominal states are supplied by the caller
+    //  (retrieved from eskf_.getStateAtDelay(delay_step_from/to)).
+    //
+    //  from_state : nominal at the "from" epoch  (T_k,     delay slot d_from)
+    //  to_state   : nominal at the "to"   epoch  (T_{k+Δt}, delay slot d_to)
+    //
+    //  Measurement:
+    //    z_p = R_from^{-1} · (p_to − p_from)   [body-frame displacement]
+    //    z_R = R_from^{-1} · R_to               [relative rotation]
+    //
+    //  Predicted:
+    //    ẑ_p = R̂_from^{-1} · Δp̂   where  Δp̂ = p̂_to − p̂_from
+    //    ẑ_R = ΔR̂               where  ΔR̂  = R̂_from^{-1} · R̂_to
+    //
+    //  H_to   (6 × 12) — linearised w.r.t. "to" epoch error [δp, δθ, δv, δω]:
+    //    [ R̂_from^{-1}   0   0   0 ]   ← Δp rows
+    //    [ 0              I   0   0 ]   ← ΔR rows
+    //
+    //  H_from (6 × 12) — linearised w.r.t. "from" epoch error [δp, δθ, δv, δω]:
+    //    [ −R̂_from^{-1}   [R̂_from^{-1}·Δp̂]×   0   0 ]   ← Δp rows
+    //    [  0              −ΔR̂^T                0   0 ]   ← ΔR rows
+    //
+    //  R_noise must be a DISPLACEMENT covariance (m² / rad²), not velocity.
+    [[nodiscard]]
+    static DualObsData<6> observeRelativePose(const NavStateT& from_state,
+                                              const NavStateT& to_state,
+                                              const Vec3T&     delta_p_body_obs,
+                                              const SO3T&      delta_R_obs)
+    {
+        const Mat3T Rf_inv     = from_state.R.inverse().matrix();          // R̂_from^{-1}
+        const Vec3T delta_p_hat = to_state.p - from_state.p;              // Δp̂ (world frame)
+        const SO3T  delta_R_hat = from_state.R.inverse() * to_state.R;    // ΔR̂
+
+        // ── H_to ─────────────────────────────────────────────────────────────
+        Eigen::Matrix<S, 6, kNavStateDim> Hto = Eigen::Matrix<S, 6, kNavStateDim>::Zero();
+        Hto.template block<3, 3>(0, 0) = Rf_inv;              // ∂Δp / ∂δp_to
+        Hto.template block<3, 3>(3, 3) = Mat3T::Identity();   // ∂ΔR / ∂δθ_to
+
+        // ── H_from ───────────────────────────────────────────────────────────
+        Eigen::Matrix<S, 6, kNavStateDim> Hfrom = Eigen::Matrix<S, 6, kNavStateDim>::Zero();
+        Hfrom.template block<3, 3>(0, 0) = -Rf_inv;                              // ∂Δp / ∂δp_from
+        Hfrom.template block<3, 3>(0, 3) = SO3T::hat(Rf_inv * delta_p_hat);      // ∂Δp / ∂δθ_from  ([R̂_from^{-1}Δp̂]×)
+        Hfrom.template block<3, 3>(3, 3) = -delta_R_hat.matrix().transpose();    // ∂ΔR / ∂δθ_from  (−ΔR̂^T)
+
+        // ── Innovation ───────────────────────────────────────────────────────
+        Eigen::Matrix<S, 6, 1> innov;
+        innov.template head<3>() = delta_p_body_obs - Rf_inv * delta_p_hat;
+        innov.template tail<3>() = (delta_R_hat.inverse() * delta_R_obs).log();
+
+        return {Hto, Hfrom, innov};
     }
 };
 

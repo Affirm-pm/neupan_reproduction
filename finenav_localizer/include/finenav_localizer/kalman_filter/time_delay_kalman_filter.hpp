@@ -173,6 +173,42 @@ public:
         return true;
     }
 
+    // ---- Dual-slot measurement update ------------------------------------
+
+    /// Apply a measurement whose observation function spans two state epochs:
+    ///   C_slot_a acts on error state at slot_a  (e.g. the "to"   epoch)
+    ///   C_slot_b acts on error state at slot_b  (e.g. the "from" epoch)
+    ///
+    /// Builds the full expanded C_ex with non-zero blocks at both slots,
+    /// then calls the standard KF update.  When slot_a == slot_b the
+    /// two blocks are summed at the same column (correct degenerate case).
+    ///
+    /// @param y       Measurement vector          (dim_y × 1)
+    /// @param C_a     Measurement Jacobian for slot_a  (dim_y × dim_x)
+    /// @param slot_a  Delay slot for C_a  (0 = current tick)
+    /// @param C_b     Measurement Jacobian for slot_b  (dim_y × dim_x)
+    /// @param slot_b  Delay slot for C_b
+    /// @param R       Measurement noise cov.     (dim_y × dim_y)
+    bool updateWithTwoSlots(const Eigen::MatrixXd & y,
+                            const Eigen::MatrixXd & C_a,
+                            int                    slot_a,
+                            const Eigen::MatrixXd & C_b,
+                            int                    slot_b,
+                            const Eigen::MatrixXd & R)
+    {
+        if (slot_a >= max_delay_step_ || slot_b >= max_delay_step_) {
+            std::cerr << "[TimeDelayKF] updateWithTwoSlots: slot " << slot_a
+                      << " or " << slot_b
+                      << " >= max_delay_step=" << max_delay_step_ << " — ignoring.\n";
+            return false;
+        }
+        const int dim_y = static_cast<int>(y.rows());
+        Eigen::MatrixXd C_ex = Eigen::MatrixXd::Zero(dim_y, dim_x_ex_);
+        C_ex.block(0, dim_x_ * slot_a, dim_y, dim_x_) += C_a;
+        C_ex.block(0, dim_x_ * slot_b, dim_y, dim_x_) += C_b;
+        return update(y, C_ex * x_, C_ex, R);
+    }
+
     // ---- Delayed measurement update ---------------------------------------
 
     /// Apply a measurement that was captured delay_step ticks ago.
