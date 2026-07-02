@@ -7,15 +7,15 @@
 #include <mutex>
 #include <string>
 #include <rclcpp/rclcpp.hpp>
-#include "finenav_core/concepts.hpp"
+#include "finenav_core/map/map_concept.hpp"
 namespace finenav {
 // Forward declaration — UpdateSource is owned by MapServer.
-template <MapConcept MapT>
+template <SpatialContainer MapT>
 class MapServer;
 // ==============================================================================
 // IUpdateSource — type-erased interface for MapServer's source list
 // ==============================================================================
-template <MapConcept MapT>
+template <SpatialContainer MapT>
 class IUpdateSource {
 public:
     virtual ~IUpdateSource() = default;
@@ -33,7 +33,7 @@ public:
  * @tparam MapT  目标地图类型
  * @tparam MsgT  输入消息类型
  */
-template <MapConcept MapT, typename MsgT>
+template <SpatialContainer MapT, typename MsgT>
 class UpdateSource final : public IUpdateSource<MapT> {
 public:
     struct SourceBufferPolicy {
@@ -65,16 +65,16 @@ private:
 // ==============================================================================
 // UpdateSource Implementation
 // ==============================================================================
-template <MapConcept MapT, typename MsgT>
+template <SpatialContainer MapT, typename MsgT>
 UpdateSource<MapT, MsgT>::UpdateSource(
     const std::string& source_name, SourceBufferPolicy policy, Fuser fuser)
     : source_name_(source_name), policy_(policy), fuser_(std::move(fuser)) {}
-template <MapConcept MapT, typename MsgT>
+template <SpatialContainer MapT, typename MsgT>
 void UpdateSource<MapT, MsgT>::enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp) {
     std::lock_guard<std::mutex> lock(mutex_);
     enqueue(std::move(msg), stamp);
 }
-template <MapConcept MapT, typename MsgT>
+template <SpatialContainer MapT, typename MsgT>
 void UpdateSource<MapT, MsgT>::applyBuffered(MapT& map, const rclcpp::Time& now) {
     std::deque<BufferedMessage> pending;
     {
@@ -103,7 +103,7 @@ void UpdateSource<MapT, MsgT>::applyBuffered(MapT& map, const rclcpp::Time& now)
         fuser_(item.msg, item.stamp, map);
     }
 }
-template <MapConcept MapT, typename MsgT>
+template <SpatialContainer MapT, typename MsgT>
 void UpdateSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
     if (policy_.max_buffer_size > 0 && buffer_.size() >= policy_.max_buffer_size) {
         buffer_.pop_front();
@@ -112,7 +112,7 @@ void UpdateSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
     last_seen_stamp_  = stamp;
     has_seen_message_ = true;
 }
-template <MapConcept MapT, typename MsgT>
+template <SpatialContainer MapT, typename MsgT>
 void UpdateSource<MapT, MsgT>::pruneExpired(const rclcpp::Time& now) {
     if (policy_.observation_keep_time_sec <= 0.0) return;
     while (!buffer_.empty()) {

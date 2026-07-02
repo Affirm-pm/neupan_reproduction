@@ -3,14 +3,16 @@
 // All rights reserved.
 #pragma once
 #include <shared_mutex>
-#include "finenav_core/concepts.hpp"
+#include "finenav_core/map/map_concept.hpp"
 namespace finenav {
 /**
- * @brief LockedMapRO — 持有共享读锁的地图 RAII 视图。
+ * @brief LockedMapRO — RAII read-only view holding a shared_lock.
  *
- * 构造时自动加读锁，析构时自动释放，保证 plan() 调用期间地图不被写入。
+ * Acquired via MapServer::getLockedReadView(). Construction acquires a shared
+ * (read) lock; destruction releases it. Multiple concurrent readers are allowed.
+ * As long as any LockedMapRO is alive, writers are blocked.
  */
-template <MapConcept MapT>
+template <SpatialContainer MapT>
 class LockedMapRO {
 public:
     LockedMapRO(const MapT& map, std::shared_mutex& mutex)
@@ -22,11 +24,13 @@ private:
     std::shared_lock<std::shared_mutex> lock_;
 };
 /**
- * @brief LockedMapRW — 持有独占写锁的地图 RAII 视图。
+ * @brief LockedMapRW — RAII read-write view holding a unique_lock.
  *
- * 构造时自动加写锁，析构时自动释放，用于主动且即时地修改地图。
+ * Acquired via MapServer::getLockedWriteView(). Construction acquires an
+ * exclusive (write) lock, blocking until all active LockedMapRO handles are
+ * released. Use sparingly — prefer addUpdateSource() for routine data injection.
  */
-template <MapConcept MapT>
+template <SpatialContainer MapT>
 class LockedMapRW {
 public:
     LockedMapRW(MapT& map, std::shared_mutex& mutex)

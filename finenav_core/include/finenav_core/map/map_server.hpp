@@ -15,50 +15,56 @@
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/node_thread.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
-#include "finenav_core/concepts.hpp"
+#include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/update_source.hpp"
 
 namespace finenav {
 
-// ==============================================================================
-// MapServer Declaration
-// ==============================================================================
 
 /**
- * @brief MapServer — 管理一张地图实例的生命周期、并发访问与周期性更新。
+ * @brief MapServer — manages the lifecycle, concurrent access, and periodic update
+ * of a SpatialContainer instance.
  *
- * - 通过 addUpdateSource() 注册数据源，由内部定时器定期将缓存消息融合进地图。
- * - 通过 getLockedReadView() / getLockedWriteView() 获取 RAII 锁视图，保证线程安全。
- * - 可选接入 FineNavLocalizer 实现地图窗口跟随机器人位移。
- *
- * @tparam MapT  地图类型，必须满足 MapConcept。
+ * @tparam MapT  Map type; must satisfy SpatialContainer at minimum.
  */
-template <MapConcept MapT>
+template <SpatialContainer MapT>
 class MapServer {
 public:
     /**
-     * @brief 单个数据源的缓存与超时策略。
+     * @brief Per-source buffer and timeout policy.
+     *
+     * Each update source (laser, RGB-D, etc.) can have independent buffering
+     * parameters tuned to its publication rate and latency characteristics.
      */
     struct SourceBufferPolicy {
-        std::size_t max_buffer_size{32};       ///< 最大缓存帧数（0 = 无限制）
-        double observation_keep_time_sec{0.0}; ///< 消息最大保留时长（0 = 永不过期）
-        double source_timeout_sec{0.0};        ///< 数据源超时阈值（0 = 禁用）
+        std::size_t max_buffer_size{32};       ///< Max buffered frames (0 = unbounded)
+        double observation_keep_time_sec{0.0}; ///< Max message age before eviction (0 = keep forever)
+        double source_timeout_sec{0.0};        ///< Source timeout threshold (0 = disabled)
     };
 
+    /// Hook executed BEFORE sensor fusion, with write lock held. Map is mutable.
     using PreUpdateHook  = std::function<void(MapT& map)>;
+
+    /// Hook executed AFTER sensor fusion, with write lock held. Map is read-only.
     using PostUpdateHook = std::function<void(const MapT& map)>;
 
     template <typename MsgT>
     using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
 
     /**
-     * @brief 构造 MapServer，初始化内部定时器以定期执行地图更新。
-     * @param node           ROS 2 节点指针
-     * @param server_name    MapServer 的名称（同时作为私有子节点名）
-     * @param update_rate_hz 传感器融合定时器频率（Hz），默认 10 Hz
-     * @param localizer      可选的定位器指针；非空时启动地图位移定时器
-     * @param shift_rate_hz  地图位移定时器频率（Hz），默认 50 Hz
+     * @brief Construct a MapServer and launch its internal update timer.
+     *
+     * Creates a private ROS node (named @p server_name under the parent node's
+     * namespace) running on its own dedicated thread via NodeThread.
+     *
+     * @param node           Parent ROS node (used for clock and logging)
+     * @param server_name    Unique name; also used as the private node name
+     * @param update_rate_hz Sensor fusion timer frequency (Hz), default 10.0
+     * @param localizer      Optional FineNavLocalizer pointer. Only meaningful when
+     *                       MapT satisfies ShiftableMap; otherwise logged and ignored.
+     * @param shift_rate_hz  Map window shift check frequency (Hz), default 50.0.
+     *                       Only meaningful when MapT satisfies ShiftableMap.
      */
     explicit MapServer(
         rclcpp::Node::SharedPtr node,
@@ -67,35 +73,40 @@ public:
         FineNavLocalizer* localizer = nullptr,
         double shift_rate_hz = 50.0);
 
-    /** @brief 注册在每次地图更新周期**前**执行的回调。 */
+    /** @brief Register a hook called BEFORE sensor fusion (write lock held, map is mutable). */
     void registerPreUpdateHook(std::function<void(MapT& map)> hook);
 
-    /** @brief 注册在每次地图更新周期**后**执行的回调。 */
+    /** @brief Register a hook called AFTER sensor fusion (write lock held, map is read-only). */
     void registerPostUpdateHook(std::function<void(MapT& map)> hook);
 
     /**
-     * @brief 获取 RAII 读视图（共享锁）。
-     * @return 受读锁保护的 LockedMapRO<MapT>
+     * @brief Acquire a RAII read-only (shared-lock) view of the map.
+     * @return LockedMapRO<MapT> providing const access via operator-> and get()
      */
     LockedMapRO<MapT> getLockedReadView();
 
     /**
-     * @brief 获取 RAII 读写视图（独占锁）。用于主动即时修改地图。
-     * @return 受写锁保护的 LockedMapRW<MapT>
+     * @brief Acquire a RAII read-write (exclusive-lock) view of the map.
+     *
+     * @note Use sparingly — every concurrent reader blocks this acquisition.
+     * Prefer addUpdateSource() for routine data injection.
+     *
+     * @return LockedMapRW<MapT> providing mutable access via operator-> and get()
      */
     LockedMapRW<MapT> getLockedWriteView();
 
     /**
-     * @brief 注册一个数据源，返回线程安全的推送闭包。
+     * @brief Register a sensor data source and return a thread-safe push handle.
      *
-     * 返回的闭包可从任意线程调用，数据将被缓存至内部队列，
-     * 并在下次 runUpdateCycle() 时由 fuser 融合进地图。
+     * The returned callable can be invoked from any thread (e.g., a ROS
+     * subscription callback). Messages are buffered internally and fused into
+     * the map by the update timer during the next runUpdateCycle().
      *
-     * @tparam MsgT       消息类型
-     * @param source_name 数据源名称（用于日志）
-     * @param policy      缓存与超时策略
-     * @param fuser       融合函数：(const MsgT&, MapT&) -> void
-     * @return 线程安全的推送闭包：void(MsgT&&, const rclcpp::Time&)
+     * @tparam MsgT       Message type (e.g., pcl::PointCloud<pcl::PointXYZ>)
+     * @param source_name Human-readable source identifier (used in log messages)
+     * @param policy      Buffer size and timeout configuration
+     * @param fuser       Fusion callback: (const MsgT& msg, const rclcpp::Time& stamp, MapT& map)
+     * @return Thread-safe push handle: void(MsgT&& msg, const rclcpp::Time& stamp)
      */
     template <typename MsgT>
     std::function<void(MsgT&&, const rclcpp::Time&)> addUpdateSource(
