@@ -308,7 +308,7 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(TrackingPolicy& polic
 // ==============================================================================
 
 template <typename PlannersT, typename ExecutionPolicy>
-template <MapConcept MapT, typename BuilderFn>
+template <SpatialContainer MapT, typename BuilderFn>
 requires std::is_invocable_v<BuilderFn, const MapT&> &&
          std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>,
                              typename ControlLayer<PlannersT, ExecutionPolicy>::MapViewsVariant>

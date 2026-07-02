@@ -75,12 +75,12 @@ public:
      * 框架在每次调用 planner.plan() 前自动通过 server 申请读锁，并将加锁后的
      * const MapT& 传给 builder 以构造 IMapView；读锁在 plan() 返回后自动释放。
      *
-     * @tparam MapT      地图类型，从 server 参数自动推导，必须满足 MapConcept
-     * @tparam BuilderFn 任意可调用类型，签名：(const MapT&) -> MapViewsVariant-compatible
-     * @param server     提供地图数据的 MapServer（弱引用持有）
-     * @param builder    适配函数：接收加锁的 const MapT&，返回可构造 MapViewsVariant 的值
+     * @tparam MapT      Map type, deduced from @p server; must satisfy SpatialContainer
+     * @tparam BuilderFn Any callable with signature (const MapT&) → MapViewsVariant-compatible
+     * @param server     MapServer providing the map data (stored as weak_ptr)
+     * @param builder    Adapter: receives a locked const MapT&, returns a MapViewsVariant value
      */
-    template <MapConcept MapT, typename BuilderFn>
+    template <SpatialContainer MapT, typename BuilderFn>
     requires std::is_invocable_v<BuilderFn, const MapT&> &&
              std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>, MapViewsVariant>
     void bind_map_view(std::shared_ptr<MapServer<MapT>> server, BuilderFn&& builder);
