@@ -39,10 +39,11 @@ public:
     using Fuser = typename ObservationSource<MapT, MsgT>::Fuser;
 
     /// Hook executed BEFORE sensor fusion, with write lock held.
-    using PreUpdateHook  = std::function<void(MapT& map)>;
+    /// Receives the latest robot state (or a zero state if no provider is set).
+    using PreUpdateHook  = std::function<void(const RobotState& robot_state, MapT& map)>;
 
     /// Hook executed AFTER sensor fusion, with write lock held.
-    using PostUpdateHook = std::function<void(MapT& map)>;
+    using PostUpdateHook = std::function<void(const RobotState& robot_state, MapT& map)>;
 
     /**
      * @brief Construct a MapServer and launch its internal update timer.

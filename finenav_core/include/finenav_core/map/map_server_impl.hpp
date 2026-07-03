@@ -127,12 +127,17 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
 
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
+    // Capture robot state once per cycle so all hooks see a consistent snapshot.
+    const RobotState robot_state = state_provider_
+        ? state_provider_->getRobotState().value_or(RobotState{})
+        : RobotState{};
+
     auto t0 = Clock::now();
-    for (auto& hook : pre_update_hooks_)  hook(*map_instance_);
+    for (auto& hook : pre_update_hooks_)  hook(robot_state, *map_instance_);
     auto t1 = Clock::now();
     for (auto& src  : observation_sources_)   src->applyBuffered(*map_instance_, now);
     auto t2 = Clock::now();
-    for (auto& hook : post_update_hooks_) hook(*map_instance_);
+    for (auto& hook : post_update_hooks_) hook(robot_state, *map_instance_);
     auto t3 = Clock::now();
 
     // ── Timing report ──────────────────────────────────────────────────────
