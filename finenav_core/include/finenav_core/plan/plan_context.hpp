@@ -9,7 +9,7 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <string>
 
-namespace finenav {
+namespace finenav::core {
 
 /**
  * @brief PrePlanContext — 规划前回调所携带的上下文。
@@ -35,5 +35,5 @@ struct PostPlanContext {
     finenav_msgs::msg::Trajectory& result_traj; // [RW] 规划结果轨迹
 };
 
-} // namespace finenav
+} // namespace finenav::core
 

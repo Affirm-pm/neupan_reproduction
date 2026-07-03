@@ -19,7 +19,7 @@
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/update_source.hpp"
 
-namespace finenav {
+namespace finenav::core {
 
 
 /**
@@ -142,7 +142,7 @@ private:
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };
 
-}  // namespace finenav
+}  // namespace finenav::core
 
 #include "finenav_core/map/map_server_impl.hpp"
 

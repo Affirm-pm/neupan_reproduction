@@ -23,7 +23,7 @@
 #include "finenav_util/simple_action_server.hpp"
 #include "finenav_util/node_thread.hpp"
 
-namespace finenav {
+namespace finenav::core {
 
 // ==============================================================================
 // ControlLayer Declaration
@@ -149,6 +149,6 @@ private:
     std::vector<std::shared_ptr<void>> param_handles_; ///< 防止参数回调句柄被析构
 };
 
-} // namespace finenav
+} // namespace finenav::core
 
 #include "finenav_core/plan/control_layer_impl.hpp"

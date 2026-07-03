@@ -9,7 +9,7 @@
 
 #include "finenav_core/math_def.hpp"
 
-namespace finenav {
+namespace finenav::core {
 
 /**
  * @brief SpatialContainer — the minimal contract for any bounded spatial data container.
@@ -44,4 +44,4 @@ concept ShiftableMap = SpatialContainer<T> &&
         { map.shiftWindowTo(pos) } -> std::same_as<void>;
     };
 
-}  // namespace finenav
+}  // namespace finenav::core

@@ -10,7 +10,7 @@
 #include <Eigen/Geometry>
 #include <rclcpp/time.hpp>
 
-namespace finenav {
+namespace finenav::core {
 
 /**
  *  @brief RobotState — the canonical robot state representation in FineNav-Engine.
@@ -47,4 +47,4 @@ public:
     virtual std::optional<RobotState> getRobotState(const rclcpp::Time& t) const = 0;
 };
 
-}  // namespace finenav
+}  // namespace finenav::core

@@ -12,7 +12,7 @@
 #include "finenav_msgs/msg/robot_state.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 
-namespace finenav {
+namespace finenav::core {
 
 // =============================================================================
 // PlanningContext — immutable per-frame data passed into Planner::plan().
@@ -90,4 +90,4 @@ concept PlannerConcept =
         { planner.plan(ctx, map_view) } -> std::same_as<std::optional<OutputDataT<T>>>;
     };
 
-}  // namespace finenav
+}  // namespace finenav::core

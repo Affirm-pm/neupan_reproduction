@@ -11,7 +11,7 @@
 #include <geometry_msgs/msg/accel.hpp>
 #include <builtin_interfaces/msg/duration.hpp>
 
-namespace finenav {
+namespace finenav::core {
 
 struct IOProfile {
     bool pose = false;

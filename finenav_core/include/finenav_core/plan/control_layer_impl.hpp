@@ -8,7 +8,7 @@
 
 #pragma once
 
-namespace finenav {
+namespace finenav::core {
 
 // ==============================================================================
 // Constructor
@@ -333,5 +333,5 @@ void ControlLayer<PlannersT, ExecutionPolicy>::bind_map_view(
     };
 }
 
-} // namespace finenav
+} // namespace finenav::core
 

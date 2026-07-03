@@ -4,7 +4,7 @@
 #pragma once
 #include <shared_mutex>
 #include "finenav_core/map/map_concept.hpp"
-namespace finenav {
+namespace finenav::core {
 /**
  * @brief LockedMapRO — RAII read-only view holding a shared_lock.
  *
@@ -41,4 +41,4 @@ private:
     MapT& map_;
     std::unique_lock<std::shared_mutex> lock_;
 };
-} // namespace finenav
+} // namespace finenav::core

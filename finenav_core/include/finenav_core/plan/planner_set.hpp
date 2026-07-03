@@ -8,7 +8,7 @@
 #include <variant>
 #include <memory>
 
-namespace finenav {
+namespace finenav::core {
 
 // ==============================================================================
 // PlannerSet — 声明一组规划器类型，供 ControlLayer 枚举
@@ -91,5 +91,5 @@ using GenerateMapViewsVariant = typename detail::DedupVariant<
     typename ToVariant<typename PlannerSetT::Tuple>::type
 >::type;
 
-} // namespace finenav
+} // namespace finenav::core
 

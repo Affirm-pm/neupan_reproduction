@@ -5,7 +5,7 @@
 // It contains out-of-line template method implementations for MapServer.
 // Do NOT include this file directly — include map_server.hpp instead.
 #pragma once
-namespace finenav {
+namespace finenav::core {
 
 // ==============================================================================
 // Constructor
@@ -288,4 +288,4 @@ void MapServer<MapT>::keep_alive(std::shared_ptr<T> handle) {
     if (handle) held_param_handles_.push_back(handle);
 }
 
-} // namespace finenav
+} // namespace finenav::core

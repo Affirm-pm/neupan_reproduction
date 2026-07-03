@@ -8,7 +8,7 @@
 #include <string>
 #include <rclcpp/rclcpp.hpp>
 #include "finenav_core/map/map_concept.hpp"
-namespace finenav {
+namespace finenav::core {
 // Forward declaration — UpdateSource is owned by MapServer.
 template <SpatialContainer MapT>
 class MapServer;
@@ -120,4 +120,4 @@ void UpdateSource<MapT, MsgT>::pruneExpired(const rclcpp::Time& now) {
         buffer_.pop_front();
     }
 }
-} // namespace finenav
+} // namespace finenav::core

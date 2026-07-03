@@ -8,7 +8,7 @@
 #include "finenav_core/plan/data_packet.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
 
-namespace finenav {
+namespace finenav::core {
 
 consteval uint32_t ProfileToMsgMask(const IOProfile& p) {
     uint32_t mask = 0;
@@ -71,4 +71,4 @@ void fromROSMsg(finenav_msgs::msg::Trajectory&& src,
     if constexpr (Config.time)  dst.times = std::move(src.time_from_start);
 }
 
-} // namespace finenav
+} // namespace finenav::core
