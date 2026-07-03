@@ -44,8 +44,7 @@ public:
     using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
 
     ObservationSource(const std::string& source_name, SourceBufferPolicy policy, Fuser fuser);
-
-    /// Thread-safe: push a message from any thread.
+    
     void enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp);
 
     /**
@@ -107,7 +106,12 @@ void ObservationSource<MapT, MsgT>::applyBuffered(MapT& map, const rclcpp::Time&
         pending.swap(buffer_);
     }
 
-    if (!fuser_) return;
+    if (!fuser_) {
+        RCLCPP_WARN_ONCE(rclcpp::get_logger("MapServer"),
+            "ObservationSource '%s': no Fuser was provided — messages are "
+            "enqueued but never applied.", source_name_.c_str());
+        return;
+    }
     if (!pending.empty()) {
         RCLCPP_DEBUG_STREAM(rclcpp::get_logger("MapServer"),
             "ObservationSource '" << source_name_ << "' applying "
@@ -122,6 +126,11 @@ void ObservationSource<MapT, MsgT>::applyBuffered(MapT& map, const rclcpp::Time&
 template <SpatialContainer MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
     if (policy_.max_buffer_size > 0 && buffer_.size() >= policy_.max_buffer_size) {
+        RCLCPP_WARN_THROTTLE(rclcpp::get_logger("MapServer"),
+            *rclcpp::Clock{RCL_STEADY_TIME}, 2000,
+            "ObservationSource '%s': buffer full (%zu / %zu) — oldest message "
+            "dropped.  Increase max_buffer_size or the update rate.",
+            source_name_.c_str(), buffer_.size(), policy_.max_buffer_size);
         buffer_.pop_front();
     }
     buffer_.push_back(BufferedMessage{stamp, std::move(msg)});
@@ -132,10 +141,19 @@ void ObservationSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stam
 template <SpatialContainer MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::pruneExpired(const rclcpp::Time& now) {
     if (policy_.observation_keep_time_sec <= 0.0) return;
+    size_t n = 0;
     while (!buffer_.empty()) {
-        if ((now - buffer_.front().stamp).seconds() <= policy_.observation_keep_time_sec) break;
-        // TODO: warn when an observation is evicted by time
+        if ((now - buffer_.front().stamp).seconds() <= policy_.observation_keep_time_sec)
+            break;
+        ++n;
         buffer_.pop_front();
+    }
+    if (n > 0) {
+        RCLCPP_WARN_THROTTLE(rclcpp::get_logger("MapServer"),
+            *rclcpp::Clock{RCL_STEADY_TIME}, 2000,
+            "ObservationSource '%s': %zu message(s) expired (keep time %.1f s). "
+            "The update rate may be too slow for the incoming observation rate.",
+            source_name_.c_str(), n, policy_.observation_keep_time_sec);
     }
 }
 
