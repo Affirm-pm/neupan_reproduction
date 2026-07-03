@@ -164,7 +164,7 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
 
     // Update
     for (auto& src : observation_sources_) {
-        src->applyBuffered(*map_instance_, now);
+        src->applyBuffered(*map_instance_, now, state_provider_);
     }
 
     // Post-Update

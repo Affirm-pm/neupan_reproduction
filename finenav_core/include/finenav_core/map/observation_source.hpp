@@ -10,6 +10,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "finenav_core/map/map_concept.hpp"
+#include "finenav_core/robot_state/robot_state.hpp"
 
 namespace finenav::core {
 
@@ -31,7 +32,9 @@ template <SpatialContainer MapT>
 class IObservationSource {
 public:
     virtual ~IObservationSource() = default;
-    virtual void applyBuffered(MapT& map, const rclcpp::Time& now) = 0;
+
+    virtual void applyBuffered(MapT& map, const rclcpp::Time& now,
+                                IRobotStateProvider* state_provider) = 0;
 };
 
 /**
@@ -44,16 +47,20 @@ template <SpatialContainer MapT, typename MsgT>
 class ObservationSource final : public IObservationSource<MapT> {
 public:
 
-    using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
+    using Fuser = std::function<void(
+        const MsgT& msg, const rclcpp::Time& stamp,
+        const RobotState& state, MapT& map)>;
 
     ObservationSource(const std::string& source_name, ObservationBufferPolicy policy, Fuser fuser);
-    
+
     void enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp);
 
     /**
      * @brief Drain buffered messages and fuse each one into the map.
+     * @note  Skips messages whose timestamped robot state is unavailable.
      */
-    void applyBuffered(MapT& map, const rclcpp::Time& now) override;
+    void applyBuffered(MapT& map, const rclcpp::Time& now,
+                        IRobotStateProvider* state_provider) override;
 
 private:
 
@@ -89,7 +96,8 @@ void ObservationSource<MapT, MsgT>::enqueueThreadSafe(MsgT&& msg, const rclcpp::
 }
 
 template <SpatialContainer MapT, typename MsgT>
-void ObservationSource<MapT, MsgT>::applyBuffered(MapT& map, const rclcpp::Time& now) {
+void ObservationSource<MapT, MsgT>::applyBuffered(
+    MapT& map, const rclcpp::Time& now, IRobotStateProvider* state_provider) {
 
     std::deque<BufferedMessage> pending;
     {
@@ -122,7 +130,19 @@ void ObservationSource<MapT, MsgT>::applyBuffered(MapT& map, const rclcpp::Time&
     }
 
     for (const auto& item : pending) {
-        fuser_(item.msg, item.stamp, map);
+        auto maybe_state = state_provider
+            ? state_provider->getRobotState(item.stamp)
+            : std::nullopt;
+        if (!maybe_state) {
+            static auto throttle_clock = rclcpp::Clock{RCL_STEADY_TIME};
+            RCLCPP_WARN_THROTTLE(rclcpp::get_logger("MapServer"),
+                throttle_clock, 5000,
+                "ObservationSource '%s': no robot state available at stamp "
+                "%.3f s — message dropped.",
+                source_name_.c_str(), item.stamp.seconds());
+            continue;
+        }
+        fuser_(item.msg, item.stamp, *maybe_state, map);
     }
 }
 
