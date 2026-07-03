@@ -17,6 +17,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 
 #include "eskf.hpp"
+#include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_localizer/filter_model.hpp"
 #include "finenav_localizer/nav_state_buffer.hpp"
 #include "finenav_localizer/observation_queue.hpp"
@@ -28,8 +29,8 @@ namespace finenav {
 // ============================================================================
 //  FineNavLocalizer  —  timer-driven ESKF localizer with time-delay compensation
 //
-//  参数通过 generate_parameter_library 从 finenav_localizer.yaml 加载，
-//  与框架其他组件（Navigator、NavStateManager）保持一致的配置风格。
+//  Parameters are loaded from finenav_localizer.yaml via generate_parameter_library,
+//  consistent with other framework components (Navigator, NavStateManager).
 //
 //  Internal threading model
 //  ─────────────────────────────────────────────────────────────────────────
@@ -42,10 +43,10 @@ namespace finenav {
 //  feedObservation() pushes into pose_queue_ / twist_queue_, which are each
 //  mutex-protected internally; the call never contends with timerCallback().
 //
-//  getState() / getCovariance() / getLastUpdateTime() read from an output
-//  cache protected by cached_state_mutex_ (shared_mutex).
+//  getState() / getCovariance() / getLastUpdateTime() / getRobotState() read
+//  from an output cache protected by cached_state_mutex_ (shared_mutex).
 // ============================================================================
-class FineNavLocalizer {
+class FineNavLocalizer : public IRobotStateProvider {
 public:
     using PMat     = NavigationModelD::PMat;
     using Vec3d    = NavigationModelD::Vec3T;
@@ -113,6 +114,11 @@ public:
     NavStateD    getState()          const;
     PMat         getCovariance()     const;
     rclcpp::Time getLastUpdateTime() const;
+
+    /// @brief IRobotStateProvider implementation — returns the latest state in
+    ///        the canonical framework representation.
+    /// @note  Thread-safe (reads from the same cached_state_mutex_ as getState()).
+    RobotState getRobotState() const override;
 
     /**
      * @brief Query the interpolated state at an arbitrary past timestamp.

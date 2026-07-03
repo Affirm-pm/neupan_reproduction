@@ -209,6 +209,23 @@ NavStateD FineNavLocalizer::getState() const
     return s;
 }
 
+RobotState FineNavLocalizer::getRobotState() const
+{
+    std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);
+    NavStateD s = cached_state_;
+    // Follow the same contract as getState(): v in body frame.
+    s.v = s.R.inverse() * s.v;
+    if (params_.force_2d_mode) {
+        s = force2DOutput(s);
+    }
+    return RobotState{
+        s.p,
+        s.R.unit_quaternion(),
+        s.v,
+        s.omega
+    };
+}
+
 FineNavLocalizer::PMat FineNavLocalizer::getCovariance() const
 {
     std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);

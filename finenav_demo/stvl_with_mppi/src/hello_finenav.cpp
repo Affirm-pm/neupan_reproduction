@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
 
     // --------------------------------- Launch Mapping --------------------------------------
     auto map_server = finenav_engine->createMapResource<GridMap<Voxel>>(
-        "my_map_server", 10.0, true, 100.0);
+        "my_map_server", 10.0, 100.0);
 
 
     // ============================================================

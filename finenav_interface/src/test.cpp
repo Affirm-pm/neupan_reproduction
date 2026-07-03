@@ -47,7 +47,6 @@ int main(int argc, char** argv) {
     auto map_server_ptr = finenav_ptr->createMapResource<SimpleTestMap>(
         "test_map_server",
         1.0,   // update_rate_hz
-        true,  // enable_shift_window
         50.0   // shift_rate_hz
     );
 

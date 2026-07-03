@@ -14,8 +14,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/node_thread.hpp"
-#include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_core/map/map_concept.hpp"
+#include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/update_source.hpp"
 
@@ -61,8 +61,9 @@ public:
      * @param node           Parent ROS node (used for clock and logging)
      * @param server_name    Unique name; also used as the private node name
      * @param update_rate_hz Sensor fusion timer frequency (Hz), default 10.0
-     * @param localizer      Optional FineNavLocalizer pointer. Only meaningful when
-     *                       MapT satisfies ShiftableMap; otherwise logged and ignored.
+     * @param state_provider Source of robot pose for window tracking and health
+     *                       checks. Only meaningful when MapT satisfies ShiftableMap;
+     *                       otherwise logged and ignored. May be nullptr.
      * @param shift_rate_hz  Map window shift check frequency (Hz), default 50.0.
      *                       Only meaningful when MapT satisfies ShiftableMap.
      */
@@ -70,7 +71,7 @@ public:
         rclcpp::Node::SharedPtr node,
         const std::string& server_name,
         double update_rate_hz = 10.0,
-        FineNavLocalizer* localizer = nullptr,
+        IRobotStateProvider* state_provider = nullptr,
         double shift_rate_hz = 50.0);
 
     /** @brief Register a hook called BEFORE sensor fusion (write lock held, map is mutable). */
@@ -129,8 +130,8 @@ private:
     std::unique_ptr<MapT> map_instance_;
     std::shared_mutex     rw_mutex_;
 
-    // ---- Optional localizer for map shifting ----
-    FineNavLocalizer*            localizer_{nullptr};
+    // ---- Optional robot state provider for map shifting ----
+    IRobotStateProvider*         state_provider_{nullptr};
     rclcpp::TimerBase::SharedPtr shift_timer_;
 
     // ---- Hooks, sources & timers ----

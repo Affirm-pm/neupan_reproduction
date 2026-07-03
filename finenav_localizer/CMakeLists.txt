@@ -12,6 +12,7 @@ find_package(rclcpp REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(finenav_core REQUIRED)
 find_package(finenav_util REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(Sophus REQUIRED)
@@ -40,6 +41,7 @@ ament_target_dependencies(${PROJECT_NAME}
         tf2_ros
         tf2_eigen
         geometry_msgs
+        finenav_core
         finenav_util
 )
 target_link_libraries(${PROJECT_NAME}
@@ -73,6 +75,7 @@ ament_export_dependencies(
         tf2_ros
         tf2_eigen
         geometry_msgs
+        finenav_core
         finenav_util
         Eigen3
         Sophus

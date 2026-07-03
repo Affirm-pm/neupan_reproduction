@@ -16,9 +16,9 @@ MapServer<MapT>::MapServer(
     rclcpp::Node::SharedPtr node,
     const std::string& server_name,
     double update_rate_hz,
-    FineNavLocalizer* localizer,
+    IRobotStateProvider* state_provider,
     double shift_rate_hz)
-    : node_(node), server_name_(server_name), localizer_(localizer)
+    : node_(node), server_name_(server_name), state_provider_(state_provider)
 {
     rclcpp::NodeOptions pnode_opts;
     pnode_opts.append_parameter_override(
@@ -38,7 +38,7 @@ MapServer<MapT>::MapServer(
 
     // Map window shift timer — compile-time decision.
     if constexpr (ShiftableMap<MapT>) {
-        if (localizer_ != nullptr) {
+        if (state_provider_ != nullptr) {
             auto shift_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::duration<double>(1.0 / shift_rate_hz));
             shift_timer_ = rclcpp::create_timer(
@@ -54,7 +54,7 @@ MapServer<MapT>::MapServer(
                 server_name_.c_str());
         }
     } else {
-        if (localizer_ != nullptr) {
+        if (state_provider_ != nullptr) {
             RCLCPP_INFO(node_->get_logger(),
                 "MapServer '%s': map is a fixed-location container "
                 "(not ShiftableMap); localizer pointer ignored.",
@@ -169,11 +169,9 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     //
     // This check runs on every update cycle (not a separate timer) because it
     // is cheap (one AABB test) and the failure mode is catastrophically silent.
-    if (localizer_ != nullptr) {
-        // NOTE: read robot pose WITHOUT holding the localizer's internal lock.
-        // This is a best-effort health check; a stale pose is still useful for
-        // detecting gross window misalignment.
-        const auto robot_pose = localizer_->getState().p;
+    if (state_provider_ != nullptr) {
+        const auto robot_state = state_provider_->getRobotState();
+        const auto& robot_pose = robot_state.position;
         if (!map_instance_->isInside(robot_pose)) {
             const auto bounds = map_instance_->getWindowBounds();
             const auto center = map_instance_->getWindowCenter();
@@ -217,9 +215,8 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     // runtime. The if constexpr ensures it also never compiles the
     // shiftWindowTo() call for non-shiftable types.
     if constexpr (ShiftableMap<MapT>) {
-        auto robot_pose  = localizer_->getState().p;
-        auto latest_time = localizer_->getLastUpdateTime();
-        // TODO: need an atomic getState+getTime interface to avoid data race
+        const auto robot_state = state_provider_->getRobotState();
+        const auto& robot_pose = robot_state.position;
 
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
@@ -269,8 +266,9 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
         map_instance_->shiftWindowTo(robot_pose);
 
         RCLCPP_DEBUG_STREAM(pnode_->get_logger(),
-            "MapServer shifted with pose delayed by "
-            << (now - latest_time).seconds() << " seconds");
+            "MapServer window shifted to ("
+            << robot_pose.x() << ", " << robot_pose.y() << ", "
+            << robot_pose.z() << ")");
     }
 }
 
