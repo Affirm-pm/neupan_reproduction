@@ -1,10 +1,8 @@
 // Copyright (c) 2026.
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
-//
-// Template implementation fragment — included ONLY from map_server.hpp.
-// No #pragma once: this file is not a standalone header.
-// For API docs, see the declarations in map_server.hpp.
+
+#pragma once
 
 #include "finenav_util/algo_configurator.hpp"
 
@@ -214,6 +212,7 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
         const auto& robot_pose = maybe_state->position;
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
+        // TODO： 这个逻辑要修下
         // ── Gate 1: is the robot even inside the current window? ───────────
         if (!map_instance_->isInside(robot_pose)) {
             RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
