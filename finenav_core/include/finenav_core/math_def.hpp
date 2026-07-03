@@ -8,6 +8,9 @@
 
 namespace finenav::core {
 
+/**
+ * @brief Math definition that used in FineNav-Engine
+ */
 using Position3D = Eigen::Vector3d;
 using Region3D = Eigen::AlignedBox3d;
 
