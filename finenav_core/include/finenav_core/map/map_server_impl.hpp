@@ -90,7 +90,7 @@ template <typename MsgT>
 std::function<void(MsgT&&, const rclcpp::Time&)>
 MapServer<MapT>::addObservationSource(
     const std::string& source_name,
-    SourceBufferPolicy policy,
+    ObservationBufferPolicy policy,
     Fuser<MsgT> fuser)
 {
     using Source = ObservationSource<MapT, MsgT>;
@@ -113,7 +113,7 @@ void MapServer<MapT>::addObservationSource(
     const std::string& source_name,
     const std::string& topic_name,
     const rclcpp::QoS& qos,
-    SourceBufferPolicy policy,
+    ObservationBufferPolicy policy,
     Fuser<MsgT> fuser)
 {
     auto injector = addObservationSource(source_name, policy, std::move(fuser));

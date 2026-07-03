@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
         }
     });
 
-    MapServer<GridMap<Voxel>>::SourceBufferPolicy policy;
+    MapServer<GridMap<Voxel>>::ObservationBufferPolicy policy;
     policy.max_buffer_size = 50000;
     policy.observation_keep_time_sec = 2.0;
 

@@ -4,35 +4,32 @@
 
 #pragma once
 
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <vector>
 
-#include <rclcpp/rclcpp.hpp>
-#include "finenav_util/algo_configurator.hpp"
-#include "finenav_util/node_thread.hpp"
+#include "rclcpp/rclcpp.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/observation_source.hpp"
+#include "finenav_util/node_thread.hpp"
 
 namespace finenav::core {
 
-
 /**
- * @brief MapServer — manages the lifecycle, concurrent access, and periodic update
- * of a SpatialContainer instance.
- *
- * @tparam MapT  Map type; must satisfy SpatialContainer at minimum.
+ * @brief MapServer — manages the lifecycle and periodic update of a SpatialContainer instance.
+ * @tparam MapT  Map type; must satisfy SpatialContainer at minimum. If MapT also \
+ * @details The sensor data is not fused into the map when the data received. It will imediately move to a buffer with zero-copy.
+ * The map is fused when the update timer is triggered.
  */
 template <SpatialContainer MapT>
 class MapServer {
 public:
     /// Re-exported for convenience at call sites.
-    using SourceBufferPolicy = finenav::core::SourceBufferPolicy;
+    using ObservationBufferPolicy = finenav::core::ObservationBufferPolicy;
 
     /// Re-exported from ObservationSource.
     template <typename MsgT>
@@ -109,7 +106,7 @@ public:
      */
     template <typename MsgT>
     std::function<void(MsgT&&, const rclcpp::Time&)> addObservationSource(
-        const std::string& source_name, SourceBufferPolicy policy, Fuser<MsgT> fuser);
+        const std::string& source_name, ObservationBufferPolicy policy, Fuser<MsgT> fuser);
 
     /**
      * @brief Register a sensor data source backed by a ROS topic subscription.
@@ -130,7 +127,7 @@ public:
         const std::string& source_name,
         const std::string& topic_name,
         const rclcpp::QoS& qos,
-        SourceBufferPolicy policy,
+        ObservationBufferPolicy policy,
         Fuser<MsgT> fuser);
 
 private:

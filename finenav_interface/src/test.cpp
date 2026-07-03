@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
     });
 
     // 4. 初始化策略并注册数据注射器
-    MapServer<SimpleTestMap>::SourceBufferPolicy policy;
+    MapServer<SimpleTestMap>::ObservationBufferPolicy policy;
     policy.max_buffer_size = 10;
     policy.observation_keep_time_sec = 2.0;
 

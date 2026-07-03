@@ -18,9 +18,9 @@ template <SpatialContainer MapT>
 class MapServer;
 
 /**
- * @brief SourceBufferPolicy — buffer and timeout parameters for one sensor stream.
+ * @brief ObservationBufferPolicy — buffer and timeout parameters for one sensor stream.
  */
-struct SourceBufferPolicy {
+struct ObservationBufferPolicy {
     std::size_t max_buffer_size{32};           ///< Max buffered frames (0 = unbounded)
     double observation_keep_time_sec{0.0};     ///< Max message age before eviction (0 = keep forever)
     double source_timeout_sec{0.0};            ///< Source timeout threshold (0 = disabled)
@@ -46,7 +46,7 @@ public:
 
     using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
 
-    ObservationSource(const std::string& source_name, SourceBufferPolicy policy, Fuser fuser);
+    ObservationSource(const std::string& source_name, ObservationBufferPolicy policy, Fuser fuser);
     
     void enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp);
 
@@ -66,7 +66,7 @@ private:
     void pruneExpired(const rclcpp::Time& now);
 
     std::string source_name_;
-    SourceBufferPolicy policy_;
+    ObservationBufferPolicy policy_;
     Fuser fuser_;
     std::mutex mutex_;
     std::deque<BufferedMessage> buffer_;
@@ -79,7 +79,7 @@ private:
 // ==============================================================================
 template <SpatialContainer MapT, typename MsgT>
 ObservationSource<MapT, MsgT>::ObservationSource(
-    const std::string& source_name, SourceBufferPolicy policy, Fuser fuser)
+    const std::string& source_name, ObservationBufferPolicy policy, Fuser fuser)
     : source_name_(source_name), policy_(policy), fuser_(std::move(fuser)) {}
 
 template <SpatialContainer MapT, typename MsgT>
