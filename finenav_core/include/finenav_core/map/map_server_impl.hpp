@@ -2,13 +2,12 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
+
 #pragma once
+
 namespace finenav::core {
 
-// ==============================================================================
-// Constructor
-// ==============================================================================
-
+// --- MapServer::MapServer  (see map_server.hpp) --------------------------------
 template <SpatialContainer MapT>
 MapServer<MapT>::MapServer(
     rclcpp::Node::SharedPtr node,
@@ -47,7 +46,7 @@ MapServer<MapT>::MapServer(
                 server_name_.c_str(), shift_rate_hz);
         } else {
             RCLCPP_WARN(node_->get_logger(),
-                "MapServer '%s': ShiftableMap but no localizer provided; "
+                "MapServer '%s': ShiftableMap but no state provider; "
                 "shift timer disabled. Robot-following will NOT occur.",
                 server_name_.c_str());
         }
@@ -55,44 +54,37 @@ MapServer<MapT>::MapServer(
         if (state_provider_ != nullptr) {
             RCLCPP_INFO(node_->get_logger(),
                 "MapServer '%s': map is a fixed-location container "
-                "(not ShiftableMap); localizer pointer ignored.",
+                "(not ShiftableMap); state provider ignored.",
                 server_name_.c_str());
         }
     }
 }
 
-// ==============================================================================
-// Hook Registration
-// ==============================================================================
-
+// --- MapServer::registerPreUpdateHook  (see map_server.hpp) --------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::registerPreUpdateHook(PreUpdateHook hook) {
     pre_update_hook_ = std::move(hook);
 }
 
+// --- MapServer::registerPostUpdateHook  (see map_server.hpp) -------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::registerPostUpdateHook(PostUpdateHook hook) {
     post_update_hook_ = std::move(hook);
 }
 
-// ==============================================================================
-// Locked View Accessors
-// ==============================================================================
-
+// --- MapServer::getLockedReadView  (see map_server.hpp) ------------------------
 template <SpatialContainer MapT>
 LockedMapRO<MapT> MapServer<MapT>::getLockedReadView() {
     return LockedMapRO<MapT>(*map_instance_, rw_mutex_);
 }
 
+// --- MapServer::getLockedWriteView  (see map_server.hpp) -----------------------
 template <SpatialContainer MapT>
 LockedMapRW<MapT> MapServer<MapT>::getLockedWriteView() {
     return LockedMapRW<MapT>(*map_instance_, rw_mutex_);
 }
 
-// ==============================================================================
-// addObservationSource
-// ==============================================================================
-
+// --- MapServer::addObservationSource (manual injector)  (see map_server.hpp) ---
 template <SpatialContainer MapT>
 template <typename MsgT>
 std::function<void(MsgT&&, const rclcpp::Time&)>
@@ -114,6 +106,7 @@ MapServer<MapT>::addObservationSource(
     };
 }
 
+// --- MapServer::addObservationSource (topic-based)  (see map_server.hpp) -------
 template <SpatialContainer MapT>
 template <typename MsgT>
 void MapServer<MapT>::addObservationSource(
@@ -149,10 +142,7 @@ void MapServer<MapT>::addObservationSource(
         server_name_.c_str(), topic_name.c_str(), source_name.c_str());
 }
 
-// ==============================================================================
-// runUpdateCycle — sensor fusion + window health check
-// ==============================================================================
-
+// --- MapServer::runUpdateCycle  (private, see map_server.hpp) ------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     using Clock = std::chrono::steady_clock;
@@ -191,18 +181,15 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
 
     // ── Window health check ────────────────────────────────────────────────
     //
-    // If a localizer is available, verify that the robot is still inside the
-    // map window. Being outside is a hard fault: planners reading this map
-    // will get invalid or missing data near the robot.
+    // If a state provider is available, verify that the robot is still inside the
+    // map window. Being outside is a hard fault: planners reading this map will
+    // get invalid or missing data near the robot.
     //
     // Common root causes:
-    //   - Shift timer is disabled (no localizer, or ShiftableMap without one)
+    //   - Shift timer is disabled (no state provider, or ShiftableMap without one)
     //   - shift_rate_hz too slow for the robot's speed
     //   - shiftWindowTo() implementation is a no-op when it shouldn't be
     //   - Window extent is too small for the operational area
-    //
-    // This check runs on every update cycle (not a separate timer) because it
-    // is cheap (one AABB test) and the failure mode is catastrophically silent.
     if (state_provider_ != nullptr) {
         const auto maybe_state = state_provider_->getRobotState();
         if (!maybe_state) {
@@ -242,28 +229,19 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     }
 }
 
-// ==============================================================================
-// runShiftCycle — smart-gated window recentering (ShiftableMap only)
-// ==============================================================================
-
+// --- MapServer::runShiftCycle  (private, see map_server.hpp) -------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     // Compile-time guard: this method body is only valid for ShiftableMap.
-    // For fixed-location maps (SpatialContainer only), the shift timer is
-    // never created (see constructor), so this method is never called at
-    // runtime. The if constexpr ensures it also never compiles the
-    // shiftWindowTo() call for non-shiftable types.
     if constexpr (ShiftableMap<MapT>) {
         const auto maybe_state = state_provider_->getRobotState();
-        if (!maybe_state) return;  // provider not initialised yet — skip this cycle
+        if (!maybe_state) return;  // provider not initialised yet
 
         const auto& robot_pose = maybe_state->position;
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
         // ── Gate 1: is the robot even inside the current window? ───────────
         if (!map_instance_->isInside(robot_pose)) {
-            // Robot escaped the window entirely. Shift immediately — no
-            // gating, no margin check. This is an urgent corrective action.
             RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
                 "MapServer '%s': robot escaped window — forcing immediate shift.",
                 server_name_.c_str());
@@ -271,35 +249,25 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
             return;
         }
 
-        // ── Gate 2: is the robot near enough to the edge to justify shifting?
+        // ── Gate 2: is the robot near enough to the edge? ──────────────────
         //
-        // We compute the normalised offset of the robot from the window centre
-        // in each axis. A value of 0.0 means the robot is at the centre; 1.0
-        // means it is at the edge. We trigger a shift when the robot exceeds
-        // shift_margin_ratio_ in any axis.
-        //
-        // Example: a 100 m × 100 m window, margin = 0.5.
-        //   Centre = (0, 0). Robot at (30, 0) → offset_ratio = 0.6 → SHIFT.
-        //   Robot at (10, 0) → offset_ratio = 0.2 → skip (still well inside).
+        // Normalised offset from window centre in each axis.  0 = centre,
+        // 1 = edge.  Trigger a shift when exceeding kShiftMarginRatio.
         //
         // TODO: make shift_margin_ratio a dynamic parameter.
         constexpr double kShiftMarginRatio = 0.5;
 
-        const auto center     = map_instance_->getWindowCenter();
-        const auto bounds     = map_instance_->getWindowBounds();
+        const auto center      = map_instance_->getWindowCenter();
+        const auto bounds      = map_instance_->getWindowBounds();
         const auto half_extent = (bounds.max() - bounds.min()) * 0.5;
 
-        // Avoid division by zero for degenerate (zero-size) windows.
         if (half_extent.x() > 0.0 && half_extent.y() > 0.0) {
             const auto offset = (robot_pose - center).cwiseAbs();
             const bool near_edge =
                 (offset.x() / half_extent.x() > kShiftMarginRatio) ||
                 (offset.y() / half_extent.y() > kShiftMarginRatio);
 
-            if (!near_edge) {
-                // Robot is well within the window — nothing to do.
-                return;
-            }
+            if (!near_edge) return;  // well within window, nothing to do
         }
 
         // ── Perform the shift ──────────────────────────────────────────────
@@ -312,10 +280,7 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     }
 }
 
-// ==============================================================================
-// Utility
-// ==============================================================================
-
+// --- MapServer::keep_alive  (private) ------------------------------------------
 template <SpatialContainer MapT>
 template <typename T>
 void MapServer<MapT>::keep_alive(std::shared_ptr<T> handle) {
