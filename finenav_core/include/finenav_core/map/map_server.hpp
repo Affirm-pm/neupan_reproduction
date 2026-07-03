@@ -51,14 +51,17 @@ public:
      * @param server_name    Unique name
      * @param update_rate_hz Sensor fusion timer frequency (Hz), default 10.0
      * @param state_provider Source of robot pose
-     * @param shift_rate_hz  Map window shift check frequency (Hz), default 50.0.
+     * @param shift_rate_hz     Map window shift check frequency (Hz), default 50.0.
+     * @param shift_margin_ratio Distance-from-centre ratio that triggers a shift.
+     *                           0 = centre only, 1 = at window edge.  Default 0.5.
      */
-    explicit MapServer(
+    explicit MapServer(         // TODO：2D情况能否正常fallback，需要测试
         rclcpp::Node::SharedPtr node,
         const std::string& server_name,
         IRobotStateProvider* state_provider,
         double update_rate_hz = 10.0,
-        double shift_rate_hz = 50.0);
+        double shift_rate_hz = 50.0,
+        double shift_margin_ratio = 0.2);
 
     MapServer(const MapServer&) = delete;
     MapServer& operator=(const MapServer&) = delete;
@@ -149,6 +152,7 @@ private:
     std::vector<std::shared_ptr<void>>               held_param_handles_;
     double                                           update_rate_hz_{0.0};
     double                                           shift_rate_hz_{0.0};
+    double                                           shift_margin_ratio_{0.5};
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };
 

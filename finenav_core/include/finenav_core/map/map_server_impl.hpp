@@ -17,9 +17,11 @@ MapServer<MapT>::MapServer(
     const std::string& server_name,
     IRobotStateProvider* state_provider,
     double update_rate_hz,
-    double shift_rate_hz)
+    double shift_rate_hz,
+    double shift_margin_ratio)
     : node_(node), server_name_(server_name), state_provider_(state_provider),
-      update_rate_hz_(update_rate_hz), shift_rate_hz_(shift_rate_hz) {
+      update_rate_hz_(update_rate_hz), shift_rate_hz_(shift_rate_hz),
+      shift_margin_ratio_(shift_margin_ratio) {
 
     rclcpp::NodeOptions pnode_opts;
     pnode_opts.append_parameter_override(
@@ -219,13 +221,12 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     // Compile-time guard: this method body is only valid for ShiftableMap.
     if constexpr (ShiftableMap<MapT>) {
         const auto maybe_state = state_provider_->getRobotState();
-        if (!maybe_state) return;  // provider not initialised yet
+        if (!maybe_state) return;
 
         const auto& robot_pose = maybe_state->position;
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
-        // TODO： 这个逻辑要修下
-        // ── Gate 1: is the robot even inside the current window? ───────────
+        // If the robot is not even inside the current window, shift.
         if (!map_instance_->isInside(robot_pose)) {
             FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 1000,
                 "MapServer '{}': robot escaped window — forcing immediate shift.",
@@ -234,23 +235,17 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
             return;
         }
 
-        // ── Gate 2: is the robot near enough to the edge? ──────────────────
-        //
-        // Normalised offset from window centre in each axis.  0 = centre,
-        // 1 = edge.  Trigger a shift when exceeding kShiftMarginRatio.
-        //
-        // TODO: make shift_margin_ratio a dynamic parameter.
-        constexpr double kShiftMarginRatio = 0.5;
-
+        // If the robot near enough to the edge, shift.
         const auto center      = map_instance_->getWindowCenter();
         const auto bounds      = map_instance_->getWindowBounds();
         const auto half_extent = (bounds.max() - bounds.min()) * 0.5;
 
-        if (half_extent.x() > 0.0 && half_extent.y() > 0.0) {
+        if (half_extent.x() > 0.0 && half_extent.y() > 0.0 && half_extent.z() > 0.0) {
             const auto offset = (robot_pose - center).cwiseAbs();
             const bool near_edge =
-                (offset.x() / half_extent.x() > kShiftMarginRatio) ||
-                (offset.y() / half_extent.y() > kShiftMarginRatio);
+                (offset.x() / half_extent.x() > shift_margin_ratio_) ||
+                (offset.y() / half_extent.y() > shift_margin_ratio_) ||
+                (offset.z() / half_extent.z() > shift_margin_ratio_);
 
             if (!near_edge) return;  // well within window, nothing to do
         }
