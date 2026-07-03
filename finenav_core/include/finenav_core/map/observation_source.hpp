@@ -35,7 +35,7 @@ public:
 };
 
 /**
- * @brief ObservationSource — manage data buffer for one sensor stream.
+ * @brief ObservationSource — manages the data buffer for one sensor stream.
  *
  * @tparam MapT  Map type.
  * @tparam MsgT  Sensor message type.

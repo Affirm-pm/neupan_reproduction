@@ -28,34 +28,22 @@ namespace finenav::core {
 template <SpatialContainer MapT>
 class MapServer {
 public:
-    /// Re-exported for convenience at call sites.
-    using ObservationBufferPolicy = finenav::core::ObservationBufferPolicy;
 
     /// Re-exported from ObservationSource.
     template <typename MsgT>
     using Fuser = typename ObservationSource<MapT, MsgT>::Fuser;
 
-    /// Hook executed BEFORE sensor fusion, with write lock held.
-    /// Receives the latest robot state (or a zero state if no provider is set).
+    /// Hook executed BEFORE / AFTER sensor fusion, with write lock held.
     using PreUpdateHook  = std::function<void(const RobotState& robot_state, MapT& map)>;
-
-    /// Hook executed AFTER sensor fusion, with write lock held.
     using PostUpdateHook = std::function<void(const RobotState& robot_state, MapT& map)>;
 
     /**
-     * @brief Construct a MapServer and launch its internal update timer.
-     *
-     * Creates a private ROS node (named @p server_name under the parent node's
-     * namespace) running on its own dedicated thread via NodeThread.
-     *
-     * @param node           Parent ROS node (used for clock and logging)
-     * @param server_name    Unique name; also used as the private node name
+     * @brief MapServer Constructor.
+     * @param node           Parent ROS node
+     * @param server_name    Unique name
      * @param update_rate_hz Sensor fusion timer frequency (Hz), default 10.0
-     * @param state_provider Source of robot pose for window tracking and health
-     *                       checks. Only meaningful when MapT satisfies ShiftableMap;
-     *                       otherwise logged and ignored. May be nullptr.
+     * @param state_provider Source of robot pose
      * @param shift_rate_hz  Map window shift check frequency (Hz), default 50.0.
-     *                       Only meaningful when MapT satisfies ShiftableMap.
      */
     explicit MapServer(
         rclcpp::Node::SharedPtr node,
@@ -77,17 +65,13 @@ public:
     void registerPostUpdateHook(PostUpdateHook hook);
 
     /**
-     * @brief Acquire a RAII read-only (shared-lock) view of the map.
+     * @brief Acquire a RAII read-only view of the map.
      * @return LockedMapRO<MapT> providing const access via operator-> and get()
      */
     LockedMapRO<MapT> getLockedReadView();
 
     /**
-     * @brief Acquire a RAII read-write (exclusive-lock) view of the map.
-     *
-     * @note Use sparingly — every concurrent reader blocks this acquisition.
-     * Prefer addObservationSource() for routine data injection.
-     *
+     * @brief Acquire a RAII read-write view of the map.
      * @return LockedMapRW<MapT> providing mutable access via operator-> and get()
      */
     LockedMapRW<MapT> getLockedWriteView();
@@ -111,9 +95,7 @@ public:
     /**
      * @brief Register a sensor data source backed by a ROS topic subscription.
      *
-     * MapServer creates the subscription internally — no separate subscriber or
-     * injector variable is needed.  The fuser receives the ROS message type
-     * directly and can convert inside the callback (e.g., pcl::fromROSMsg).
+     * Messages are buffered internally and fused into the map by the update timer.
      *
      * @tparam MsgT   ROS message type (e.g., sensor_msgs::msg::PointCloud2)
      * @param source_name Human-readable source identifier
@@ -155,7 +137,7 @@ private:
     PreUpdateHook                                    pre_update_hook_;
     PostUpdateHook                                   post_update_hook_;
     std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
-    std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;  ///< topic-based sources
+    std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;
     std::vector<std::shared_ptr<void>>               held_param_handles_;
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };
