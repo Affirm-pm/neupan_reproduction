@@ -1,9 +1,12 @@
 // Copyright (c) 2026.
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
+//
+// Template implementation fragment — included ONLY from map_server.hpp.
+// No #pragma once: this file is not a standalone header.
+// For API docs, see the declarations in map_server.hpp.
 
-
-#pragma once
+#include "finenav_util/algo_configurator.hpp"
 
 namespace finenav::core {
 
@@ -15,48 +18,46 @@ MapServer<MapT>::MapServer(
     IRobotStateProvider* state_provider,
     double update_rate_hz,
     double shift_rate_hz)
-    : node_(node), server_name_(server_name), state_provider_(state_provider)
-{
+    : node_(node), server_name_(server_name), state_provider_(state_provider) {
+
     rclcpp::NodeOptions pnode_opts;
     pnode_opts.append_parameter_override(
         "use_sim_time",
-        node_->get_parameter("use_sim_time").as_bool());
+        node_->get_parameter("use_sim_time").as_bool()); // Inherit use_sim_time from parent node
     pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<NodeThread>(pnode_);
     map_instance_ = std::make_unique<MapT>();
-    keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
+    keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_)); // Every algo (map_instance) need to be configurated.
 
-    // Sensor fusion update timer — always needed.
+    if (state_provider == nullptr) {
+        RCLCPP_ERROR(node_->get_logger(),
+            "MapServer '%s': state_provider is required but nullptr was passed. "
+            "No timers will be created — this MapServer is dormant.",
+            server_name_.c_str());
+        return;
+    }
+
+    // Sensor fusion update timer.
     auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::duration<double>(1.0 / update_rate_hz));
     update_timer_ = rclcpp::create_timer(
         pnode_, pnode_->get_clock(), period,
         [this]() { this->runUpdateCycle(this->pnode_->now()); });
 
-    // Map window shift timer — compile-time decision.
+    RCLCPP_INFO(node_->get_logger(),
+        "MapServer '%s': update timer started at %.1f Hz.",
+        server_name_.c_str(), update_rate_hz);
+
+    // Map window shift timer — only when the map is shiftable.
     if constexpr (ShiftableMap<MapT>) {
-        if (state_provider_ != nullptr) {
-            auto shift_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                std::chrono::duration<double>(1.0 / shift_rate_hz));
-            shift_timer_ = rclcpp::create_timer(
-                pnode_, pnode_->get_clock(), shift_period,
-                [this]() { this->runShiftCycle(this->pnode_->now()); });
-            RCLCPP_INFO(node_->get_logger(),
-                "MapServer '%s': shift timer started at %.1f Hz (ShiftableMap).",
-                server_name_.c_str(), shift_rate_hz);
-        } else {
-            RCLCPP_WARN(node_->get_logger(),
-                "MapServer '%s': ShiftableMap but no state provider; "
-                "shift timer disabled. Robot-following will NOT occur.",
-                server_name_.c_str());
-        }
-    } else {
-        if (state_provider_ != nullptr) {
-            RCLCPP_INFO(node_->get_logger(),
-                "MapServer '%s': map is a fixed-location container "
-                "(not ShiftableMap); state provider ignored.",
-                server_name_.c_str());
-        }
+        auto shift_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::duration<double>(1.0 / shift_rate_hz));
+        shift_timer_ = rclcpp::create_timer(
+            pnode_, pnode_->get_clock(), shift_period,
+            [this]() { this->runShiftCycle(this->pnode_->now()); });
+        RCLCPP_INFO(node_->get_logger(),
+            "MapServer '%s': shift timer started at %.1f Hz.",
+            server_name_.c_str(), shift_rate_hz);
     }
 }
 
@@ -132,9 +133,7 @@ void MapServer<MapT>::addObservationSource(
                     "degraded by time-skew.", source_name.c_str());
                 stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
             }
-            // Take ownership of the message — the only copy is ROS
-            // deserialization into the shared_ptr.  From here to the buffer
-            // it is moves all the way down.
+
             injector(std::move(*msg), stamp);
         });
     held_subscriptions_.push_back(sub);
@@ -152,47 +151,35 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
 
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
-    // Capture robot state once per cycle so all hooks see a consistent snapshot.
-    const RobotState robot_state = state_provider_
-        ? state_provider_->getRobotState().value_or(RobotState{})
-        : RobotState{};
+    // Pre-Update
+    if (pre_update_hook_) {
+        if (auto maybe_rs = state_provider_->getRobotState()) {
+            pre_update_hook_(*maybe_rs, *map_instance_);
+        } else {
+            RCLCPP_WARN(node_->get_logger(),
+                "MapServer '%s': try to get current robot state but failed — skipping pre-update hook.",
+                server_name_.c_str());
+        }
+    }
 
-    auto t0 = Clock::now();
-    if (pre_update_hook_)  pre_update_hook_(robot_state, *map_instance_);
-    auto t1 = Clock::now();
-    for (auto& src : observation_sources_)  src->applyBuffered(*map_instance_, now);
-    auto t2 = Clock::now();
-    if (post_update_hook_)  post_update_hook_(robot_state, *map_instance_);
-    auto t3 = Clock::now();
+    // Update
+    for (auto& src : observation_sources_) {
+        src->applyBuffered(*map_instance_, now);
+    }
 
-    // ── Timing report ──────────────────────────────────────────────────────
-    const double ms_pre   = Ms(t1 - t0).count();
-    const double ms_fuse  = Ms(t2 - t1).count();
-    const double ms_post  = Ms(t3 - t2).count();
-    const double ms_total = Ms(t3 - t0).count();
-
-    RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
-        "\n[MapServer: %s] update cycle timing\n"
-        "  preUpdateHook  : %7.2f ms\n"
-        "  applyBuffered  : %7.2f ms\n"
-        "  postUpdateHook : %7.2f ms\n"
-        "  ─────────────────────────\n"
-        "  Total          : %7.2f ms",
-        server_name_.c_str(),
-        ms_pre, ms_fuse, ms_post, ms_total);
+    // Post-Update
+    if (post_update_hook_) {
+        if (auto maybe_rs = state_provider_->getRobotState()) {
+            post_update_hook_(*maybe_rs, *map_instance_);
+        } else {
+            RCLCPP_WARN(node_->get_logger(),
+                "MapServer '%s': try to get current robot state but failed — skipping post-update hook.",
+                server_name_.c_str());
+        }
+    }
 
     // ── Window health check ────────────────────────────────────────────────
-    //
-    // If a state provider is available, verify that the robot is still inside the
-    // map window. Being outside is a hard fault: planners reading this map will
-    // get invalid or missing data near the robot.
-    //
-    // Common root causes:
-    //   - Shift timer is disabled (no state provider, or ShiftableMap without one)
-    //   - shift_rate_hz too slow for the robot's speed
-    //   - shiftWindowTo() implementation is a no-op when it shouldn't be
-    //   - Window extent is too small for the operational area
-    if (state_provider_ != nullptr) {
+    {
         const auto maybe_state = state_provider_->getRobotState();
         if (!maybe_state) {
             // Provider not yet initialised — cannot check window containment.
@@ -205,28 +192,13 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
             const auto center = map_instance_->getWindowCenter();
             const auto extent = bounds.sizes();
 
-            RCLCPP_ERROR_THROTTLE(node_->get_logger(), *node_->get_clock(), 3000,
-                "\n[MapServer: %s] ROBOT OUTSIDE MAP WINDOW — HARD FAULT\n"
-                "  ───────────────────────────────────────────────────\n"
-                "  Robot position   : (%7.2f, %7.2f, %7.2f)\n"
-                "  Window center    : (%7.2f, %7.2f, %7.2f)\n"
-                "  Window min       : (%7.2f, %7.2f, %7.2f)\n"
-                "  Window max       : (%7.2f, %7.2f, %7.2f)\n"
-                "  Window extent    : (%7.1f, %7.1f, %7.1f) m\n"
-                "  ───────────────────────────────────────────────────\n"
-                "  Planners reading this map will receive no valid data\n"
-                "  near the robot. Check:\n"
-                "    - Is the shift timer enabled and running? Is\n"
-                "      shift_rate_hz fast enough for robot speed?\n"
-                "    - Does shiftWindowTo() actually move the window?\n"
-                "    - Is the map's window extent large enough for\n"
-                "      the operational area?",
-                server_name_.c_str(),
-                robot_pose.x(), robot_pose.y(), robot_pose.z(),
-                center.x(), center.y(), center.z(),
-                bounds.min().x(), bounds.min().y(), bounds.min().z(),
-                bounds.max().x(), bounds.max().y(), bounds.max().z(),
-                extent.x(), extent.y(), extent.z());
+            RCLCPP_ERROR_STREAM_THROTTLE(node_->get_logger(), *node_->get_clock(), 3000,
+                "\n[MapServer: " << server_name_ << "] ROBOT OUTSIDE MAP WINDOW - HARD FAULT\n"
+                "  Robot position   : (" << robot_pose.x() << ", " << robot_pose.y() << ", " << robot_pose.z() << ")\n"
+                "  Window center    : (" << center.x() << ", " << center.y() << ", " << center.z() << ")\n"
+                "  Window min       : (" << bounds.min().x() << ", " << bounds.min().y() << ", " << bounds.min().z() << ")\n"
+                "  Window max       : (" << bounds.max().x() << ", " << bounds.max().y() << ", " << bounds.max().z() << ")\n"
+                "  Window extent    : (" << extent.x() << ", " << extent.y() << ", " << extent.z() << ") m");
         }
     }
 }

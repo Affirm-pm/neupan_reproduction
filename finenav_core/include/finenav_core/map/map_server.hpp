@@ -15,7 +15,6 @@
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/observation_source.hpp"
-#include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/node_thread.hpp"
 
 namespace finenav::core {
