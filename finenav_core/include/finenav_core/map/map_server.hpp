@@ -147,6 +147,8 @@ private:
     std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
     std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;
     std::vector<std::shared_ptr<void>>               held_param_handles_;
+    double                                           update_rate_hz_{0.0};
+    double                                           shift_rate_hz_{0.0};
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };
 

@@ -34,10 +34,28 @@ public:
         FINENAV_LOG_DEBUG(logger_, "{}: {:.2f} ms", name_, elapsed_ms());
     }
 
-    /// Elapsed wall-clock time in milliseconds since construction.
+    /**
+     * @brief Elapsed wall-clock time in milliseconds since construction.
+     * @return Elapsed time in milliseconds.
+     */
     double elapsed_ms() const {
         auto now = std::chrono::steady_clock::now();
         return std::chrono::duration<double, std::milli>(now - start_).count();
+    }
+
+    /**
+     * @brief WARN_THROTTLE if elapsed exceeds the given threshold (in ms).
+     * @return true if the threshold was exceeded.
+     */
+    bool warn_if_over(double threshold_ms) {
+        double elapsed = elapsed_ms();
+        if (elapsed > threshold_ms) {
+            FINENAV_LOG_WARN_THROTTLE(logger_, 1000,
+                "{}: {:.2f} ms > {:.1f} ms threshold — timer overrun",
+                name_, elapsed, threshold_ms);
+            return true;
+        }
+        return false;
     }
 
     Stopwatch(const Stopwatch&) = delete;

@@ -18,7 +18,8 @@ MapServer<MapT>::MapServer(
     IRobotStateProvider* state_provider,
     double update_rate_hz,
     double shift_rate_hz)
-    : node_(node), server_name_(server_name), state_provider_(state_provider) {
+    : node_(node), server_name_(server_name), state_provider_(state_provider),
+      update_rate_hz_(update_rate_hz), shift_rate_hz_(shift_rate_hz) {
 
     rclcpp::NodeOptions pnode_opts;
     pnode_opts.append_parameter_override(
@@ -206,6 +207,8 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
                 extent.x(), extent.y(), extent.z());
         }
     }
+
+    sw.warn_if_over(1000.0 / update_rate_hz_);
 }
 
 // --- MapServer::runShiftCycle  (private, see map_server.hpp) -------------------
@@ -259,6 +262,8 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
             "MapServer window shifted to ({:.2f}, {:.2f}, {:.2f})",
             robot_pose.x(), robot_pose.y(), robot_pose.z());
     }
+
+    sw.warn_if_over(1000.0 / shift_rate_hz_);
 }
 
 // --- MapServer::keep_alive  (private) ------------------------------------------
