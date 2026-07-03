@@ -15,6 +15,7 @@
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/observation_source.hpp"
+#include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/node_thread.hpp"
 
 namespace finenav::core {
@@ -56,8 +57,8 @@ public:
     explicit MapServer(
         rclcpp::Node::SharedPtr node,
         const std::string& server_name,
+        IRobotStateProvider* state_provider,
         double update_rate_hz = 10.0,
-        IRobotStateProvider* state_provider = nullptr,
         double shift_rate_hz = 50.0);
 
     MapServer(const MapServer&) = delete;

@@ -82,7 +82,7 @@ public:
             // Always provide the robot state.  MapServer decides at compile time
             // (ShiftableMap<MapT>) whether to actually use it for window tracking.
             auto new_map = std::make_shared<MapServer<MapT>>(
-                node_, name, update_rate_hz, localizer_.get(), shift_rate_hz);
+                node_, name, localizer_.get(), update_rate_hz, shift_rate_hz);
             map_resources_.emplace_back(name, new_map);
             return new_map;
         }

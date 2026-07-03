@@ -12,8 +12,8 @@ template <SpatialContainer MapT>
 MapServer<MapT>::MapServer(
     rclcpp::Node::SharedPtr node,
     const std::string& server_name,
-    double update_rate_hz,
     IRobotStateProvider* state_provider,
+    double update_rate_hz,
     double shift_rate_hz)
     : node_(node), server_name_(server_name), state_provider_(state_provider)
 {
