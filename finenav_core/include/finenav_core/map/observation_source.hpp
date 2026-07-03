@@ -129,8 +129,9 @@ void ObservationSource<MapT, MsgT>::applyBuffered(MapT& map, const rclcpp::Time&
 template <SpatialContainer MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
     if (policy_.max_buffer_size > 0 && buffer_.size() >= policy_.max_buffer_size) {
+        static auto throttle_clock = rclcpp::Clock{RCL_STEADY_TIME};
         RCLCPP_WARN_THROTTLE(rclcpp::get_logger("MapServer"),
-            *rclcpp::Clock{RCL_STEADY_TIME}, 2000,
+            throttle_clock, 2000,
             "ObservationSource '%s': buffer full (%zu / %zu) — oldest message "
             "dropped.  Increase max_buffer_size or the update rate.",
             source_name_.c_str(), buffer_.size(), policy_.max_buffer_size);
@@ -152,8 +153,9 @@ void ObservationSource<MapT, MsgT>::pruneExpired(const rclcpp::Time& now) {
         buffer_.pop_front();
     }
     if (n > 0) {
+        static auto throttle_clock = rclcpp::Clock{RCL_STEADY_TIME};
         RCLCPP_WARN_THROTTLE(rclcpp::get_logger("MapServer"),
-            *rclcpp::Clock{RCL_STEADY_TIME}, 2000,
+            throttle_clock, 2000,
             "ObservationSource '%s': %zu message(s) expired (keep time %.1f s). "
             "The update rate may be too slow for the incoming observation rate.",
             source_name_.c_str(), n, policy_.observation_keep_time_sec);
