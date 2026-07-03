@@ -9,6 +9,7 @@
 #include <string>
 
 #include "rclcpp/rclcpp.hpp"
+#include "finenav_util/common/log_macros.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 
@@ -51,14 +52,13 @@ public:
         const MsgT& msg, const rclcpp::Time& stamp,
         const RobotState& state, MapT& map)>;
 
-    ObservationSource(const std::string& source_name, ObservationBufferPolicy policy, Fuser fuser);
+    ObservationSource(const std::string& source_name, ObservationBufferPolicy policy,
+                      Fuser fuser, rclcpp::Logger logger);
 
     void enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp);
 
-    /**
-     * @brief Drain buffered messages and fuse each one into the map.
-     * @note  Skips messages whose timestamped robot state is unavailable.
-     */
+    /// Drain buffered messages and fuse each one into the map.
+    /// Skips messages whose timestamped robot state is unavailable.
     void applyBuffered(MapT& map, const rclcpp::Time& now,
                         IRobotStateProvider* state_provider) override;
 
@@ -75,6 +75,7 @@ private:
     std::string source_name_;
     ObservationBufferPolicy policy_;
     Fuser fuser_;
+    rclcpp::Logger logger_;
     std::mutex mutex_;
     std::deque<BufferedMessage> buffer_;
     rclcpp::Time last_seen_stamp_{0, 0, RCL_ROS_TIME};
@@ -86,8 +87,10 @@ private:
 // ==============================================================================
 template <SpatialContainer MapT, typename MsgT>
 ObservationSource<MapT, MsgT>::ObservationSource(
-    const std::string& source_name, ObservationBufferPolicy policy, Fuser fuser)
-    : source_name_(source_name), policy_(policy), fuser_(std::move(fuser)) {}
+    const std::string& source_name, ObservationBufferPolicy policy,
+    Fuser fuser, rclcpp::Logger logger)
+    : source_name_(source_name), policy_(policy), fuser_(std::move(fuser)),
+      logger_(std::move(logger)) {}
 
 template <SpatialContainer MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp) {
@@ -107,9 +110,9 @@ void ObservationSource<MapT, MsgT>::applyBuffered(
             const auto elapsed = (now - last_seen_stamp_).seconds();
             if (elapsed > policy_.source_timeout_sec) {
                 if (!buffer_.empty()) {
-                    RCLCPP_WARN_STREAM(rclcpp::get_logger("MapServer"),
-                        "ObservationSource '" << source_name_ << "' has timed out ("
-                        << elapsed << "s). Buffer cleared!");
+                    FINENAV_LOG_WARN(logger_,
+                        "ObservationSource '{}' has timed out ({} s). Buffer cleared.",
+                        source_name_, elapsed);
                 }
                 buffer_.clear();
             }
@@ -118,15 +121,15 @@ void ObservationSource<MapT, MsgT>::applyBuffered(
     }
 
     if (!fuser_) {
-        RCLCPP_WARN_ONCE(rclcpp::get_logger("MapServer"),
-            "ObservationSource '%s': no Fuser was provided — messages are "
-            "enqueued but never applied.", source_name_.c_str());
+        FINENAV_LOG_WARN_ONCE(logger_,
+            "ObservationSource '{}': no Fuser was provided — messages are "
+            "enqueued but never applied.", source_name_);
         return;
     }
     if (!pending.empty()) {
-        RCLCPP_DEBUG_STREAM(rclcpp::get_logger("MapServer"),
-            "ObservationSource '" << source_name_ << "' applying "
-            << pending.size() << " buffered messages.");
+        FINENAV_LOG_DEBUG(logger_,
+            "ObservationSource '{}' applying {} buffered messages.",
+            source_name_, pending.size());
     }
 
     for (const auto& item : pending) {
@@ -134,12 +137,10 @@ void ObservationSource<MapT, MsgT>::applyBuffered(
             ? state_provider->getRobotState(item.stamp)
             : std::nullopt;
         if (!maybe_state) {
-            static auto throttle_clock = rclcpp::Clock{RCL_STEADY_TIME};
-            RCLCPP_WARN_THROTTLE(rclcpp::get_logger("MapServer"),
-                throttle_clock, 5000,
-                "ObservationSource '%s': no robot state available at stamp "
-                "%.3f s — message dropped.",
-                source_name_.c_str(), item.stamp.seconds());
+            FINENAV_LOG_WARN_THROTTLE(logger_, 5000,
+                "ObservationSource '{}': no robot state available at stamp "
+                "{:.3f} s — message dropped.",
+                source_name_, item.stamp.seconds());
             continue;
         }
         fuser_(item.msg, item.stamp, *maybe_state, map);
@@ -149,12 +150,10 @@ void ObservationSource<MapT, MsgT>::applyBuffered(
 template <SpatialContainer MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
     if (policy_.max_buffer_size > 0 && buffer_.size() >= policy_.max_buffer_size) {
-        static auto throttle_clock = rclcpp::Clock{RCL_STEADY_TIME};
-        RCLCPP_WARN_THROTTLE(rclcpp::get_logger("MapServer"),
-            throttle_clock, 2000,
-            "ObservationSource '%s': buffer full (%zu / %zu) — oldest message "
-            "dropped.  Increase max_buffer_size or the update rate.",
-            source_name_.c_str(), buffer_.size(), policy_.max_buffer_size);
+        FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+            "ObservationSource '{}': buffer full ({}/{}); oldest message dropped. "
+            "Increase max_buffer_size or the update rate.",
+            source_name_, buffer_.size(), policy_.max_buffer_size);
         buffer_.pop_front();
     }
     buffer_.push_back(BufferedMessage{stamp, std::move(msg)});
@@ -173,12 +172,10 @@ void ObservationSource<MapT, MsgT>::pruneExpired(const rclcpp::Time& now) {
         buffer_.pop_front();
     }
     if (n > 0) {
-        static auto throttle_clock = rclcpp::Clock{RCL_STEADY_TIME};
-        RCLCPP_WARN_THROTTLE(rclcpp::get_logger("MapServer"),
-            throttle_clock, 2000,
-            "ObservationSource '%s': %zu message(s) expired (keep time %.1f s). "
+        FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+            "ObservationSource '{}': {} message(s) expired (keep time {:.1f} s). "
             "The update rate may be too slow for the incoming observation rate.",
-            source_name_.c_str(), n, policy_.observation_keep_time_sec);
+            source_name_, n, policy_.observation_keep_time_sec);
     }
 }
 
