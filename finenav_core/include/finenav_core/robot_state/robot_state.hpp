@@ -9,13 +9,9 @@
 
 namespace finenav {
 
-// =============================================================================
-// RobotState — the canonical robot state representation for framework consumers.
-//
-// All quantities use Eigen types (no ROS message dependency).  Velocity is
-// expressed in the **body frame**, consistent with FineNavLocalizer::getState().
-// =============================================================================
-
+/**
+ *  @brief RobotState — the canonical robot state representation in FineNav-Engine.
+ */
 struct RobotState {
     Eigen::Vector3d    position;           ///< world-frame position (m)
     Eigen::Quaterniond orientation;        ///< world ← body rotation
@@ -23,19 +19,11 @@ struct RobotState {
     Eigen::Vector3d    angular_velocity;   ///< body-frame angular velocity (rad/s)
 };
 
-// =============================================================================
-// IRobotStateProvider — abstract interface for robot state queries.
-//
-// This is the single, framework-wide contract for obtaining the current robot
-// state.  finenav_localizer::FineNavLocalizer implements it.  Framework
-// components (MapServer, ControlLayer, Navigator) consume it through this
-// interface so that finenav_core does not depend on finenav_localizer.
-//
-// The pattern is pull-based (service-style): consumers call getRobotState()
-// when they need the state, typically at the update rate of 10-50 Hz.  This is
-// NOT a streaming / message-passing interface.
-// =============================================================================
 
+/**
+ * @brief IRobotStateProvider — abstract interface for robot state queries.
+ * @details  The pattern is pull-based：consumers call getRobotState() when they need the state,
+ */
 class IRobotStateProvider {
 public:
     virtual ~IRobotStateProvider() = default;
