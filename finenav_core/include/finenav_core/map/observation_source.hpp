@@ -26,6 +26,7 @@ struct ObservationBufferPolicy {
     std::size_t max_buffer_size{32};           ///< Max buffered frames (0 = unbounded)
     double observation_keep_time_sec{0.0};     ///< Max message age before eviction (0 = keep forever)
     double source_timeout_sec{0.0};            ///< Source timeout threshold (0 = disabled)
+    double expected_update_rate_hz{0.0};       ///< Expected sensor rate; warns on starvation (0 = disabled)
 };
 
 
@@ -117,6 +118,19 @@ void ObservationSource<MapT, MsgT>::applyBuffered(
                 buffer_.clear();
             }
         }
+        // Data starvation check
+        if (policy_.expected_update_rate_hz > 0.0 && has_seen_message_) {
+            const double since_last = (now - last_seen_stamp_).seconds();
+            const double expected_period = 1.0 / policy_.expected_update_rate_hz;
+            if (since_last > expected_period) {
+                FINENAV_LOG_WARN_THROTTLE(logger_, 5000,
+                    "ObservationSource '{}': no data for {:.2f} s (expected every "
+                    "{:.2f} s at {:.1f} Hz). Sensor may be offline.",
+                    source_name_, since_last, expected_period,
+                    policy_.expected_update_rate_hz);
+            }
+        }
+
         pending.swap(buffer_);
     }
 
