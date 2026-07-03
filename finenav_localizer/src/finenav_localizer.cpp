@@ -209,8 +209,11 @@ NavStateD FineNavLocalizer::getState() const
     return s;
 }
 
-RobotState FineNavLocalizer::getRobotState() const
+std::optional<RobotState> FineNavLocalizer::getRobotState() const
 {
+    if (!is_initialized_.load(std::memory_order_acquire)) {
+        return std::nullopt;
+    }
     std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);
     NavStateD s = cached_state_;
     // Follow the same contract as getState(): v in body frame.
@@ -223,6 +226,18 @@ RobotState FineNavLocalizer::getRobotState() const
         s.R.unit_quaternion(),
         s.v,
         s.omega
+    };
+}
+
+std::optional<RobotState> FineNavLocalizer::getRobotState(const rclcpp::Time& t) const
+{
+    auto s = getStateAt(t);
+    if (!s) return std::nullopt;
+    return RobotState{
+        s->p,
+        s->R.unit_quaternion(),
+        s->v,
+        s->omega
     };
 }
 

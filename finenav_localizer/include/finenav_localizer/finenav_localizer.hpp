@@ -117,8 +117,15 @@ public:
 
     /// @brief IRobotStateProvider implementation — returns the latest state in
     ///        the canonical framework representation.
+    /// @return std::nullopt if the filter has not yet been initialised.
     /// @note  Thread-safe (reads from the same cached_state_mutex_ as getState()).
-    RobotState getRobotState() const override;
+    std::optional<RobotState> getRobotState() const override;
+
+    /// @brief IRobotStateProvider implementation — interpolated state at a
+    ///        specific timestamp.  Delegates to getStateAt() internally.
+    /// @return std::nullopt if uninitialised or timestamp outside history window.
+    /// @note  Thread-safe.
+    std::optional<RobotState> getRobotState(const rclcpp::Time& t) const override;
 
     /**
      * @brief Query the interpolated state at an arbitrary past timestamp.

@@ -4,8 +4,11 @@
 
 #pragma once
 
+#include <optional>
+
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include <rclcpp/time.hpp>
 
 namespace finenav {
 
@@ -22,16 +25,26 @@ struct RobotState {
 
 /**
  * @brief IRobotStateProvider — abstract interface for robot state queries.
- * @details  The pattern is pull-based：consumers call getRobotState() when they need the state,
+ * @details  The pattern is pull-based: consumers call getRobotState() when they need the state.
  */
 class IRobotStateProvider {
 public:
     virtual ~IRobotStateProvider() = default;
 
-    /// @brief Return the latest available robot state.
-    /// @note  Must be thread-safe.  Implementations typically hold a shared_mutex
-    ///        on a cached copy updated by an internal timer thread.
-    virtual RobotState getRobotState() const = 0;
+    /**
+     * @brief Return the latest available robot state.
+     * @return Optional RobotState; std::nullopt if no state is available.
+     * @note  Must be thread-safe.
+     */
+    virtual std::optional<RobotState> getRobotState() const = 0;
+
+    /**
+     * @brief Return the latest available robot state.
+     * @param t Query timestamp.
+     * @return Optional RobotState; std::nullopt if no state is available.
+     * @note  Must be thread-safe.
+     */
+    virtual std::optional<RobotState> getRobotState(const rclcpp::Time& t) const = 0;
 };
 
 }  // namespace finenav

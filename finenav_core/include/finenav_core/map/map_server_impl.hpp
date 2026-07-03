@@ -170,8 +170,13 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     // This check runs on every update cycle (not a separate timer) because it
     // is cheap (one AABB test) and the failure mode is catastrophically silent.
     if (state_provider_ != nullptr) {
-        const auto robot_state = state_provider_->getRobotState();
-        const auto& robot_pose = robot_state.position;
+        const auto maybe_state = state_provider_->getRobotState();
+        if (!maybe_state) {
+            // Provider not yet initialised — cannot check window containment.
+            // This is normal during startup; will resolve on the next cycle.
+            return;
+        }
+        const auto& robot_pose = maybe_state->position;
         if (!map_instance_->isInside(robot_pose)) {
             const auto bounds = map_instance_->getWindowBounds();
             const auto center = map_instance_->getWindowCenter();
@@ -215,9 +220,10 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     // runtime. The if constexpr ensures it also never compiles the
     // shiftWindowTo() call for non-shiftable types.
     if constexpr (ShiftableMap<MapT>) {
-        const auto robot_state = state_provider_->getRobotState();
-        const auto& robot_pose = robot_state.position;
+        const auto maybe_state = state_provider_->getRobotState();
+        if (!maybe_state) return;  // provider not initialised yet — skip this cycle
 
+        const auto& robot_pose = maybe_state->position;
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
         // ── Gate 1: is the robot even inside the current window? ───────────
