@@ -104,11 +104,7 @@ MapServer<MapT>::addObservationSource(
     Fuser<MsgT> fuser)
 {
     using Source = ObservationSource<MapT, MsgT>;
-    typename Source::SourceBufferPolicy src_policy{
-        policy.max_buffer_size,
-        policy.observation_keep_time_sec,
-        policy.source_timeout_sec};
-    auto source = std::make_shared<Source>(source_name, src_policy, std::move(fuser));
+    auto source = std::make_shared<Source>(source_name, policy, std::move(fuser));
     observation_sources_.push_back(source);
     RCLCPP_DEBUG_STREAM(node_->get_logger(),
         "MapServer added update source: " << source_name);

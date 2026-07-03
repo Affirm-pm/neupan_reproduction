@@ -31,17 +31,8 @@ namespace finenav::core {
 template <SpatialContainer MapT>
 class MapServer {
 public:
-    /**
-     * @brief Per-source buffer and timeout policy.
-     *
-     * Each update source (laser, RGB-D, etc.) can have independent buffering
-     * parameters tuned to its publication rate and latency characteristics.
-     */
-    struct SourceBufferPolicy {
-        std::size_t max_buffer_size{32};       ///< Max buffered frames (0 = unbounded)
-        double observation_keep_time_sec{0.0}; ///< Max message age before eviction (0 = keep forever)
-        double source_timeout_sec{0.0};        ///< Source timeout threshold (0 = disabled)
-    };
+    /// Re-exported for convenience at call sites.
+    using SourceBufferPolicy = finenav::core::SourceBufferPolicy;
 
     /// Hook executed BEFORE sensor fusion, with write lock held. Map is mutable.
     using PreUpdateHook  = std::function<void(MapT& map)>;
@@ -49,8 +40,9 @@ public:
     /// Hook executed AFTER sensor fusion, with write lock held. Map is read-only.
     using PostUpdateHook = std::function<void(const MapT& map)>;
 
+    /// Re-exported from ObservationSource.
     template <typename MsgT>
-    using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
+    using Fuser = typename ObservationSource<MapT, MsgT>::Fuser;
 
     /**
      * @brief Construct a MapServer and launch its internal update timer.

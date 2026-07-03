@@ -17,6 +17,15 @@ namespace finenav::core {
 template <SpatialContainer MapT>
 class MapServer;
 
+/**
+ * @brief SourceBufferPolicy — buffer and timeout parameters for one sensor stream.
+ */
+struct SourceBufferPolicy {
+    std::size_t max_buffer_size{32};           ///< Max buffered frames (0 = unbounded)
+    double observation_keep_time_sec{0.0};     ///< Max message age before eviction (0 = keep forever)
+    double source_timeout_sec{0.0};            ///< Source timeout threshold (0 = disabled)
+};
+
 
 template <SpatialContainer MapT>
 class IObservationSource {
@@ -34,12 +43,6 @@ public:
 template <SpatialContainer MapT, typename MsgT>
 class ObservationSource final : public IObservationSource<MapT> {
 public:
-
-    struct SourceBufferPolicy {
-        std::size_t max_buffer_size{32};        ///< Max buffered frames (0 = unbounded)
-        double observation_keep_time_sec{0.0};  ///< Max message age before eviction (0 = keep forever)
-        double source_timeout_sec{0.0};         ///< Source timeout threshold (0 = disabled)
-    };
 
     using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
 
