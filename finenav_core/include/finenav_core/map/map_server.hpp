@@ -17,7 +17,7 @@
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
-#include "finenav_core/map/update_source.hpp"
+#include "finenav_core/map/observation_source.hpp"
 
 namespace finenav::core {
 
@@ -90,7 +90,7 @@ public:
      * @brief Acquire a RAII read-write (exclusive-lock) view of the map.
      *
      * @note Use sparingly — every concurrent reader blocks this acquisition.
-     * Prefer addUpdateSource() for routine data injection.
+     * Prefer addObservationSource() for routine data injection.
      *
      * @return LockedMapRW<MapT> providing mutable access via operator-> and get()
      */
@@ -110,7 +110,7 @@ public:
      * @return Thread-safe push handle: void(MsgT&& msg, const rclcpp::Time& stamp)
      */
     template <typename MsgT>
-    std::function<void(MsgT&&, const rclcpp::Time&)> addUpdateSource(
+    std::function<void(MsgT&&, const rclcpp::Time&)> addObservationSource(
         const std::string& source_name, SourceBufferPolicy policy, Fuser<MsgT> fuser);
 
 private:
@@ -137,7 +137,7 @@ private:
     // ---- Hooks, sources & timers ----
     std::vector<std::function<void(MapT&)>>          pre_update_hooks_;
     std::vector<std::function<void(MapT&)>>          post_update_hooks_;
-    std::vector<std::shared_ptr<IUpdateSource<MapT>>> update_sources_;
+    std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
     std::vector<std::shared_ptr<void>>               held_param_handles_;
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };

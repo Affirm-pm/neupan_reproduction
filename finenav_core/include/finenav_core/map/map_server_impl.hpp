@@ -92,24 +92,24 @@ LockedMapRW<MapT> MapServer<MapT>::getLockedWriteView() {
 }
 
 // ==============================================================================
-// addUpdateSource
+// addObservationSource
 // ==============================================================================
 
 template <SpatialContainer MapT>
 template <typename MsgT>
 std::function<void(MsgT&&, const rclcpp::Time&)>
-MapServer<MapT>::addUpdateSource(
+MapServer<MapT>::addObservationSource(
     const std::string& source_name,
     SourceBufferPolicy policy,
     Fuser<MsgT> fuser)
 {
-    using Source = UpdateSource<MapT, MsgT>;
+    using Source = ObservationSource<MapT, MsgT>;
     typename Source::SourceBufferPolicy src_policy{
         policy.max_buffer_size,
         policy.observation_keep_time_sec,
         policy.source_timeout_sec};
     auto source = std::make_shared<Source>(source_name, src_policy, std::move(fuser));
-    update_sources_.push_back(source);
+    observation_sources_.push_back(source);
     RCLCPP_DEBUG_STREAM(node_->get_logger(),
         "MapServer added update source: " << source_name);
     std::weak_ptr<Source> weak_source = source;
@@ -134,7 +134,7 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     auto t0 = Clock::now();
     for (auto& hook : pre_update_hooks_)  hook(*map_instance_);
     auto t1 = Clock::now();
-    for (auto& src  : update_sources_)   src->applyBuffered(*map_instance_, now);
+    for (auto& src  : observation_sources_)   src->applyBuffered(*map_instance_, now);
     auto t2 = Clock::now();
     for (auto& hook : post_update_hooks_) hook(*map_instance_);
     auto t3 = Clock::now();

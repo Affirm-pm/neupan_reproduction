@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
     policy.max_buffer_size = 10;
     policy.observation_keep_time_sec = 2.0;
 
-    auto laser_injector = map_server_ptr->addUpdateSource<DummyLaserScan>(
+    auto laser_injector = map_server_ptr->addObservationSource<DummyLaserScan>(
         "front_laser",
         policy,
         [](const DummyLaserScan& msg, const rclcpp::Time& /*stamp*/, SimpleTestMap& map) {

@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
     policy.max_buffer_size = 50000;
     policy.observation_keep_time_sec = 2.0;
 
-    auto laser_injector = map_server->addUpdateSource<pcl::PointCloud<pcl::PointXYZ>>(
+    auto laser_injector = map_server->addObservationSource<pcl::PointCloud<pcl::PointXYZ>>(
         "front_laser",
         policy,
         [stvl_manager, localizer](
