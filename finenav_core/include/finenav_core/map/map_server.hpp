@@ -92,19 +92,40 @@ public:
     /**
      * @brief Register a sensor data source and return a thread-safe push handle.
      *
-     * The returned callable can be invoked from any thread (e.g., a ROS
-     * subscription callback). Messages are buffered internally and fused into
-     * the map by the update timer during the next runUpdateCycle().
+     * The returned callable can be invoked from any thread. Messages are
+     * buffered internally and fused into the map by the update timer.
      *
-     * @tparam MsgT       Message type (e.g., pcl::PointCloud<pcl::PointXYZ>)
-     * @param source_name Human-readable source identifier (used in log messages)
-     * @param policy      Buffer size and timeout configuration
-     * @param fuser       Fusion callback: (const MsgT& msg, const rclcpp::Time& stamp, MapT& map)
+     * @tparam MsgT   Message type
+     * @param source_name Human-readable source identifier
+     * @param policy  Buffer size and timeout configuration
+     * @param fuser   Fusion callback: (const MsgT& msg, const rclcpp::Time& stamp, MapT& map)
      * @return Thread-safe push handle: void(MsgT&& msg, const rclcpp::Time& stamp)
      */
     template <typename MsgT>
     std::function<void(MsgT&&, const rclcpp::Time&)> addObservationSource(
         const std::string& source_name, SourceBufferPolicy policy, Fuser<MsgT> fuser);
+
+    /**
+     * @brief Register a sensor data source backed by a ROS topic subscription.
+     *
+     * MapServer creates the subscription internally — no separate subscriber or
+     * injector variable is needed.  The fuser receives the ROS message type
+     * directly and can convert inside the callback (e.g., pcl::fromROSMsg).
+     *
+     * @tparam MsgT   ROS message type (e.g., sensor_msgs::msg::PointCloud2)
+     * @param source_name Human-readable source identifier
+     * @param topic_name  ROS topic to subscribe to
+     * @param qos         Subscription QoS
+     * @param policy      Buffer size and timeout configuration
+     * @param fuser       Fusion callback: (const MsgT& msg, const rclcpp::Time& stamp, MapT& map)
+     */
+    template <typename MsgT>
+    void addObservationSource(
+        const std::string& source_name,
+        const std::string& topic_name,
+        const rclcpp::QoS& qos,
+        SourceBufferPolicy policy,
+        Fuser<MsgT> fuser);
 
 private:
     void runUpdateCycle(const rclcpp::Time& now);
@@ -131,6 +152,7 @@ private:
     std::vector<PreUpdateHook>                       pre_update_hooks_;
     std::vector<PostUpdateHook>                      post_update_hooks_;
     std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
+    std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;  ///< topic-based sources
     std::vector<std::shared_ptr<void>>               held_param_handles_;
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };

@@ -107,13 +107,48 @@ MapServer<MapT>::addObservationSource(
     auto source = std::make_shared<Source>(source_name, policy, std::move(fuser));
     observation_sources_.push_back(source);
     RCLCPP_DEBUG_STREAM(node_->get_logger(),
-        "MapServer added update source: " << source_name);
+        "MapServer added observation source: " << source_name);
     std::weak_ptr<Source> weak_source = source;
     return [weak_source](MsgT&& msg, const rclcpp::Time& stamp) {
         if (auto src = weak_source.lock()) {
             src->enqueueThreadSafe(std::move(msg), stamp);
         }
     };
+}
+
+template <SpatialContainer MapT>
+template <typename MsgT>
+void MapServer<MapT>::addObservationSource(
+    const std::string& source_name,
+    const std::string& topic_name,
+    const rclcpp::QoS& qos,
+    SourceBufferPolicy policy,
+    Fuser<MsgT> fuser)
+{
+    auto injector = addObservationSource(source_name, policy, std::move(fuser));
+
+    auto sub = node_->create_subscription<MsgT>(
+        topic_name, qos,
+        [injector = std::move(injector), source_name,
+         logger = node_->get_logger()](std::shared_ptr<const MsgT> msg) {
+            MsgT copy = *msg;
+            rclcpp::Time stamp;
+            if constexpr (requires { msg->header.stamp; }) {
+                stamp = msg->header.stamp;
+            } else {
+                RCLCPP_WARN_ONCE(logger,
+                    "ObservationSource '%s': message type has no header.stamp — "
+                    "using arrival time as stamp.  Sensor fusion accuracy may be "
+                    "degraded by time-skew.", source_name.c_str());
+                stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
+            }
+            injector(std::move(copy), stamp);
+        });
+    held_subscriptions_.push_back(sub);
+
+    RCLCPP_INFO(node_->get_logger(),
+        "MapServer '%s': subscribed to '%s' for observation source '%s'.",
+        server_name_.c_str(), topic_name.c_str(), source_name.c_str());
 }
 
 // ==============================================================================
