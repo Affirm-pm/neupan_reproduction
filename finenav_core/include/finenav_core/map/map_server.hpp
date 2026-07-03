@@ -149,8 +149,8 @@ private:
     rclcpp::TimerBase::SharedPtr shift_timer_;
 
     // ---- Hooks, sources & timers ----
-    std::vector<PreUpdateHook>                       pre_update_hooks_;
-    std::vector<PostUpdateHook>                      post_update_hooks_;
+    PreUpdateHook                                    pre_update_hook_;
+    PostUpdateHook                                   post_update_hook_;
     std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
     std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;  ///< topic-based sources
     std::vector<std::shared_ptr<void>>               held_param_handles_;

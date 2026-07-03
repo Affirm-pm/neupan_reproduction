@@ -1,9 +1,7 @@
 // Copyright (c) 2026.
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
-// This file is included at the bottom of map_server.hpp.
-// It contains out-of-line template method implementations for MapServer.
-// Do NOT include this file directly — include map_server.hpp instead.
+
 #pragma once
 namespace finenav::core {
 
@@ -69,12 +67,12 @@ MapServer<MapT>::MapServer(
 
 template <SpatialContainer MapT>
 void MapServer<MapT>::registerPreUpdateHook(PreUpdateHook hook) {
-    pre_update_hooks_.push_back(std::move(hook));
+    pre_update_hook_ = std::move(hook);
 }
 
 template <SpatialContainer MapT>
 void MapServer<MapT>::registerPostUpdateHook(PostUpdateHook hook) {
-    post_update_hooks_.push_back(std::move(hook));
+    post_update_hook_ = std::move(hook);
 }
 
 // ==============================================================================
@@ -168,11 +166,11 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
         : RobotState{};
 
     auto t0 = Clock::now();
-    for (auto& hook : pre_update_hooks_)  hook(robot_state, *map_instance_);
+    if (pre_update_hook_)  pre_update_hook_(robot_state, *map_instance_);
     auto t1 = Clock::now();
-    for (auto& src  : observation_sources_)   src->applyBuffered(*map_instance_, now);
+    for (auto& src : observation_sources_)  src->applyBuffered(*map_instance_, now);
     auto t2 = Clock::now();
-    for (auto& hook : post_update_hooks_) hook(robot_state, *map_instance_);
+    if (post_update_hook_)  post_update_hook_(robot_state, *map_instance_);
     auto t3 = Clock::now();
 
     // ── Timing report ──────────────────────────────────────────────────────
