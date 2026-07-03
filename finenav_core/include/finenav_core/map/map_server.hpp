@@ -67,6 +67,12 @@ public:
         IRobotStateProvider* state_provider = nullptr,
         double shift_rate_hz = 50.0);
 
+    MapServer(const MapServer&) = delete;
+    MapServer& operator=(const MapServer&) = delete;
+    MapServer(MapServer&&) = delete;
+    MapServer& operator=(MapServer&&) = delete;
+    ~MapServer() = default;
+
     /** @brief Register a hook called BEFORE sensor fusion, with write lock held. */
     void registerPreUpdateHook(PreUpdateHook hook);
 

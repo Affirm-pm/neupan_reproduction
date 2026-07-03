@@ -17,8 +17,15 @@ class LockedMapRO {
 public:
     LockedMapRO(const MapT& map, std::shared_mutex& mutex)
         : map_(map), lock_(mutex) {}
+
+    LockedMapRO(const LockedMapRO&) = delete;
+    LockedMapRO& operator=(const LockedMapRO&) = delete;
+    LockedMapRO(LockedMapRO&&) = default;
+    LockedMapRO& operator=(LockedMapRO&&) = default;
+
     const MapT* operator->() const { return &map_; }
     const MapT& get() const { return map_; }
+
 private:
     const MapT& map_;
     std::shared_lock<std::shared_mutex> lock_;
@@ -35,8 +42,15 @@ class LockedMapRW {
 public:
     LockedMapRW(MapT& map, std::shared_mutex& mutex)
         : map_(map), lock_(mutex) {}
+
+    LockedMapRW(const LockedMapRW&) = delete;
+    LockedMapRW& operator=(const LockedMapRW&) = delete;
+    LockedMapRW(LockedMapRW&&) = default;
+    LockedMapRW& operator=(LockedMapRW&&) = default;
+
     MapT* operator->() { return &map_; }
     MapT& get() { return map_; }
+
 private:
     MapT& map_;
     std::unique_lock<std::shared_mutex> lock_;
