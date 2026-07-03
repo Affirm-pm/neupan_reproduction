@@ -20,10 +20,18 @@
 namespace finenav::core {
 
 /**
- * @brief MapServer — manages the lifecycle and periodic update of a SpatialContainer instance.
- * @tparam MapT  Map type; must satisfy SpatialContainer at minimum. If MapT also \
- * @details The sensor data is not fused into the map when the data received. It will imediately move to a buffer with zero-copy.
- * The map is fused when the update timer is triggered.
+ * @brief MapServer — runtime orchestrator for a single SpatialContainer instance.
+ *
+ * MapServer owns the map, runs the sensor-fusion update loop, provides
+ * thread-safe RAII access for planner threads
+ *
+ * Sensor data is NOT fused synchronously on arrival.  It is moved into a
+ * per-source buffer and deferred until the next update cycle.  The update
+ * timer drains all buffers and fuses each observation into the map.
+ *
+ * @tparam MapT  Map type; must satisfy SpatialContainer at minimum.  If MapT
+ *               also satisfies ShiftableMap and a state provider is given, the
+ *               optional window-tracking feature is enabled at compile time.
  */
 template <SpatialContainer MapT>
 class MapServer {

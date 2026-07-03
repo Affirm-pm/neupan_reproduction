@@ -121,8 +121,7 @@ void MapServer<MapT>::addObservationSource(
     auto sub = node_->create_subscription<MsgT>(
         topic_name, qos,
         [injector = std::move(injector), source_name,
-         logger = node_->get_logger()](std::shared_ptr<const MsgT> msg) {
-            MsgT copy = *msg;
+         logger = node_->get_logger()](std::shared_ptr<MsgT> msg) {
             rclcpp::Time stamp;
             if constexpr (requires { msg->header.stamp; }) {
                 stamp = msg->header.stamp;
@@ -133,7 +132,10 @@ void MapServer<MapT>::addObservationSource(
                     "degraded by time-skew.", source_name.c_str());
                 stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
             }
-            injector(std::move(copy), stamp);
+            // Take ownership of the message — the only copy is ROS
+            // deserialization into the shared_ptr.  From here to the buffer
+            // it is moves all the way down.
+            injector(std::move(*msg), stamp);
         });
     held_subscriptions_.push_back(sub);
 
