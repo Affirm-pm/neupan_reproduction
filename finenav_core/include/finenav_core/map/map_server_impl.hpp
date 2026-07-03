@@ -68,12 +68,12 @@ MapServer<MapT>::MapServer(
 // ==============================================================================
 
 template <SpatialContainer MapT>
-void MapServer<MapT>::registerPreUpdateHook(std::function<void(MapT& map)> hook) {
+void MapServer<MapT>::registerPreUpdateHook(PreUpdateHook hook) {
     pre_update_hooks_.push_back(std::move(hook));
 }
 
 template <SpatialContainer MapT>
-void MapServer<MapT>::registerPostUpdateHook(std::function<void(MapT& map)> hook) {
+void MapServer<MapT>::registerPostUpdateHook(PostUpdateHook hook) {
     post_update_hooks_.push_back(std::move(hook));
 }
 

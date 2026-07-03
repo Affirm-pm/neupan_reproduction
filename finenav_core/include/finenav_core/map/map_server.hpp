@@ -34,15 +34,15 @@ public:
     /// Re-exported for convenience at call sites.
     using SourceBufferPolicy = finenav::core::SourceBufferPolicy;
 
-    /// Hook executed BEFORE sensor fusion, with write lock held. Map is mutable.
-    using PreUpdateHook  = std::function<void(MapT& map)>;
-
-    /// Hook executed AFTER sensor fusion, with write lock held. Map is read-only.
-    using PostUpdateHook = std::function<void(const MapT& map)>;
-
     /// Re-exported from ObservationSource.
     template <typename MsgT>
     using Fuser = typename ObservationSource<MapT, MsgT>::Fuser;
+
+    /// Hook executed BEFORE sensor fusion, with write lock held.
+    using PreUpdateHook  = std::function<void(MapT& map)>;
+
+    /// Hook executed AFTER sensor fusion, with write lock held.
+    using PostUpdateHook = std::function<void(MapT& map)>;
 
     /**
      * @brief Construct a MapServer and launch its internal update timer.
@@ -66,11 +66,11 @@ public:
         IRobotStateProvider* state_provider = nullptr,
         double shift_rate_hz = 50.0);
 
-    /** @brief Register a hook called BEFORE sensor fusion (write lock held, map is mutable). */
-    void registerPreUpdateHook(std::function<void(MapT& map)> hook);
+    /** @brief Register a hook called BEFORE sensor fusion, with write lock held. */
+    void registerPreUpdateHook(PreUpdateHook hook);
 
-    /** @brief Register a hook called AFTER sensor fusion (write lock held, map is read-only). */
-    void registerPostUpdateHook(std::function<void(MapT& map)> hook);
+    /** @brief Register a hook called AFTER sensor fusion, with write lock held. */
+    void registerPostUpdateHook(PostUpdateHook hook);
 
     /**
      * @brief Acquire a RAII read-only (shared-lock) view of the map.
@@ -127,8 +127,8 @@ private:
     rclcpp::TimerBase::SharedPtr shift_timer_;
 
     // ---- Hooks, sources & timers ----
-    std::vector<std::function<void(MapT&)>>          pre_update_hooks_;
-    std::vector<std::function<void(MapT&)>>          post_update_hooks_;
+    std::vector<PreUpdateHook>                       pre_update_hooks_;
+    std::vector<PostUpdateHook>                      post_update_hooks_;
     std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
     std::vector<std::shared_ptr<void>>               held_param_handles_;
     rclcpp::TimerBase::SharedPtr                     update_timer_;
