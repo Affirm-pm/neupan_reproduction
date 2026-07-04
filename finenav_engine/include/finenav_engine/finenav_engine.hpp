@@ -71,18 +71,13 @@ public:
 
     template <typename MapT>
     [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<MapServer<MapT>> createMapResource(
-        const std::string& name,
-        double update_rate_hz = 10.0,
-        double shift_rate_hz  = 50.0)
+    std::shared_ptr<MapServer<MapT>> createMapResource(const std::string& name)
     {
         auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
                                [&](const auto& pair) { return pair.first == name; });
         if (it == map_resources_.end()) {
-            // Always provide the robot state.  MapServer decides at compile time
-            // (ShiftableMap<MapT>) whether to actually use it for window tracking.
             auto new_map = std::make_shared<MapServer<MapT>>(
-                node_, name, localizer_.get(), update_rate_hz, shift_rate_hz);
+                node_, name, localizer_.get());
             map_resources_.emplace_back(name, new_map);
             return new_map;
         }

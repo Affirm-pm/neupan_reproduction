@@ -15,22 +15,17 @@ template <SpatialContainer MapT>
 MapServer<MapT>::MapServer(
     rclcpp::Node::SharedPtr node,
     const std::string& server_name,
-    IRobotStateProvider* state_provider,
-    double update_rate_hz,
-    double shift_rate_hz,
-    double shift_margin_ratio)
-    : node_(node), server_name_(server_name), state_provider_(state_provider),
-      update_rate_hz_(update_rate_hz), shift_rate_hz_(shift_rate_hz),
-      shift_margin_ratio_(shift_margin_ratio) {
+    IRobotStateProvider* state_provider)
+    : node_(node), server_name_(server_name), state_provider_(state_provider) {
 
     rclcpp::NodeOptions pnode_opts;
     pnode_opts.append_parameter_override(
         "use_sim_time",
-        node_->get_parameter("use_sim_time").as_bool()); // Inherit use_sim_time from parent node
+        node_->get_parameter("use_sim_time").as_bool());
     pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<NodeThread>(pnode_);
     map_instance_ = std::make_unique<MapT>();
-    keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_)); // Every algo (map_instance) need to be configurated.
+    keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
 
     if (state_provider == nullptr) {
         FINENAV_LOG_ERROR(node_->get_logger(),
@@ -40,27 +35,34 @@ MapServer<MapT>::MapServer(
         return;
     }
 
+    // Load dynamic parameters for this MapServer instance.
+    auto param_listener = std::make_shared<map_server::ParamListener>(pnode_);
+    params_ = param_listener->get_params();
+    param_listener->setUserCallback(
+        [this](const map_server::Params& p) { params_ = p; });
+    keep_alive(param_listener);
+
     // Sensor fusion update timer.
-    auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::duration<double>(1.0 / update_rate_hz));
+    auto update_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::duration<double>(1.0 / params_.update_rate_hz));
     update_timer_ = rclcpp::create_timer(
-        pnode_, pnode_->get_clock(), period,
+        pnode_, pnode_->get_clock(), update_period,
         [this]() { this->runUpdateCycle(this->pnode_->now()); });
 
     FINENAV_LOG_INFO(node_->get_logger(),
         "MapServer '{}': update timer started at {:.1f} Hz.",
-        server_name_, update_rate_hz);
+        server_name_, params_.update_rate_hz);
 
     // Map window shift timer — only when the map is shiftable.
     if constexpr (ShiftableMap<MapT>) {
         auto shift_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::duration<double>(1.0 / shift_rate_hz));
+            std::chrono::duration<double>(1.0 / params_.shift_rate_hz));
         shift_timer_ = rclcpp::create_timer(
             pnode_, pnode_->get_clock(), shift_period,
             [this]() { this->runShiftCycle(this->pnode_->now()); });
         FINENAV_LOG_INFO(node_->get_logger(),
             "MapServer '{}': shift timer started at {:.1f} Hz.",
-            server_name_, shift_rate_hz);
+            server_name_, params_.shift_rate_hz);
     }
 }
 
@@ -210,7 +212,7 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
         }
     }
 
-    sw.warn_if_over(1000.0 / update_rate_hz_);
+    sw.warn_if_over(1000.0 / params_.update_rate_hz);
 }
 
 // --- MapServer::runShiftCycle  (private, see map_server.hpp) -------------------
@@ -243,9 +245,9 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
         if (half_extent.x() > 0.0 && half_extent.y() > 0.0 && half_extent.z() > 0.0) {
             const auto offset = (robot_pose - center).cwiseAbs();
             const bool near_edge =
-                (offset.x() / half_extent.x() > shift_margin_ratio_) ||
-                (offset.y() / half_extent.y() > shift_margin_ratio_) ||
-                (offset.z() / half_extent.z() > shift_margin_ratio_);
+                (offset.x() / half_extent.x() > params_.shift_margin_ratio) ||
+                (offset.y() / half_extent.y() > params_.shift_margin_ratio) ||
+                (offset.z() / half_extent.z() > params_.shift_margin_ratio);
 
             if (!near_edge) return;  // well within window, nothing to do
         }
@@ -258,7 +260,7 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
             robot_pose.x(), robot_pose.y(), robot_pose.z());
     }
 
-    sw.warn_if_over(1000.0 / shift_rate_hz_);
+    sw.warn_if_over(1000.0 / params_.shift_rate_hz);
 }
 
 // --- MapServer::keep_alive  (private) ------------------------------------------

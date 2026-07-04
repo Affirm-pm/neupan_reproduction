@@ -16,6 +16,7 @@
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/observation_source.hpp"
 #include "finenav_util/node_thread.hpp"
+#include "finenav_core/map_server_params.hpp"
 
 namespace finenav::core {
 
@@ -55,13 +56,10 @@ public:
      * @param shift_margin_ratio Distance-from-centre ratio that triggers a shift.
      *                           0 = centre only, 1 = at window edge.  Default 0.5.
      */
-    explicit MapServer(         // TODO：2D情况能否正常fallback，需要测试
+    explicit MapServer( // TODO：2D情况能否正常fallback，需要测试 // TODO：评估是否需要参数热加载
         rclcpp::Node::SharedPtr node,
         const std::string& server_name,
-        IRobotStateProvider* state_provider,
-        double update_rate_hz = 10.0,
-        double shift_rate_hz = 50.0,
-        double shift_margin_ratio = 0.2);
+        IRobotStateProvider* state_provider);
 
     MapServer(const MapServer&) = delete;
     MapServer& operator=(const MapServer&) = delete;
@@ -150,9 +148,7 @@ private:
     std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
     std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;
     std::vector<std::shared_ptr<void>>               held_param_handles_;
-    double                                           update_rate_hz_{0.0};
-    double                                           shift_rate_hz_{0.0};
-    double                                           shift_margin_ratio_{0.5};
+    map_server::Params                               params_;
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };
 
