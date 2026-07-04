@@ -16,7 +16,6 @@
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/map/map_server.hpp"
-#include "finenav_core/plan/plan_context.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/planner_set.hpp"
 #include "finenav_core/plan/ros_conversions.hpp"
@@ -42,7 +41,7 @@ class ControlLayer {
 public:
     using MapViewsVariant = GenerateMapViewsVariant<PlannersT>;
     using ActionT         = finenav_interfaces::action::ComputePlan;
-    using ActionServer    = SimpleActionServer<ActionT>;
+    using ActionServer    = finenav::util::SimpleActionServer<ActionT>;
 
     /**
      * @brief BoundMapView — 地图视图 + RAII 读锁的聚合体。
@@ -58,7 +57,7 @@ public:
     using MapViewFactory      = std::function<BoundMapView()>;
     using PrePlanCallback     = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback    = std::function<bool(PostPlanContext&)>;
-    using RobotStateProvider  = std::function<finenav_interfaces::msg::RobotState()>;
+    using RobotStateProvider  = std::function<RobotState()>;
 
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,

@@ -129,7 +129,7 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
         return false;
     }
 
-    finenav_interfaces::msg::RobotState current_robot_state = robot_state_provider_();
+    RobotState current_robot_state = robot_state_provider_();
 
     finenav_interfaces::msg::Trajectory current_ref_msg;
     {
@@ -152,12 +152,12 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
                 active_planner_id_, current_robot_state, goal_pose, current_ref_msg};
 
             if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
-                return std::nullopt; // 用户拦截，中止此次规划
+                return std::nullopt;
             }
 
             PlanningContext<PlannerT> ctx;
-            ctx.robot_state = pre_ctx.robot_state;
-            ctx.goal_pose   = pre_ctx.goal_pose;
+            ctx.robot_state = current_robot_state;
+            ctx.goal_pose = pre_ctx.goal_pose;
             fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj);
             return ctx;
         }();

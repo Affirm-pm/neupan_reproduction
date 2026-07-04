@@ -17,6 +17,7 @@ find_package(generate_parameter_library REQUIRED)
 include_directories(include)
 
 add_subdirectory(smoke_test)
+add_subdirectory(control_layer_smoke)
 # TODO: re-enable when finenav_engine/navigator is fixed
 # add_subdirectory(interface_demo)
 

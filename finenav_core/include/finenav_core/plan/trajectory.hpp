@@ -39,21 +39,24 @@ template <> struct TimeMixin<false> {};
 
 struct EmptyBlock {};
 
-// 核心容器：根据 C++20 Config 对象进行多重继承
-template <IOProfile Config>
-struct DataPacket :
-    public PoseMixin<Config.pose>,
-    public VelMixin<Config.vel>,
-    public AccelMixin<Config.accel>,
-    public TimeMixin<Config.time>
+/// A planner's trajectory: a sequence of waypoints with compile-time field
+/// selection.  Only the fields enabled in the `Profile` exist at runtime —
+/// a planner that does not need velocity/acceleration pays no memory cost.
+template <IOProfile Profile>
+struct Trajectory :
+    public PoseMixin<Profile.pose>,
+    public VelMixin<Profile.vel>,
+    public AccelMixin<Profile.accel>,
+    public TimeMixin<Profile.time>
 {};
 
-// 类型别名 helper
+/// Alias for a planner's output trajectory type.
 template <typename PlannerT>
-using InputDataT = DataPacket<PlannerT::InputProfile>;
+using OutputTrajectoryT = Trajectory<PlannerT::OutputProfile>;
 
+/// Alias for a planner's input (reference) trajectory type.
 template <typename PlannerT>
-using OutputDataT = DataPacket<PlannerT::OutputProfile>;
+using InputTrajectoryT = Trajectory<PlannerT::InputProfile>;
 
 
 
