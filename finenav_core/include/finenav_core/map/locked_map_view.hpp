@@ -2,6 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 #pragma once
+#include <mutex>
 #include <shared_mutex>
 #include "finenav_core/map/map_concept.hpp"
 namespace finenav::core {
