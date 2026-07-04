@@ -3,13 +3,13 @@
 // All rights reserved.
 
 #pragma once
-#include <cstdint>
 
 #include <vector>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/accel.hpp>
-#include <builtin_interfaces/msg/duration.hpp>
+
+#include "builtin_interfaces/msg/duration.hpp"
 
 namespace finenav::core {
 
@@ -58,8 +58,6 @@ using OutputTrajectoryT = Trajectory<PlannerT::OutputProfile>;
 template <typename PlannerT>
 using InputTrajectoryT = Trajectory<PlannerT::InputProfile>;
 
-
-
-}
+} // namespace finenav::core
 
 

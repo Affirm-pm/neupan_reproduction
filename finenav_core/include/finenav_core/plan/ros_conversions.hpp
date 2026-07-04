@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+
 #include "finenav_core/plan/trajectory.hpp"
 #include "finenav_interfaces/msg/trajectory.hpp"
 

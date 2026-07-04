@@ -6,12 +6,11 @@
 
 #include <concepts>
 #include <optional>
-#include <utility>
 
+#include "geometry_msgs/msg/pose.hpp"
 #include "finenav_core/plan/trajectory.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_interfaces/msg/trajectory.hpp"
-#include "geometry_msgs/msg/pose.hpp"
 
 namespace finenav::core {
 

@@ -2,6 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 #pragma once
+
 namespace finenav::core {
 /**
  * @brief SingleShotPolicy — 每次 Action Goal 执行一次 plan()，完成后立即 succeed。
