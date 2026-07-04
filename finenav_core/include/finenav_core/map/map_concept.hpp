@@ -18,7 +18,6 @@ namespace finenav::core {
 template <typename T>
 concept SpatialContainer =
     std::default_initializable<T> &&
-    std::movable<T> &&
     requires(T map, const Position3D& pos,
              const typename T::ConfigType& config,
              const typename T::DataType& data) {

@@ -30,7 +30,7 @@ struct PrePlanContext {
  * @brief PlanningContext — context passed to planner.plan() calls.
  * @tparam PlannerT Planner type
  */
-template <typename PlannerT> // TODO: Compile guard with PlannerConcept?
+template <typename PlannerT>
 struct PlanningContext {
     RobotState                    robot_state;      ///< Current robot state
     geometry_msgs::msg::Pose      goal_pose;        ///< Goal pose for the current planning episode
@@ -48,10 +48,12 @@ struct PostPlanContext {
 
 
 /**
- * @brief PlannerConcept
+ * @brief Planner — the fundamental contract for motion generation algorithms.
+ *
+ * A Planner reads a map view and produces a trajectory
  */
 template <typename T>
-concept PlannerConcept = // TODO: 改名为 Planner
+concept Planner =
     std::default_initializable<T> &&
     requires {
         typename T::ConfigType;
