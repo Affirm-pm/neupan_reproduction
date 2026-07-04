@@ -29,8 +29,6 @@ set(ros_dependencies
         finenav_util
 )
 
-# Generate parameter library for NavStateManager — moved to finenav_navigator
-
 install(DIRECTORY include/
         DESTINATION include/
 )
@@ -69,5 +67,11 @@ ament_export_dependencies(
         generate_parameter_library
         ${ros_dependencies}
 )
+
+if(BUILD_TESTING)
+        find_package(ament_cmake_gtest REQUIRED)
+        ament_find_gtest()
+        add_subdirectory(test)
+endif()
 
 ament_package()
