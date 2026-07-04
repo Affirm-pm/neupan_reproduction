@@ -13,14 +13,15 @@
 #include "finenav_msgs/action/compute_plan.hpp"
 #include "finenav_msgs/msg/robot_state.hpp"
 #include "finenav_msgs/msg/trajectory.hpp"
-#include "finenav_core/concepts.hpp"
+#include "finenav_core/map/map_concept.hpp"
+#include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/map/map_server.hpp"
 #include "finenav_core/plan/plan_context.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/planner_set.hpp"
 #include "finenav_core/plan/ros_conversions.hpp"
 #include "finenav_core/algo_configurator.hpp"
-#include "finenav_util/simple_action_server.hpp"
+#include "finenav_util/ros/simple_action_server.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 
 namespace finenav::core {
