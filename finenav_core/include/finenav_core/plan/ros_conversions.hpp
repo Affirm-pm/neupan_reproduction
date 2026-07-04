@@ -21,23 +21,6 @@ consteval uint32_t ProfileToMsgMask(const IOProfile& p) {
 
 // TODO: func: checkConsistency
 
-/// Convert Eigen RobotState → ROS message format.
-inline void toROSMsg(const RobotState& src, finenav_interfaces::msg::RobotState& dst) {
-    dst.pose.position.x    = src.position.x();
-    dst.pose.position.y    = src.position.y();
-    dst.pose.position.z    = src.position.z();
-    dst.pose.orientation.w = src.orientation.w();
-    dst.pose.orientation.x = src.orientation.x();
-    dst.pose.orientation.y = src.orientation.y();
-    dst.pose.orientation.z = src.orientation.z();
-    dst.twist.linear.x     = src.linear_velocity.x();
-    dst.twist.linear.y     = src.linear_velocity.y();
-    dst.twist.linear.z     = src.linear_velocity.z();
-    dst.twist.angular.x    = src.angular_velocity.x();
-    dst.twist.angular.y    = src.angular_velocity.y();
-    dst.twist.angular.z    = src.angular_velocity.z();
-}
-
 template <IOProfile Config>
 void toROSMsg(const Trajectory<Config>& src,
               finenav_interfaces::msg::Trajectory& dst)
