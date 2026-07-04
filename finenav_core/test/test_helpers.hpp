@@ -13,7 +13,7 @@
 
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 
 // ── Minimal SpatialContainer for testing ────────────────────────────────────
 
@@ -47,14 +47,14 @@ static_assert(finenav::core::ShiftableMap<SmokeMap>);
 
 // ── AlgoConfigurator specialisation ────────────────────────────────────────
 
-namespace finenav::util {
+namespace finenav::core {
 template <>
 struct AlgoConfigurator<SmokeMap> {
     static std::shared_ptr<void> load(rclcpp::Node::SharedPtr, SmokeMap&) {
         return nullptr;
     }
 };
-} // namespace finenav::util
+} // namespace finenav::core
 
 // ── Mock state provider ────────────────────────────────────────────────────
 

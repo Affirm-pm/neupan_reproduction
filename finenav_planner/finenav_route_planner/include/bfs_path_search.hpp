@@ -7,7 +7,7 @@
 #include <optional>
 
 #include "finenav_core/concepts.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_route_planner/bfs_params.hpp"
 
 #include "astar_algorithm.hpp"   // BFS is A* with Heuristic::Zero

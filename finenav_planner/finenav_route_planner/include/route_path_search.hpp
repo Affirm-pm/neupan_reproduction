@@ -10,7 +10,7 @@
 #include <std_msgs/msg/string.hpp>
 
 #include "finenav_core/concepts.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_route_planner/route_params.hpp"
 
 #include "astar_algorithm.hpp"
@@ -147,7 +147,7 @@ private:
 } // namespace finenav
 
 //TODO: 不用 FINENAV_REGISTER_ALGO_CONFIG(finenav::RoutePathSearch, route_planner) 的做法有待商榷
-namespace finenav {
+namespace finenav::core {
 
 template <>
 struct AlgoConfigurator<finenav::RoutePathSearch> {
@@ -178,4 +178,4 @@ struct AlgoConfigurator<finenav::RoutePathSearch> {
     }
 };
 
-} // namespace finenav
+} // namespace finenav::core

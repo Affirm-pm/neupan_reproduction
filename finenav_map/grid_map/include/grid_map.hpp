@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "finenav_map_grid_map/grid_map_params.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 
 #include "grid_map_math.hpp"
 #include "grid_map_iterator.hpp"

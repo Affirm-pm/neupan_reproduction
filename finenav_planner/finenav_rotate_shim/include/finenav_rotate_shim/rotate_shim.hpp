@@ -13,7 +13,7 @@
 
 #include "finenav_core/concepts.hpp"
 #include "finenav_core/plan/data_packet.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_mppi_controller/map_view_def.hpp"
 #include "finenav_rotate_shim/finenav_rotate_shim_params.hpp"
 

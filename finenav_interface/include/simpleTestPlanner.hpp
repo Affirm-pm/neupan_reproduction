@@ -5,7 +5,7 @@
 #pragma once
 
 #include "finenav_core/concepts.hpp" // TODO: 为什么这个文件也必不可少
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_interface/test_planner_params.hpp"
 
 namespace finenav {

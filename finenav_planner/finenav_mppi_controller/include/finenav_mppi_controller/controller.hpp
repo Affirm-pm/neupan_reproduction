@@ -30,7 +30,7 @@
 #include "finenav_interface/test_planner_params.hpp"
 
 #include "finenav_core/concepts.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_mppi_controller/finenav_mppi_controller_params.hpp"
 #include "finenav_mppi_controller/optimizer.hpp"
 #include "finenav_mppi_controller/map_view_def.hpp"

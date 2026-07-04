@@ -8,7 +8,7 @@
 #include <cmath>
 
 #include "finenav_core/concepts.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_route_planner/astar_params.hpp"
 
 #include "astar_algorithm.hpp"

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_interface/test_map_params.hpp"
 
 namespace finenav {

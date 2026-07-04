@@ -10,7 +10,7 @@
 #include <nav_msgs/msg/occupancy_grid.hpp>
 
 #include "finenav_core/concepts.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_map_occ_grid_2d/occ_grid_2d_params.hpp"
 
 namespace finenav {

@@ -19,7 +19,7 @@
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/planner_set.hpp"
 #include "finenav_core/plan/ros_conversions.hpp"
-#include "finenav_util/algo_configurator.hpp"
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_util/simple_action_server.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 
