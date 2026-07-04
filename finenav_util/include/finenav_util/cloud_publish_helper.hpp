@@ -12,7 +12,7 @@
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 
-namespace finenav_utils {
+namespace finenav::util {
 
 class CloudPublishHelper {
 public:
@@ -37,4 +37,4 @@ private:
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 };
 
-} // namespace finenav_utils
+} // namespace finenav::util

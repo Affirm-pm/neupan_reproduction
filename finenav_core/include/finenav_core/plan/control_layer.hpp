@@ -21,7 +21,7 @@
 #include "finenav_core/plan/ros_conversions.hpp"
 #include "finenav_util/algo_configurator.hpp"
 #include "finenav_util/simple_action_server.hpp"
-#include "finenav_util/node_thread.hpp"
+#include "finenav_util/ros/node_thread.hpp"
 
 namespace finenav::core {
 
@@ -100,7 +100,7 @@ protected:
 
     rclcpp::Node::SharedPtr      node_;
     rclcpp::Node::SharedPtr      pnode_;
-    std::unique_ptr<NodeThread>  pnode_thread_;
+    std::unique_ptr<finenav::util::NodeThread>  pnode_thread_;
 
     typename PlannersT::Tuple planners_instance_;
 

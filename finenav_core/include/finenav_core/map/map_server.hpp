@@ -15,7 +15,7 @@
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/observation_source.hpp"
-#include "finenav_util/node_thread.hpp"
+#include "finenav_util/ros/node_thread.hpp"
 #include "finenav_core/map_server_params.hpp"
 
 namespace finenav::core {
@@ -132,7 +132,7 @@ private:
     rclcpp::Node::SharedPtr     node_;
     std::string                 server_name_;
     rclcpp::Node::SharedPtr     pnode_;
-    std::unique_ptr<NodeThread> pnode_thread_;
+    std::unique_ptr<finenav::util::NodeThread> pnode_thread_;
 
     // ---- Map data & lock ----
     std::unique_ptr<MapT> map_instance_;

@@ -11,7 +11,7 @@
 
 #include "finenav_util/common/log_macros.hpp"
 
-namespace finenav_util {
+namespace finenav::util {
 
 /**
  * @brief RAII scope timer. Construction records the start time; destruction logs the elapsed duration at DEBUG level.
@@ -69,4 +69,4 @@ private:
     std::chrono::steady_clock::time_point start_;
 };
 
-}  // namespace finenav_util
+}  // namespace finenav::util

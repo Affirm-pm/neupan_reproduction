@@ -23,7 +23,7 @@ MapServer<MapT>::MapServer(
         "use_sim_time",
         node_->get_parameter("use_sim_time").as_bool());
     pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), pnode_opts);
-    pnode_thread_ = std::make_unique<NodeThread>(pnode_);
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
     map_instance_ = std::make_unique<MapT>();
     keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
 
@@ -152,7 +152,7 @@ void MapServer<MapT>::addObservationSource(
 // --- MapServer::runUpdateCycle  (private, see map_server.hpp) ------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
-    ::finenav_util::Stopwatch sw(node_->get_logger(), "runUpdateCycle");
+    finenav::util::Stopwatch sw(node_->get_logger(), "runUpdateCycle");
 
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
@@ -218,7 +218,7 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
 // --- MapServer::runShiftCycle  (private, see map_server.hpp) -------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
-    ::finenav_util::Stopwatch sw(pnode_->get_logger(), "runShiftCycle");
+    finenav::util::Stopwatch sw(pnode_->get_logger(), "runShiftCycle");
 
     // Compile-time guard: this method body is only valid for ShiftableMap.
     if constexpr (ShiftableMap<MapT>) {

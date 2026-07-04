@@ -9,7 +9,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 
-namespace finenav {
+namespace finenav::util {
 
 class NodeThread {
   public:
@@ -31,4 +31,4 @@ class NodeThread {
     rclcpp::Executor::SharedPtr executor_;
 };
 
-}  // namespace finenav
+}  // namespace finenav::util

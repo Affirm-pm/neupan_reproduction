@@ -10,18 +10,23 @@
 #include <rclcpp/rclcpp.hpp>
 
 // TODO: 改名 xxxx_marcos
-namespace finenav {
-// 不需要配置的默认模版
+namespace finenav::util {
+
 template <typename AlgoT>
 struct AlgoConfigurator {
     static constexpr std::string_view name = "unknown_algo";
 
-    // 返回一个智能指针，将生命周期转移给调用者
     static std::shared_ptr<void> load(rclcpp::Node::SharedPtr, AlgoT&) {
-        // TODO: 这种情况应该警告，表示用户没有注册算法
-        return nullptr; // 返回空指针，keep_alive 会自动忽略
+        return nullptr;
     }
 };
+
+}  // namespace finenav::util
+
+// Backward-compat alias so existing callers continue to work.
+namespace finenav {
+template <typename AlgoT>
+using AlgoConfigurator = finenav::util::AlgoConfigurator<AlgoT>;
 }
 
 // TODO： 考虑 PARAM_NS 是否改名为 algo_name 或者 algo_id 之类的东西，只要能够对用户屏蔽参数概念

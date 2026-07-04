@@ -107,7 +107,7 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
         [this]() { timerCallback(); });
 
     // ── 启动 spin 线程（最后执行，确保所有订阅/服务已注册）────────────────────
-    pnode_thread_ = std::make_unique<NodeThread>(pnode_);
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
     RCLCPP_INFO(
         logger_,
@@ -209,7 +209,7 @@ NavStateD FineNavLocalizer::getState() const
     return s;
 }
 
-std::optional<RobotState> FineNavLocalizer::getRobotState() const
+std::optional<finenav::core::RobotState> FineNavLocalizer::getRobotState() const
 {
     if (!is_initialized_.load(std::memory_order_acquire)) {
         return std::nullopt;
@@ -221,7 +221,7 @@ std::optional<RobotState> FineNavLocalizer::getRobotState() const
     if (params_.force_2d_mode) {
         s = force2DOutput(s);
     }
-    return RobotState{
+    return finenav::core::RobotState{
         s.p,
         s.R.unit_quaternion(),
         s.v,
@@ -229,11 +229,11 @@ std::optional<RobotState> FineNavLocalizer::getRobotState() const
     };
 }
 
-std::optional<RobotState> FineNavLocalizer::getRobotState(const rclcpp::Time& t) const
+std::optional<finenav::core::RobotState> FineNavLocalizer::getRobotState(const rclcpp::Time& t) const
 {
     auto s = getStateAt(t);
     if (!s) return std::nullopt;
-    return RobotState{
+    return finenav::core::RobotState{
         s->p,
         s->R.unit_quaternion(),
         s->v,

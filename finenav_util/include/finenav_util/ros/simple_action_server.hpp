@@ -20,7 +20,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
-namespace finenav {
+namespace finenav::util {
 
 /**
  * @brief FineNav 专用简化版 Action Server

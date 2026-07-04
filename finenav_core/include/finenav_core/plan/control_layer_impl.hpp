@@ -26,7 +26,7 @@ ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
         "use_sim_time",
         node_->get_parameter("use_sim_time").as_bool());
     pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts);
-    pnode_thread_ = std::make_unique<NodeThread>(pnode_);
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
     pnode_->declare_parameter<std::string>("example_param", "hello, world");
 

@@ -21,7 +21,7 @@
 #include "finenav_localizer/filter_model.hpp"
 #include "finenav_localizer/nav_state_buffer.hpp"
 #include "finenav_localizer/observation_queue.hpp"
-#include "finenav_util/node_thread.hpp"
+#include "finenav_util/ros/node_thread.hpp"
 #include "finenav_localizer/localizer_params.hpp"
 
 namespace finenav {
@@ -46,7 +46,7 @@ namespace finenav {
 //  getState() / getCovariance() / getLastUpdateTime() / getRobotState() read
 //  from an output cache protected by cached_state_mutex_ (shared_mutex).
 // ============================================================================
-class FineNavLocalizer : public IRobotStateProvider {
+class FineNavLocalizer : public finenav::core::IRobotStateProvider {
 public:
     using PMat     = NavigationModelD::PMat;
     using Vec3d    = NavigationModelD::Vec3T;
@@ -119,13 +119,13 @@ public:
     ///        the canonical framework representation.
     /// @return std::nullopt if the filter has not yet been initialised.
     /// @note  Thread-safe (reads from the same cached_state_mutex_ as getState()).
-    std::optional<RobotState> getRobotState() const override;
+    std::optional<finenav::core::RobotState> getRobotState() const override;
 
     /// @brief IRobotStateProvider implementation — interpolated state at a
     ///        specific timestamp.  Delegates to getStateAt() internally.
     /// @return std::nullopt if uninitialised or timestamp outside history window.
     /// @note  Thread-safe.
-    std::optional<RobotState> getRobotState(const rclcpp::Time& t) const override;
+    std::optional<finenav::core::RobotState> getRobotState(const rclcpp::Time& t) const override;
 
     /**
      * @brief Query the interpolated state at an arbitrary past timestamp.
@@ -165,7 +165,7 @@ private:
     // ── ROS infrastructure ───────────────────────────────────────────────────
     rclcpp::Node::SharedPtr                        parent_node_;
     rclcpp::Node::SharedPtr                        pnode_;
-    std::unique_ptr<NodeThread>                    pnode_thread_;
+    std::unique_ptr<finenav::util::NodeThread>                    pnode_thread_;
     rclcpp::TimerBase::SharedPtr                   update_timer_;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_;  // null when publish_tf is false
 
