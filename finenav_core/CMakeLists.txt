@@ -9,7 +9,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
-find_package(finenav_msgs REQUIRED)
+find_package(finenav_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(finenav_util REQUIRED)
@@ -23,7 +23,7 @@ set(ros_dependencies
         rclcpp_action
         tf2_ros
         tf2_eigen
-        finenav_msgs
+        finenav_interfaces
         sensor_msgs
         geometry_msgs
         finenav_util

@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-    <name>finenav_msgs</name>
+    <name>finenav_interfaces</name>
     <version>0.1.0</version>
     <description>Rolling Grid Map used in FineNav</description>
 

@@ -68,12 +68,12 @@ std::string ControlLayer<PlannersT, ExecutionPolicy>::getName() const {
 template <typename PlannersT, typename ExecutionPolicy>
 void ControlLayer<PlannersT, ExecutionPolicy>::setupDataPorts() {
     if (!input_topic_.empty()) {
-        plan_ref_sub_ = pnode_->create_subscription<finenav_msgs::msg::Trajectory>(
+        plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::Trajectory>(
             input_topic_, 10,
             std::bind(&ControlLayer::PlanRefCallback, this, std::placeholders::_1));
     }
     if (!output_topic_.empty()) {
-        plan_result_pub_ = pnode_->create_publisher<finenav_msgs::msg::Trajectory>(output_topic_, 10);
+        plan_result_pub_ = pnode_->create_publisher<finenav_interfaces::msg::Trajectory>(output_topic_, 10);
     }
 }
 
@@ -91,7 +91,7 @@ void ControlLayer<PlannersT, ExecutionPolicy>::keep_alive(std::shared_ptr<T> han
 
 template <typename PlannersT, typename ExecutionPolicy>
 void ControlLayer<PlannersT, ExecutionPolicy>::PlanRefCallback(
-    const finenav_msgs::msg::Trajectory& msg)
+    const finenav_interfaces::msg::Trajectory& msg)
 {
     std::lock_guard<std::mutex> lock(plan_ref_mutex_);
     plan_ref_msg_ = msg;
@@ -129,9 +129,9 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
         return false;
     }
 
-    finenav_msgs::msg::RobotState current_robot_state = robot_state_provider_();
+    finenav_interfaces::msg::RobotState current_robot_state = robot_state_provider_();
 
-    finenav_msgs::msg::Trajectory current_ref_msg;
+    finenav_interfaces::msg::Trajectory current_ref_msg;
     {
         std::lock_guard<std::mutex> lock(plan_ref_mutex_);
         current_ref_msg = plan_ref_msg_;
@@ -139,7 +139,7 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
 
     bool plan_success  = false;
     bool planner_found = false;
-    finenav_msgs::msg::Trajectory output_traj_msg;
+    finenav_interfaces::msg::Trajectory output_traj_msg;
 
     auto try_run_planner = [&](auto& planner) -> bool {
         using PlannerT = std::decay_t<decltype(planner)>;

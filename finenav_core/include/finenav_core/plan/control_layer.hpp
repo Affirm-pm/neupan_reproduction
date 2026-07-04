@@ -10,9 +10,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 
-#include "finenav_msgs/action/compute_plan.hpp"
-#include "finenav_msgs/msg/robot_state.hpp"
-#include "finenav_msgs/msg/trajectory.hpp"
+#include "finenav_interfaces/action/compute_plan.hpp"
+#include "finenav_interfaces/msg/robot_state.hpp"
+#include "finenav_interfaces/msg/trajectory.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/map/map_server.hpp"
@@ -41,7 +41,7 @@ template <typename PlannersT, typename ExecutionPolicy = SingleShotPolicy>
 class ControlLayer {
 public:
     using MapViewsVariant = GenerateMapViewsVariant<PlannersT>;
-    using ActionT         = finenav_msgs::action::ComputePlan;
+    using ActionT         = finenav_interfaces::action::ComputePlan;
     using ActionServer    = SimpleActionServer<ActionT>;
 
     /**
@@ -58,7 +58,7 @@ public:
     using MapViewFactory      = std::function<BoundMapView()>;
     using PrePlanCallback     = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback    = std::function<bool(PostPlanContext&)>;
-    using RobotStateProvider  = std::function<finenav_msgs::msg::RobotState()>;
+    using RobotStateProvider  = std::function<finenav_interfaces::msg::RobotState()>;
 
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,
@@ -113,7 +113,7 @@ private:
     template <typename T>
     void keep_alive(std::shared_ptr<T> handle);
 
-    void PlanRefCallback(const finenav_msgs::msg::Trajectory& msg);
+    void PlanRefCallback(const finenav_interfaces::msg::Trajectory& msg);
 
     // ---- Episode entry-point ----
     void execute();
@@ -141,11 +141,11 @@ private:
     rclcpp::TimerBase::SharedPtr timer_;
     std::unique_ptr<ActionServer> action_server_;
 
-    rclcpp::Subscription<finenav_msgs::msg::Trajectory>::SharedPtr plan_ref_sub_;
-    rclcpp::Publisher<finenav_msgs::msg::Trajectory>::SharedPtr    plan_result_pub_;
+    rclcpp::Subscription<finenav_interfaces::msg::Trajectory>::SharedPtr plan_ref_sub_;
+    rclcpp::Publisher<finenav_interfaces::msg::Trajectory>::SharedPtr    plan_result_pub_;
 
     std::mutex                       plan_ref_mutex_;
-    finenav_msgs::msg::Trajectory    plan_ref_msg_;
+    finenav_interfaces::msg::Trajectory    plan_ref_msg_;
 
     std::vector<std::shared_ptr<void>> param_handles_; ///< 防止参数回调句柄被析构
 };

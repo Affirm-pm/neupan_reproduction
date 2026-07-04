@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "finenav_core/plan/data_packet.hpp"
-#include "finenav_msgs/msg/robot_state.hpp"
+#include "finenav_interfaces/msg/robot_state.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 
 namespace finenav::core {
@@ -26,7 +26,7 @@ namespace finenav::core {
 
 template <typename PlannerT>
 struct PlanningContext {
-    finenav_msgs::msg::RobotState robot_state;  ///< Current robot state (pose / twist / accel)
+    finenav_interfaces::msg::RobotState robot_state;  ///< Current robot state (pose / twist / accel)
     geometry_msgs::msg::Pose      goal_pose;
     InputDataT<PlannerT>          ref_traj;      // TODO: validate empty-trajectory logic
 };

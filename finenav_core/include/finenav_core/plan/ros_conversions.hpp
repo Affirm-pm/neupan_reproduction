@@ -6,7 +6,7 @@
 
 #include <cstdint>
 #include "finenav_core/plan/data_packet.hpp"
-#include "finenav_msgs/msg/trajectory.hpp"
+#include "finenav_interfaces/msg/trajectory.hpp"
 
 namespace finenav::core {
 
@@ -23,7 +23,7 @@ consteval uint32_t ProfileToMsgMask(const IOProfile& p) {
 
 template <IOProfile Config>
 void toROSMsg(const finenav::DataPacket<Config>& src,
-              finenav_msgs::msg::Trajectory& dst)
+              finenav_interfaces::msg::Trajectory& dst)
 {
     dst.valid_fields = ProfileToMsgMask(Config);
     if constexpr (Config.pose)  dst.poses = src.poses;
@@ -34,7 +34,7 @@ void toROSMsg(const finenav::DataPacket<Config>& src,
 
 template <IOProfile Config>
 void toROSMsg(finenav::DataPacket<Config>&& src,
-              finenav_msgs::msg::Trajectory& dst)
+              finenav_interfaces::msg::Trajectory& dst)
 {
     dst.valid_fields = ProfileToMsgMask(Config);
     if constexpr (Config.pose)  dst.poses = std::move(src.poses);
@@ -44,7 +44,7 @@ void toROSMsg(finenav::DataPacket<Config>&& src,
 }
 
 template <IOProfile Config>
-void fromROSMsg(const finenav_msgs::msg::Trajectory& src,
+void fromROSMsg(const finenav_interfaces::msg::Trajectory& src,
                 finenav::DataPacket<Config>& dst)
 {
     uint32_t required = ProfileToMsgMask(Config);
@@ -58,7 +58,7 @@ void fromROSMsg(const finenav_msgs::msg::Trajectory& src,
 }
 
 template <IOProfile Config>
-void fromROSMsg(finenav_msgs::msg::Trajectory&& src,
+void fromROSMsg(finenav_interfaces::msg::Trajectory&& src,
                 finenav::DataPacket<Config>& dst)
 {
     uint32_t required = ProfileToMsgMask(Config);

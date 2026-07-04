@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "finenav_msgs/msg/robot_state.hpp"
-#include "finenav_msgs/msg/trajectory.hpp"
+#include "finenav_interfaces/msg/robot_state.hpp"
+#include "finenav_interfaces/msg/trajectory.hpp"
 #include <geometry_msgs/msg/pose.hpp>
 #include <string>
 
@@ -19,9 +19,9 @@ namespace finenav::core {
  */
 struct PrePlanContext {
     const std::string& active_planner_id;            // [RO] 当前请求的规划器 ID
-    finenav_msgs::msg::RobotState& robot_state;      // [RW] 当前机器人状态（可被回调修改）
+    finenav_interfaces::msg::RobotState& robot_state;      // [RW] 当前机器人状态（可被回调修改）
     geometry_msgs::msg::Pose& goal_pose;             // [RW] 目标位姿
-    finenav_msgs::msg::Trajectory& ref_traj;         // [RW] 规划参考轨迹
+    finenav_interfaces::msg::Trajectory& ref_traj;         // [RW] 规划参考轨迹
 };
 
 /**
@@ -32,7 +32,7 @@ struct PrePlanContext {
 struct PostPlanContext {
     const std::string& active_planner_id;       // [RO] 当前请求的规划器 ID
     const bool is_success;                      // [RO] 规划结果是否成功
-    finenav_msgs::msg::Trajectory& result_traj; // [RW] 规划结果轨迹
+    finenav_interfaces::msg::Trajectory& result_traj; // [RW] 规划结果轨迹
 };
 
 } // namespace finenav::core
