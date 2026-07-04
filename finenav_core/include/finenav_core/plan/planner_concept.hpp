@@ -20,10 +20,11 @@ namespace finenav::core {
  */
 
 struct PrePlanContext {
-    const std::string&           active_planner_id;
-    RobotState&                  robot_state;
-    geometry_msgs::msg::Pose&    goal_pose;
-    finenav_interfaces::msg::Trajectory& ref_traj;
+    const std::string&           active_planner_id;  ///< ID of the planner that is about to run (const)
+    RobotState&                  robot_state;        ///< Current robot state
+    geometry_msgs::msg::Pose&    goal_pose;          ///< Goal pose for the current planning episode
+    finenav_interfaces::msg::Trajectory& ref_traj;   ///< Reference trajectory for the current planning episode
+};
 
 /**
  * @brief PlanningContext — context passed to planner.plan() calls.
@@ -31,16 +32,18 @@ struct PrePlanContext {
  */
 template <typename PlannerT> // TODO: Compile guard with PlannerConcept?
 struct PlanningContext {
-    RobotState robot_state;  ///< Current robot state
-    geometry_msgs::msg::Pose      goal_pose;
-    InputTrajectoryT<PlannerT>    ref_traj;
+    RobotState                    robot_state;      ///< Current robot state
+    geometry_msgs::msg::Pose      goal_pose;        ///< Goal pose for the current planning episode
+    InputTrajectoryT<PlannerT>    ref_traj;         ///< Reference trajectory for the current planning episode
+};
+
 /**
  * @brief PostPlanContext — context passed to post-plan callbacks.
  */
 struct PostPlanContext {
-    const std::string&                    active_planner_id;
-    const bool                            is_success;
-    finenav_interfaces::msg::Trajectory&  result_traj;
+    const std::string&                    active_planner_id;  ///< ID of the planner that just ran (const)
+    const bool                            is_success;         ///< Whether the planning is success or not (const)
+    finenav_interfaces::msg::Trajectory&  result_traj;        ///< Reference trajectory for the current planning episode
 };
 
 
