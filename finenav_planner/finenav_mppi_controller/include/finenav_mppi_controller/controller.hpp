@@ -26,10 +26,8 @@
 #include "rclcpp/rclcpp.hpp"
 
 
-#include "finenav_interface/test_map_params.hpp"
-#include "finenav_interface/test_planner_params.hpp"
 
-#include "finenav_core/concepts.hpp"
+#include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/algo_configurator.hpp"
 #include "finenav_mppi_controller/finenav_mppi_controller_params.hpp"
 #include "finenav_mppi_controller/optimizer.hpp"
@@ -54,13 +52,13 @@ public:
     */
     MPPIController() = default;
 
-    static constexpr finenav::IOProfile InputProfile = {
+    static constexpr finenav::core::IOProfile InputProfile = {
         .pose = true,
         .vel  = false,
         .accel= false,
         .time = false
     };
-    static constexpr finenav::IOProfile OutputProfile = {
+    static constexpr finenav::core::IOProfile OutputProfile = {
         .pose = true,
         .vel  = true,
         .accel= false,
@@ -68,7 +66,7 @@ public:
     };
 
     using IMapView = nav2_mppi_controller::IMapView;
-    using Context = finenav::PlanningContext<MPPIController>;
+    using Context = finenav::core::PlanningContext<MPPIController>;
     using ConfigType = finenav_mppi_controller::Params;
     void configure(const ConfigType& params) {              //应该传入参数 因测试先去除
 
@@ -96,12 +94,12 @@ public:
        //TODO:初始化过程需要完善
     }
 
-     std::optional<finenav::DataPacket<OutputProfile>>plan(const finenav::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
+     std::optional<finenav::core::DataPacket<OutputProfile>>plan(const finenav::core::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
         using Clock = std::chrono::steady_clock;
         using Ms    = std::chrono::duration<double, std::milli>;
         const auto t_plan_start = Clock::now();
 
-        finenav::DataPacket<OutputProfile> traj;
+        finenav::core::DataPacket<OutputProfile> traj;
         // 从框架注入的 RobotState 中取出 pose 和 twist，无需 TF 查询
         const auto& robot_state = ctx.robot_state;
         auto goal_pose = ctx.goal_pose;

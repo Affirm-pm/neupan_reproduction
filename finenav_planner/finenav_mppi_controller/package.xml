@@ -26,7 +26,6 @@
   <depend>angles</depend>
   <depend>opencv4</depend>
 
-  <depend>finenav_interface</depend>
   <depend>finenav_util</depend>
   <depend>finenav_core</depend>
   <depend>generate_parameter_library</depend>

@@ -31,7 +31,6 @@ set(dependencies_pkgs
   angles
   OpenCV
         finenav_collision_model
-        finenav_interface
         finenav_util
         finenav_core
         generate_parameter_library
