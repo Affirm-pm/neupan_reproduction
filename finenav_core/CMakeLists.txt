@@ -13,9 +13,7 @@ find_package(finenav_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(finenav_util REQUIRED)
-find_package(generate_parameter_library REQUIRED)
 
-generate_parameter_library(map_server_params src/map_server.yaml)
 
 set(ros_dependencies
         eigen3_cmake_module
@@ -41,7 +39,6 @@ target_include_directories(${PROJECT_NAME} INTERFACE
 )
 target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_20)
 target_link_libraries(${PROJECT_NAME} INTERFACE
-        map_server_params
         fmt::fmt
         Eigen3::Eigen
 )
@@ -55,16 +52,9 @@ install(TARGETS ${PROJECT_NAME}
         EXPORT ${PROJECT_NAME}Targets
         INCLUDES DESTINATION include
 )
-install(TARGETS map_server_params
-        EXPORT ${PROJECT_NAME}Targets
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-        RUNTIME DESTINATION bin
-)
 ament_export_dependencies(
         fmt
         Eigen3
-        generate_parameter_library
         ${ros_dependencies}
 )
 

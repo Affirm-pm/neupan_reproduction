@@ -16,7 +16,6 @@
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/observation_source.hpp"
 #include "finenav_util/ros/node_thread.hpp"
-#include "finenav_core/map_server_params.hpp"
 #include "finenav_core/param_handle_keeper.hpp"
 
 namespace finenav::core {
@@ -123,6 +122,7 @@ public:
         Fuser<MsgT> fuser);
 
 private:
+    void declare_parameters();
     void runUpdateCycle(const rclcpp::Time& now);
     void runShiftCycle(const rclcpp::Time& now);
 
@@ -146,7 +146,9 @@ private:
     std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
     std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;
     ParamHandleKeeper                                param_keeper_;
-    map_server::Params                               params_;
+    double                                           update_rate_hz_{10.0};
+    double                                           shift_rate_hz_{50.0};
+    double                                           shift_margin_ratio_{0.5};
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };
 
