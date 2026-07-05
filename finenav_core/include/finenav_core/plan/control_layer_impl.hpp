@@ -41,7 +41,7 @@ ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
         ([this](auto& p) {
             using T = std::decay_t<decltype(p)>;
             RCLCPP_INFO_STREAM(pnode_->get_logger(), "Loading planner: " << AlgoConfigurator<T>::name);
-            keep_alive(AlgoConfigurator<T>::load(pnode_, p));
+            param_keeper_.keep_alive(AlgoConfigurator<T>::load(pnode_, p));
         }(planners), ...);
     }, planners_instance_);
 }
@@ -80,14 +80,6 @@ void ControlLayer<PlannersT, ExecutionPolicy>::setupDataPorts() {
 // ==============================================================================
 // Utilities
 // ==============================================================================
-
-template <typename PlannersT, typename ExecutionPolicy>
-template <typename T>
-void ControlLayer<PlannersT, ExecutionPolicy>::keep_alive(std::shared_ptr<T> handle) {
-    if (handle) {
-        param_handles_.push_back(handle);
-    }
-}
 
 template <typename PlannersT, typename ExecutionPolicy>
 void ControlLayer<PlannersT, ExecutionPolicy>::PlanRefCallback(

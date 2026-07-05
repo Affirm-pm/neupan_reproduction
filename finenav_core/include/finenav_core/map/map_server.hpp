@@ -17,6 +17,7 @@
 #include "finenav_core/map/observation_source.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 #include "finenav_core/map_server_params.hpp"
+#include "finenav_core/param_handle_keeper.hpp"
 
 namespace finenav::core {
 
@@ -125,9 +126,6 @@ private:
     void runUpdateCycle(const rclcpp::Time& now);
     void runShiftCycle(const rclcpp::Time& now);
 
-    template <typename T>
-    void keep_alive(std::shared_ptr<T> handle);
-
     // ---- ROS infrastructure ----
     rclcpp::Node::SharedPtr     node_;
     std::string                 server_name_;
@@ -147,7 +145,7 @@ private:
     PostUpdateHook                                   post_update_hook_;
     std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
     std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;
-    std::vector<std::shared_ptr<void>>               held_param_handles_;
+    ParamHandleKeeper                                param_keeper_;
     map_server::Params                               params_;
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };

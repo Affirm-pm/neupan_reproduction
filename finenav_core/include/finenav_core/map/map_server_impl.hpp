@@ -25,7 +25,7 @@ MapServer<MapT>::MapServer(
     pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
     map_instance_ = std::make_unique<MapT>();
-    keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
+    param_keeper_.keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
 
     if (state_provider == nullptr) {
         FINENAV_LOG_ERROR(node_->get_logger(),
@@ -40,7 +40,7 @@ MapServer<MapT>::MapServer(
     params_ = param_listener->get_params();
     param_listener->setUserCallback(
         [this](const map_server::Params& p) { params_ = p; });
-    keep_alive(param_listener);
+    param_keeper_.keep_alive(param_listener);
 
     // Sensor fusion update timer.
     auto update_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -261,13 +261,6 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     }
 
     sw.warn_if_over(1000.0 / params_.shift_rate_hz);
-}
-
-// --- MapServer::keep_alive  (private) ------------------------------------------
-template <SpatialContainer MapT>
-template <typename T>
-void MapServer<MapT>::keep_alive(std::shared_ptr<T> handle) {
-    if (handle) held_param_handles_.push_back(handle);
 }
 
 } // namespace finenav::core
