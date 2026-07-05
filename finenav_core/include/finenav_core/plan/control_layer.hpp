@@ -33,7 +33,7 @@ namespace finenav::core {
  * plan-once flow: pre-callback → read-lock MapView → planner.plan() → post-callback.
  *
  * @tparam PlannersT       PlannerSet<...> listing the supported planner types.
- * @tparam ExecutionPolicy  SingleShotPolicy or TrackingPolicy.
+ * @tparam ExecutionPolicy  SingleShotPolicy or ContinuousPolicy.
  */
 template <typename PlannersT, typename ExecutionPolicy = SingleShotPolicy>
 class ControlLayer {
@@ -85,16 +85,12 @@ public:
 private:
     // ── Internal types ─────────────────────────────────────────────────────
 
-    using MapViewFactory = std::function<BoundMapView()>;
-
-    /**
-     * @brief Map view + RAII read-lock.  lock_guard holds a shared_ptr to the
-     * LockedMapRO so that the read-lock is released when this struct is destroyed.
-     */
     struct BoundMapView {
         MapViewsVariant        view_variant;
         std::shared_ptr<void>  lock_guard;
     };
+
+    using MapViewFactory = std::function<BoundMapView()>;
 
     // ── Methods ────────────────────────────────────────────────────────────
 
@@ -110,7 +106,7 @@ private:
     /// Policy dispatch.
     /** @brief Policy dispatch */
     void executeImpl(SingleShotPolicy& policy);
-    void executeImpl(TrackingPolicy&   policy);
+    void executeImpl(ContinuousPolicy&   policy);
 
     /// Reset each planner whose AlgoConfigurator name matches active_planner_id_.
     void resetActivePlanner();

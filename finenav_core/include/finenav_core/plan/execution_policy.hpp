@@ -1,25 +1,58 @@
 // Copyright (c) 2025.
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
+
 #pragma once
 
+#include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
+#include <rcl_interfaces/msg/floating_point_range.hpp>
+
 namespace finenav::core {
+
 /**
- * @brief SingleShotPolicy — 每次 Action Goal 执行一次 plan()，完成后立即 succeed。
+ * @brief SingleShotPolicy — runs plan() exactly once per action goal.
  *
- * 适用于离线规划、测试等"请求-响应"场景。
- * planner.reset() 在 execute() 开始时调用（Episode 边界）。
+ * Used for one-shot planners (A*, BFS, route search) where a single call
+ * produces the complete result.  Has no tunable parameters.
  */
-struct SingleShotPolicy {};
-/**
- * @brief TrackingPolicy — 每次 Action Goal 以固定频率循环调用 plan()，直到取消或目标到达。
- *
- * 适用于 MPPI 等需要持续追踪的在线控制器。
- * planner.reset() 仅在 execute() 开始时调用一次；循环内各帧 plan() 共享热启动状态。
- *
- * @param frequency_hz  控制循环频率（Hz），默认 10 Hz。
- */
-struct TrackingPolicy {
-    double frequency_hz = 10.0;
+struct SingleShotPolicy {
+    static void declare_parameters(rclcpp::Node&) {}
 };
+
+/**
+ * @brief ContinuousPolicy — runs plan() in a loop at a fixed frequency.
+ *
+ * Used for continuous-output planners (MPPI, D*-lite) that need warm-start
+ * state across cycles.  The loop continues until the action is canceled or
+ * an external state monitor signals goal_reached.
+ *
+ * @param frequency_hz  Control loop rate (Hz), default 10.0.
+ */
+struct ContinuousPolicy {
+    double frequency_hz = 10.0;
+
+    void declare_parameters(rclcpp::Node& node) {
+        rcl_interfaces::msg::ParameterDescriptor desc;
+        desc.description =
+            "Control loop frequency for ContinuousPolicy (Hz). Must be > 0.0.";
+
+        rcl_interfaces::msg::FloatingPointRange range;
+        range.from_value = 0.0;    // closest to strict > 0 that ROS supports
+        range.to_value   = 0.0;    // 0.0 = no upper bound
+        range.step       = 0.0;
+        desc.floating_point_range = {range};
+
+        node.declare_parameter<double>("frequency_hz", frequency_hz, desc);
+        frequency_hz = node.get_parameter("frequency_hz").as_double();
+
+        if (frequency_hz <= 0.0) {
+            RCLCPP_WARN(node.get_logger(),
+                "frequency_hz must be > 0.0 (got %.1f). Using default 10.0.",
+                frequency_hz);
+            frequency_hz = 10.0;
+        }
+    }
+};
+
 } // namespace finenav::core

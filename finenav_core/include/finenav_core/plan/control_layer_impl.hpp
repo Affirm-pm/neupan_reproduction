@@ -28,7 +28,9 @@ ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
     pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
-    pnode_->declare_parameter<std::string>("example_param", "hello, world");
+    if constexpr (requires { policy_.declare_parameters(*pnode_); }) {
+        policy_.declare_parameters(*pnode_);
+    }
 
     if (!layer_name.empty()) {
         action_server_ = std::make_unique<ActionServer>(
@@ -249,11 +251,11 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(SingleShotPolicy&) {
 }
 
 // ==============================================================================
-// executeImpl — TrackingPolicy
+// executeImpl — ContinuousPolicy
 // ==============================================================================
 
 template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(TrackingPolicy& policy) {
+void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(ContinuousPolicy& policy) {
     auto goal_pose = action_server_->get_current_goal()->goal;
     rclcpp::Rate rate(policy.frequency_hz);
 
