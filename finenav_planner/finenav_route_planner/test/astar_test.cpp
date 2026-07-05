@@ -269,8 +269,8 @@ inline finenav::PlanningContext<finenav::AstarPathSearch>
 makeCtx(double sx, double sy, double gx, double gy)
 {
     finenav::PlanningContext<finenav::AstarPathSearch> ctx;
-    ctx.robot_state.pose.position.x = sx;
-    ctx.robot_state.pose.position.y = sy;
+    ctx.robot_state.position.x() = sx;
+    ctx.robot_state.position.y() = sy;
     ctx.goal_pose.position.x  = gx;
     ctx.goal_pose.position.y  = gy;
     return ctx;

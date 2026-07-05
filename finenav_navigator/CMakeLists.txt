@@ -16,7 +16,7 @@ find_package(generate_parameter_library REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(finenav_msgs REQUIRED)
+find_package(finenav_interfaces REQUIRED)
 find_package(finenav_util REQUIRED)
 find_package(finenav_localizer REQUIRED)
 
@@ -30,7 +30,7 @@ set(dependencies
         generate_parameter_library
         eigen3_cmake_module
         geometry_msgs
-        finenav_msgs
+        finenav_interfaces
         finenav_util
         finenav_localizer
 )

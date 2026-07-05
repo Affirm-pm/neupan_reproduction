@@ -27,7 +27,7 @@ public:
      */
     explicit TrimByDistance(double max_distance_m);
 
-    void operator()(finenav_msgs::msg::Trajectory& trajectory) const override;
+    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
 
 private:
     double max_distance_m_;

@@ -46,7 +46,7 @@ public:
         double tolerance      = 1e-4,
         int    max_iterations = 1000);
 
-    void operator()(finenav_msgs::msg::Trajectory& trajectory) const override;
+    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
 
 private:
     double data_w_;

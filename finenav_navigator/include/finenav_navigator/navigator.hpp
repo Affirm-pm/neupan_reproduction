@@ -11,9 +11,9 @@
 
 #include "finenav_navigator/behavior_tree_engine.hpp"
 
-#include "finenav_util/simple_action_server.hpp"
-#include "finenav_util/node_thread.hpp"
-#include "finenav_msgs/action/navigate_to_pose.hpp"
+#include "finenav_util/ros/simple_action_server.hpp"
+#include "finenav_util/ros/node_thread.hpp"
+#include "finenav_interfaces/action/navigate_to_pose.hpp"
 
 #include "finenav_navigator/navigator_params.hpp"
 
@@ -34,8 +34,8 @@ namespace finenav {
  */
 class Navigator {
 public:
-    using ActionT            = finenav_msgs::action::NavigateToPose;
-    using ActionServer       = SimpleActionServer<ActionT>;
+    using ActionT            = finenav_interfaces::action::NavigateToPose;
+    using ActionServer       = finenav::util::SimpleActionServer<ActionT>;
     using RobotPoseProvider  = std::function<geometry_msgs::msg::Pose()>;
     using RobotTwistProvider = std::function<geometry_msgs::msg::Twist()>;
 
@@ -74,7 +74,7 @@ private:
 
     // ── ROS 基础设施 ──────────────────────────────────────────────────────────
     rclcpp::Node::SharedPtr       pnode_;
-    std::unique_ptr<NodeThread>   pnode_thread_;
+    std::unique_ptr<finenav::util::NodeThread>   pnode_thread_;
 
     // ── 业务组件 ──────────────────────────────────────────────────────────────
     std::unique_ptr<BehaviorTreeEngine> bt_engine_;

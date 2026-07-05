@@ -41,7 +41,7 @@ public:
      */
     explicit TrimByAABB(Eigen::AlignedBox3d bounds);
 
-    void operator()(finenav_msgs::msg::Trajectory& trajectory) const override;
+    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
 
 private:
     Eigen::AlignedBox3d bounds_;

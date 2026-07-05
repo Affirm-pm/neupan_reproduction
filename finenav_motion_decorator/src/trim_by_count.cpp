@@ -15,9 +15,9 @@ TrimByCount::TrimByCount(std::size_t max_points) : max_points_(max_points)
     }
 }
 
-void TrimByCount::operator()(finenav_msgs::msg::Trajectory& traj) const
+void TrimByCount::operator()(finenav_interfaces::msg::Trajectory& traj) const
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
 
     // Determine current size from the first populated field
     std::size_t current_size = 0;

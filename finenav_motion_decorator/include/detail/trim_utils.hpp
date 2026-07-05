@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "finenav_msgs/msg/trajectory.hpp"
+#include "finenav_interfaces/msg/trajectory.hpp"
 #include <cstddef>
 
 namespace finenav::motion_decorator::detail {
@@ -13,9 +13,9 @@ namespace finenav::motion_decorator::detail {
  * @brief Resize all populated fields of a trajectory to new_size consistently.
  *        Caller is responsible for ensuring new_size <= current size.
  */
-inline void resize_trajectory(finenav_msgs::msg::Trajectory& traj, std::size_t new_size)
+inline void resize_trajectory(finenav_interfaces::msg::Trajectory& traj, std::size_t new_size)
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
     if (traj.valid_fields & T::TRAJ_POSE)  traj.poses.resize(new_size);
     if (traj.valid_fields & T::TRAJ_VEL)   traj.twists.resize(new_size);
     if (traj.valid_fields & T::TRAJ_ACCEL) traj.accels.resize(new_size);
@@ -34,9 +34,9 @@ inline double duration_to_sec(const builtin_interfaces::msg::Duration& d)
  * @brief Erase the first n elements from all populated fields of a trajectory.
  *        Caller is responsible for ensuring n <= current size.
  */
-inline void erase_front(finenav_msgs::msg::Trajectory& traj, std::size_t n)
+inline void erase_front(finenav_interfaces::msg::Trajectory& traj, std::size_t n)
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
     if (n == 0) return;
     auto erase_n = [n](auto& vec) {
         vec.erase(vec.begin(), vec.begin() + static_cast<std::ptrdiff_t>(n));

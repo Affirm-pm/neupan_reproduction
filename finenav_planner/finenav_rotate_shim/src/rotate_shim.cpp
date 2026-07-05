@@ -30,7 +30,7 @@ void RotateShim::reset()
 // ==============================================================================
 // Plan
 // ==============================================================================
-std::optional<DataPacket<RotateShim::OutputProfile>> RotateShim::plan(
+std::optional<Trajectory<RotateShim::OutputProfile>> RotateShim::plan(
     const Context& ctx,
     const IMapView& /*map_view*/)
 {
@@ -45,11 +45,16 @@ std::optional<DataPacket<RotateShim::OutputProfile>> RotateShim::plan(
   const auto sampled_pt = getSampledPathPt(ref_traj.poses, forward_sampling_distance_);
 
   // 2. 计算采样点在机器人坐标系下的方向
-  const double dx = sampled_pt.x - ctx.robot_state.pose.position.x;
-  const double dy = sampled_pt.y - ctx.robot_state.pose.position.y;
+  const double dx = sampled_pt.x - ctx.robot_state.position.x();
+  const double dy = sampled_pt.y - ctx.robot_state.position.y();
 
   // 3. 计算当前朝向
-  const double current_yaw = yawFromQuat(ctx.robot_state.pose.orientation);
+  geometry_msgs::msg::Quaternion q;
+  q.w = ctx.robot_state.orientation.w();
+  q.x = ctx.robot_state.orientation.x();
+  q.y = ctx.robot_state.orientation.y();
+  q.z = ctx.robot_state.orientation.z();
+  const double current_yaw = yawFromQuat(q);
 
   // 4. 计算 angular distance：采样点在机器人前方方向角 — 当前朝向
   const double target_yaw = std::atan2(dy, dx);
@@ -61,11 +66,19 @@ std::optional<DataPacket<RotateShim::OutputProfile>> RotateShim::plan(
   }
 
   // 6. 未对齐 — 生成纯旋转轨迹
-  DataPacket<RotateShim::OutputProfile> output;
+  Trajectory<RotateShim::OutputProfile> output;
   const double sign = (angular_distance > 0.0) ? 1.0 : -1.0;
 
   // 仅输出一个点（当前位姿 + 旋转 twist）
-  output.poses.push_back(ctx.robot_state.pose);
+  geometry_msgs::msg::Pose p;
+  p.position.x = ctx.robot_state.position.x();
+  p.position.y = ctx.robot_state.position.y();
+  p.position.z = ctx.robot_state.position.z();
+  p.orientation.w = ctx.robot_state.orientation.w();
+  p.orientation.x = ctx.robot_state.orientation.x();
+  p.orientation.y = ctx.robot_state.orientation.y();
+  p.orientation.z = ctx.robot_state.orientation.z();
+  output.poses.push_back(p);
 
   geometry_msgs::msg::Twist twist;
   twist.linear.x   = 0.0;

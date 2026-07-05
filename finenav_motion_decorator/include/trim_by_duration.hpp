@@ -26,7 +26,7 @@ public:
      */
     explicit TrimByDuration(double max_duration_sec);
 
-    void operator()(finenav_msgs::msg::Trajectory& trajectory) const override;
+    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
 
 private:
     double max_duration_sec_;

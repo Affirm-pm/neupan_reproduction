@@ -29,7 +29,7 @@
   <depend>finenav_util</depend>
   <depend>finenav_core</depend>
   <depend>generate_parameter_library</depend>
-  <depend>finenav_msgs</depend>
+  <depend>finenav_interfaces</depend>
   <depend>finenav_collision_model</depend>
 
   <test_depend>ament_lint_auto</test_depend>

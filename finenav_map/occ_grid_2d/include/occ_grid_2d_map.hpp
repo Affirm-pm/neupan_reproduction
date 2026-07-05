@@ -9,11 +9,13 @@
 
 #include <nav_msgs/msg/occupancy_grid.hpp>
 
-#include "finenav_core/concepts.hpp"
+#include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/algo_configurator.hpp"
 #include "finenav_map_occ_grid_2d/occ_grid_2d_params.hpp"
 
 namespace finenav {
+using finenav::core::Position3D;
+using finenav::core::Region3D;
 
 /**
  * @brief OccGrid2DMap — 满足 MapConcept 的二维先验占用栅格地图数据容器

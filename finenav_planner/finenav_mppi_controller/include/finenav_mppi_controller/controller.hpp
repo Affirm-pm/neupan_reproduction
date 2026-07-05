@@ -94,13 +94,12 @@ public:
        //TODO:初始化过程需要完善
     }
 
-     std::optional<finenav::core::DataPacket<OutputProfile>>plan(const finenav::core::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
+     std::optional<finenav::core::Trajectory<OutputProfile>>plan(const finenav::core::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
         using Clock = std::chrono::steady_clock;
         using Ms    = std::chrono::duration<double, std::milli>;
         const auto t_plan_start = Clock::now();
 
-        finenav::core::DataPacket<OutputProfile> traj;
-        // 从框架注入的 RobotState 中取出 pose 和 twist，无需 TF 查询
+        finenav::core::Trajectory<OutputProfile> traj;
         const auto& robot_state = ctx.robot_state;
         auto goal_pose = ctx.goal_pose;
 
@@ -108,14 +107,28 @@ public:
         this->setPlan(path);
 
         geometry_msgs::msg::PoseStamped start_pose_stamped;
-        start_pose_stamped.pose = robot_state.pose;
+        start_pose_stamped.pose.position.x = robot_state.position.x();
+        start_pose_stamped.pose.position.y = robot_state.position.y();
+        start_pose_stamped.pose.position.z = robot_state.position.z();
+        start_pose_stamped.pose.orientation.w = robot_state.orientation.w();
+        start_pose_stamped.pose.orientation.x = robot_state.orientation.x();
+        start_pose_stamped.pose.orientation.y = robot_state.orientation.y();
+        start_pose_stamped.pose.orientation.z = robot_state.orientation.z();
         start_pose_stamped.header.stamp = rclcpp::Clock().now();
         start_pose_stamped.header.frame_id = "map";
+
+        geometry_msgs::msg::Twist twist;
+        twist.linear.x  = robot_state.linear_velocity.x();
+        twist.linear.y  = robot_state.linear_velocity.y();
+        twist.linear.z  = robot_state.linear_velocity.z();
+        twist.angular.x = robot_state.angular_velocity.x();
+        twist.angular.y = robot_state.angular_velocity.y();
+        twist.angular.z = robot_state.angular_velocity.z();
 
         const auto t_optimize_start= Clock::now();
         computeVelocityCommands(
             start_pose_stamped,
-            robot_state.twist,  // 直接使用当前实际速度
+            twist,
             map_view
             );
         const double ms_optimize = Ms(Clock::now() - t_optimize_start).count();

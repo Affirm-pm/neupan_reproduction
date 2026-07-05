@@ -6,15 +6,15 @@
 
 #include <cmath>
 #include <rclcpp/rclcpp.hpp>
-#include "finenav_msgs/action/compute_plan.hpp"
+#include "finenav_interfaces/action/compute_plan.hpp"
 #include "finenav_navigator/thirdparty/bt_action_node.hpp"
 
 namespace finenav {
 
 /**
- * @brief A behavior tree ActionNode that requests a plan from finenav_msgs::action::ComputePlan action server
+ * @brief A behavior tree ActionNode that requests a plan from finenav_interfaces::action::ComputePlan action server
  */
-class ComputePlanAction : public BT::RosActionNode<finenav_msgs::action::ComputePlan> {
+class ComputePlanAction : public BT::RosActionNode<finenav_interfaces::action::ComputePlan> {
    public:
     ComputePlanAction(const std::string& name, const BT::NodeConfig& conf, const BT::RosNodeParams& params);
 

@@ -10,7 +10,7 @@ ComputePlanAction::ComputePlanAction(
     const std::string& name,
     const BT::NodeConfig& conf,
     const BT::RosNodeParams& params)
-    : BT::RosActionNode<finenav_msgs::action::ComputePlan>(name, conf, params) {}
+    : BT::RosActionNode<finenav_interfaces::action::ComputePlan>(name, conf, params) {}
 
 bool ComputePlanAction::setGoal(Goal& goal) {
     if (!getInput("goal", goal.goal) ||

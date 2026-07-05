@@ -48,7 +48,7 @@ if (BUILD_TESTING)
         src/astar_algorithm.cpp
         src/astar_path_search.cpp
     )
-    ament_target_dependencies(astar_test finenav_core finenav_util finenav_msgs rclcpp)
+    ament_target_dependencies(astar_test finenav_core finenav_util finenav_interfaces rclcpp)
     target_include_directories(astar_test PRIVATE test)
     target_link_libraries(astar_test astar_params)
 
@@ -57,7 +57,7 @@ if (BUILD_TESTING)
         src/astar_algorithm.cpp      # BFS reuses AStarAlgorithm
         src/bfs_path_search.cpp
     )
-    ament_target_dependencies(bfs_test finenav_core finenav_util finenav_msgs)
+    ament_target_dependencies(bfs_test finenav_core finenav_util finenav_interfaces)
     target_include_directories(bfs_test PRIVATE test)
     target_link_libraries(bfs_test bfs_params)
 
@@ -68,7 +68,7 @@ if (BUILD_TESTING)
         src/route/route_graph.cpp
         src/route/route_search.cpp
     )
-    ament_target_dependencies(route_test finenav_core finenav_util finenav_msgs geometry_msgs std_msgs)
+    ament_target_dependencies(route_test finenav_core finenav_util finenav_interfaces geometry_msgs std_msgs)
     target_include_directories(route_test PRIVATE test)
     target_link_libraries(route_test route_params)
 endif ()

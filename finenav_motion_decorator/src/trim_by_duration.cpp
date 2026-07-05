@@ -16,9 +16,9 @@ TrimByDuration::TrimByDuration(double max_duration_sec) : max_duration_sec_(max_
     }
 }
 
-void TrimByDuration::operator()(finenav_msgs::msg::Trajectory& traj) const
+void TrimByDuration::operator()(finenav_interfaces::msg::Trajectory& traj) const
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
 
     if (!(traj.valid_fields & T::TRAJ_TIME)) {
         throw std::runtime_error(

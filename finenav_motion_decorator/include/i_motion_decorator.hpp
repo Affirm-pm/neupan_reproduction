@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "finenav_msgs/msg/trajectory.hpp"
+#include "finenav_interfaces/msg/trajectory.hpp"
 
 namespace finenav {
 
@@ -21,14 +21,14 @@ public:
      * @param trajectory The trajectory to be modified in-place.
      * @note Only throw when there is lethal failure
      */
-    virtual void operator()(finenav_msgs::msg::Trajectory& trajectory) const = 0;
+    virtual void operator()(finenav_interfaces::msg::Trajectory& trajectory) const = 0;
 };
 
 /**
  * @brief Enable pipe syntax for decorators: traj | DecoratorA() | DecoratorB()
  */
-inline finenav_msgs::msg::Trajectory& operator|(
-    finenav_msgs::msg::Trajectory& trajectory,
+inline finenav_interfaces::msg::Trajectory& operator|(
+    finenav_interfaces::msg::Trajectory& trajectory,
     const IMotionDecorator& decorator)
 {
     decorator(trajectory);

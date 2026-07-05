@@ -12,7 +12,10 @@
 #include "grid_map_math.hpp"
 #include "grid_map_iterator.hpp"
 
-namespace finenav { // TODO: 架构大改造，嵌套命名空间
+namespace finenav {
+using finenav::core::Position3D;
+using finenav::core::Region3D;
+// TODO: 架构大改造，嵌套命名空间
 
 /**
  * @brief 支持滚动更新的三维栅格地图类

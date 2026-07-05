@@ -27,7 +27,7 @@ public:
      */
     explicit TrimByCount(std::size_t max_points);
 
-    void operator()(finenav_msgs::msg::Trajectory& trajectory) const override;
+    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
 
 private:
     std::size_t max_points_;

@@ -71,26 +71,26 @@ public:
 
     template <typename MapT>
     [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<MapServer<MapT>> createMapResource(const std::string& name)
+    std::shared_ptr<finenav::core::MapServer<MapT>> createMapResource(const std::string& name)
     {
         auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
                                [&](const auto& pair) { return pair.first == name; });
         if (it == map_resources_.end()) {
-            auto new_map = std::make_shared<MapServer<MapT>>(
+            auto new_map = std::make_shared<finenav::core::MapServer<MapT>>(
                 node_, name, localizer_.get());
             map_resources_.emplace_back(name, new_map);
             return new_map;
         }
-        return std::any_cast<std::shared_ptr<MapServer<MapT>>>(it->second);
+        return std::any_cast<std::shared_ptr<finenav::core::MapServer<MapT>>>(it->second);
     }
 
     template <typename MapT>
     [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<MapServer<MapT>> getMapResource(const std::string& name) {
+    std::shared_ptr<finenav::core::MapServer<MapT>> getMapResource(const std::string& name) {
         auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
                                [&](const auto& pair) { return pair.first == name; });
         if (it != map_resources_.end()) {
-            return std::any_cast<std::shared_ptr<MapServer<MapT>>>(it->second);
+            return std::any_cast<std::shared_ptr<finenav::core::MapServer<MapT>>>(it->second);
         }
         return nullptr;
     }
@@ -103,35 +103,18 @@ public:
      *
      * 用户仍可在返回的 layer 上调用 set_on_post_plan() 注册应用级输出逻辑。
      */
-    template <typename PlannersT, typename ExecutionPolicy = SingleShotPolicy>
+    template <typename PlannersT, typename ExecutionPolicy = finenav::core::SingleShotPolicy>
     [[nodiscard("ControlLayer was created but the handle was lost!")]]
-    std::shared_ptr<ControlLayer<PlannersT, ExecutionPolicy>> createControlLayer(
+    std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>> createControlLayer(
         const std::string& name,
         ExecutionPolicy policy = ExecutionPolicy{})
     {
-        auto layer = std::make_shared<ControlLayer<PlannersT, ExecutionPolicy>>(
+        auto layer = std::make_shared<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>(
             node_, name, std::move(policy));
 
         // Auto-inject: robot state from Localizer
-        layer->set_robot_state_provider([this]() -> finenav_msgs::msg::RobotState {
-            const auto& state = localizer_->getState();
-            finenav_msgs::msg::RobotState rs;
-            rs.pose.position.x = state.p.x();
-            rs.pose.position.y = state.p.y();
-            rs.pose.position.z = state.p.z();
-            const auto q = state.R.unit_quaternion();
-            rs.pose.orientation.w = q.w();
-            rs.pose.orientation.x = q.x();
-            rs.pose.orientation.y = q.y();
-            rs.pose.orientation.z = q.z();
-            // getState() returns v in body frame
-            rs.twist.linear.x  = state.v.x();
-            rs.twist.linear.y  = state.v.y();
-            rs.twist.linear.z  = state.v.z();
-            rs.twist.angular.x = state.omega.x();
-            rs.twist.angular.y = state.omega.y();
-            rs.twist.angular.z = state.omega.z();
-            return rs;
+        layer->set_robot_state_provider([this]() -> finenav::core::RobotState {
+            return localizer_->getRobotState().value_or(finenav::core::RobotState{});
         });
 
 

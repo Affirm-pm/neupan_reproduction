@@ -16,9 +16,9 @@ TrimByDistance::TrimByDistance(double max_distance_m) : max_distance_m_(max_dist
     }
 }
 
-void TrimByDistance::operator()(finenav_msgs::msg::Trajectory& traj) const
+void TrimByDistance::operator()(finenav_interfaces::msg::Trajectory& traj) const
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
 
     if (!(traj.valid_fields & T::TRAJ_POSE)) {
         throw std::runtime_error(

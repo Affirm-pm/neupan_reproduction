@@ -56,7 +56,15 @@ RoutePathSearch::Result RoutePathSearch::plan(
 
     // Obstacle-aware BFS to snap start and goal to nearest reachable
     // graph points (nodes or intermediate path points).
-    const auto start_snap = findNearestGraphPoint(orig_graph, ctx.robot_state.pose, map_view);
+    geometry_msgs::msg::Pose start_pose;
+    start_pose.position.x = ctx.robot_state.position.x();
+    start_pose.position.y = ctx.robot_state.position.y();
+    start_pose.position.z = ctx.robot_state.position.z();
+    start_pose.orientation.w = ctx.robot_state.orientation.w();
+    start_pose.orientation.x = ctx.robot_state.orientation.x();
+    start_pose.orientation.y = ctx.robot_state.orientation.y();
+    start_pose.orientation.z = ctx.robot_state.orientation.z();
+    const auto start_snap = findNearestGraphPoint(orig_graph, start_pose, map_view);
     if (!start_snap.isNode() && !start_snap.isPath()) return std::nullopt;
 
     const auto goal_snap = findNearestGraphPoint(orig_graph, ctx.goal_pose, map_view);
@@ -94,7 +102,7 @@ RoutePathSearch::Result RoutePathSearch::plan(
     auto route_opt = route::findRoute(graph, start_node_idx, goal_node_idx, path_density_);
     if (!route_opt || route_opt->empty()) return std::nullopt;
 
-    OutputDataT<RoutePathSearch> output;
+    OutputTrajectoryT<RoutePathSearch> output;
     output.poses.reserve(start_snap.connector_path.size()
                        + goal_snap.connector_path.size()
                        + route_opt->size());

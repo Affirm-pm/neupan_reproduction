@@ -8,7 +8,7 @@ set(finenav_dependencies
         finenav_localizer
         finenav_navigator
         finenav_motion_decorator
-        finenav_msgs
+        finenav_interfaces
         finenav_util
 )
 

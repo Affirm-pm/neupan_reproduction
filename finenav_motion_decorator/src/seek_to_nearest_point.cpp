@@ -14,9 +14,9 @@ SeekToNearestPoint::SeekToNearestPoint(Eigen::Vector3d reference, bool use_2d)
     : reference_(std::move(reference)), use_2d_(use_2d)
 {}
 
-void SeekToNearestPoint::operator()(finenav_msgs::msg::Trajectory& traj) const
+void SeekToNearestPoint::operator()(finenav_interfaces::msg::Trajectory& traj) const
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
 
     if (!(traj.valid_fields & T::TRAJ_POSE)) {
         throw std::runtime_error(

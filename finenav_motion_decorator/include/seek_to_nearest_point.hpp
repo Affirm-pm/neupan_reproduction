@@ -36,7 +36,7 @@ public:
      */
     explicit SeekToNearestPoint(Eigen::Vector3d reference, bool use_2d = true);
 
-    void operator()(finenav_msgs::msg::Trajectory& trajectory) const override;
+    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
 
 private:
     Eigen::Vector3d reference_;

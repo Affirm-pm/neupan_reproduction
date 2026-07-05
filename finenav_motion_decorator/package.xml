@@ -9,7 +9,7 @@
 
     <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
-    <depend>finenav_msgs</depend>
+    <depend>finenav_interfaces</depend>
     <depend>eigen3_cmake_module</depend>
     <depend>Eigen3</depend>
 

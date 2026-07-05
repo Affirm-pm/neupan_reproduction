@@ -34,7 +34,7 @@ set(dependencies_pkgs
         finenav_util
         finenav_core
         generate_parameter_library
-        finenav_msgs
+        finenav_interfaces
 )
 
 foreach(pkg IN LISTS dependencies_pkgs)

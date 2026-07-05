@@ -35,7 +35,7 @@ Navigator::Navigator(rclcpp::Node::SharedPtr parent_node)
     if (!params_.behavior_trees.empty()){ bt_engine_->registerBehaviorTrees(params_.behavior_trees); }
 
     // ── 启动 spin 线程（最后执行，确保所有订阅/服务已注册）────────────────────
-    pnode_thread_ = std::make_unique<NodeThread>(pnode_);
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
     RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Initialized and spinning.");
 }

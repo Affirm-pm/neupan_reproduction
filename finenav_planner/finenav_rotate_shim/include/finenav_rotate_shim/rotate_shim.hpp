@@ -11,13 +11,17 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 
-#include "finenav_core/concepts.hpp"
-#include "finenav_core/plan/data_packet.hpp"
+#include "finenav_core/plan/planner_concept.hpp"
+#include "finenav_core/plan/trajectory.hpp"
 #include "finenav_core/algo_configurator.hpp"
 #include "finenav_mppi_controller/map_view_def.hpp"
 #include "finenav_rotate_shim/finenav_rotate_shim_params.hpp"
 
 namespace finenav {
+using finenav::core::IOProfile;
+using finenav::core::PlanningContext;
+using finenav::core::Trajectory;
+using finenav::core::OutputTrajectoryT;
 
 /**
  * @brief RotateShim — 原地旋转规划器，使机器人朝向对准参考路径上的前方采样点。
@@ -48,7 +52,7 @@ public:
    * @param map_view 忽略（旋转不查地图）
    * @return 若已对齐返回 nullopt；否则返回纯旋转角速度的轨迹
    */
-  std::optional<DataPacket<OutputProfile>> plan(const Context& ctx, const IMapView& map_view);
+  std::optional<Trajectory<OutputProfile>> plan(const Context& ctx, const IMapView& map_view);
 
 private:
   /**
