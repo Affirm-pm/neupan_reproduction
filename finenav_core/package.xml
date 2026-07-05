@@ -15,10 +15,7 @@
 
     <depend>rclcpp</depend>
     <depend>rclcpp_action</depend>
-    <depend>tf2_ros</depend>
-    <depend>tf2_eigen</depend>
 
-    <depend>sensor_msgs</depend>
     <depend>geometry_msgs</depend>
     <depend>finenav_interfaces</depend>
     <depend>finenav_util</depend>
