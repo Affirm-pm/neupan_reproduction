@@ -47,7 +47,7 @@ struct ContinuousPolicy {
         frequency_hz = node.get_parameter("frequency_hz").as_double();
 
         if (frequency_hz <= 0.0) {
-            RCLCPP_WARN(node.get_logger(),
+            FINENAV_LOG_WARN(node.get_logger(),
                 "frequency_hz must be > 0.0 (got %.1f). Using default 10.0.",
                 frequency_hz);
             frequency_hz = 10.0;

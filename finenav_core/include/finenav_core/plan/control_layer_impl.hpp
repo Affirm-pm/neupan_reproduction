@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "finenav_util/common/log_macros.hpp"
+
 namespace finenav::core {
 
 // ==============================================================================
@@ -42,7 +44,7 @@ ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
     std::apply([this](auto&... planners) {
         ([this](auto& p) {
             using T = std::decay_t<decltype(p)>;
-            RCLCPP_INFO_STREAM(pnode_->get_logger(), "Loading planner: " << AlgoConfigurator<T>::name);
+            FINENAV_LOG_INFO(pnode_->get_logger(), "Loading planner: {}", AlgoConfigurator<T>::name);
             param_keeper_.keep_alive(AlgoConfigurator<T>::load(pnode_, p));
         }(planners), ...);
     }, planners_instance_);
@@ -103,8 +105,8 @@ void ControlLayer<PlannersT, ExecutionPolicy>::resetActivePlanner() {
             if (AlgoConfigurator<PlannerT>::name == active_planner_id_) {
                 if constexpr (requires { p.reset(); }) {
                     p.reset();
-                    RCLCPP_INFO(pnode_->get_logger(),
-                        "Planner '%s' reset at episode boundary.", active_planner_id_.c_str());
+                    FINENAV_LOG_INFO(pnode_->get_logger(),
+                        "Planner '{}' reset at episode boundary.", active_planner_id_);
                 }
             }
         }(planners), ...);
@@ -114,11 +116,11 @@ void ControlLayer<PlannersT, ExecutionPolicy>::resetActivePlanner() {
 template <typename PlannersT, typename ExecutionPolicy>
 bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     if (!map_view_factory_) {
-        RCLCPP_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
+        FINENAV_LOG_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
         return false;
     }
     if (!robot_state_provider_) {
-        RCLCPP_ERROR(pnode_->get_logger(),
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
             "RobotStateProvider not set! Call set_robot_state_provider() first.");
         return false;
     }
@@ -172,15 +174,15 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
                     plan_success = true;
                     toROSMsg(std::move(result.value()), output_traj_msg);
                 } else {
-                    RCLCPP_WARN(pnode_->get_logger(), "plan() returned nullopt.");
+                    FINENAV_LOG_WARN(pnode_->get_logger(), "plan() returned nullopt.");
                 }
             } else {
-                RCLCPP_ERROR(pnode_->get_logger(),
-                    "MapView ptr is null for planner '%s'.", active_planner_id_.c_str());
+                FINENAV_LOG_ERROR(pnode_->get_logger(),
+                    "MapView ptr is null for planner '{}'.", active_planner_id_);
             }
         } else {
-            RCLCPP_ERROR(pnode_->get_logger(),
-                "MapView type mismatch for planner '%s'.", active_planner_id_.c_str());
+            FINENAV_LOG_ERROR(pnode_->get_logger(),
+                "MapView type mismatch for planner '{}'.", active_planner_id_);
         }
 
         if (on_post_plan_) {
@@ -196,8 +198,8 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
     }, planners_instance_);
 
     if (!planner_found) {
-        RCLCPP_ERROR_STREAM(pnode_->get_logger(),
-            "Planner '" << active_planner_id_ << "' not found.");
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
+            "Planner '{}' not found.", active_planner_id_);
         return false;
     }
 
@@ -214,7 +216,7 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
 
 template <typename PlannersT, typename ExecutionPolicy>
 void ControlLayer<PlannersT, ExecutionPolicy>::execute() {
-    RCLCPP_INFO(pnode_->get_logger(), "New goal received — starting episode.");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "New goal received — starting episode.");
 
     auto goal          = action_server_->get_current_goal();
     active_planner_id_ = goal->planner_id;
@@ -235,19 +237,19 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(SingleShotPolicy&) {
     auto goal_pose = action_server_->get_current_goal()->goal;
 
     if (action_server_->is_cancel_requested()) {
-        RCLCPP_INFO(pnode_->get_logger(), "SingleShot: goal cancelled before plan.");
+        FINENAV_LOG_INFO(pnode_->get_logger(), "SingleShot: goal cancelled before plan.");
         action_server_->terminate_all();
         return;
     }
 
     if (!planOnce(goal_pose)) {
-        RCLCPP_ERROR(pnode_->get_logger(), "SingleShot: plan() failed.");
+        FINENAV_LOG_ERROR(pnode_->get_logger(), "SingleShot: plan() failed.");
         action_server_->terminate_all();
         return;
     }
 
     action_server_->succeeded_current();
-    RCLCPP_INFO(pnode_->get_logger(), "SingleShot: goal succeeded.");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "SingleShot: goal succeeded.");
 }
 
 // ==============================================================================
@@ -259,13 +261,13 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(ContinuousPolicy& pol
     auto goal_pose = action_server_->get_current_goal()->goal;
     rclcpp::Rate rate(policy.frequency_hz);
 
-    RCLCPP_INFO(pnode_->get_logger(),
+    FINENAV_LOG_INFO(pnode_->get_logger(),
         "Tracking: control loop started at %.1f Hz.", policy.frequency_hz);
 
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
             // BT 驱动的正常取消（如 IsGoalReached/IsStuck 触发），不代表错误。
-            RCLCPP_INFO(pnode_->get_logger(),
+            FINENAV_LOG_INFO(pnode_->get_logger(),
                 "Tracking: goal cancelled by BT (normal termination).");
             action_server_->terminate_all();
             return;
@@ -277,14 +279,14 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(ContinuousPolicy& pol
             auto new_goal = action_server_->accept_pending_goal();
             if (new_goal) {
                 goal_pose = new_goal->goal;
-                RCLCPP_INFO(pnode_->get_logger(),
+                FINENAV_LOG_INFO(pnode_->get_logger(),
                     "Tracking: goal preempted in-loop (%.2f, %.2f) — MPPI warm-start preserved.",
                     goal_pose.position.x, goal_pose.position.y);
             }
         }
 
         if (!planOnce(goal_pose)) {
-            RCLCPP_ERROR(pnode_->get_logger(), "Tracking: plan() failed — aborting.");
+            FINENAV_LOG_ERROR(pnode_->get_logger(), "Tracking: plan() failed — aborting.");
             action_server_->terminate_all();
             return;
         }
@@ -294,7 +296,7 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(ContinuousPolicy& pol
     }
 
     action_server_->succeeded_current();
-    RCLCPP_INFO(pnode_->get_logger(), "Tracking: goal succeeded.");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "Tracking: goal succeeded.");
 }
 
 // ==============================================================================
