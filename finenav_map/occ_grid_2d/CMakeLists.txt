@@ -18,7 +18,7 @@ generate_parameter_library(
 )
 
 # ── 地图库（非 header-only，因为依赖 OpenCV）────────────────────────────
-add_library(${PROJECT_NAME}
+add_library(${PROJECT_NAME} SHARED
     src/occ_grid_2d_map.cpp
 )
 

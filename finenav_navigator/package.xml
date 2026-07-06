@@ -18,7 +18,7 @@
     <depend>eigen3_cmake_module</depend>
     <depend>finenav_interfaces</depend>
     <depend>finenav_util</depend>
-    <depend>finenav_localizer</depend>
+
 
     <export>
         <build_type>ament_cmake</build_type>

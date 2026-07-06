@@ -18,7 +18,6 @@ find_package(eigen3_cmake_module REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(finenav_interfaces REQUIRED)
 find_package(finenav_util REQUIRED)
-find_package(finenav_localizer REQUIRED)
 
 include_directories(include)
 
@@ -32,7 +31,6 @@ set(dependencies
         geometry_msgs
         finenav_interfaces
         finenav_util
-        finenav_localizer
 )
 
 # Library
@@ -41,7 +39,7 @@ generate_parameter_library(
         src/finenav_navigator.yaml
 )
 
-add_library(finenav_navigator STATIC
+add_library(finenav_navigator SHARED
         src/naviagtor.cpp
         src/behavior_tree_engine.cpp
 )

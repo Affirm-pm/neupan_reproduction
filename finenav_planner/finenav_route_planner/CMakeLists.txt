@@ -19,7 +19,7 @@ generate_parameter_library(bfs_params    bfs.yaml)
 generate_parameter_library(route_params  route.yaml)
 
 # ── planner library ─────────────────────────────────────────────────────────
-ament_auto_add_library(finenav_route_planner_lib
+ament_auto_add_library(finenav_route_planner_lib SHARED
     # Grid search engine (A* / Dijkstra / BFS all handled by AStarAlgorithm)
     src/astar_algorithm.cpp
     # Grid planner wrappers (FineNav PlannerConcept)
