@@ -7,6 +7,7 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
 endif ()
 
+# ROS2 dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -14,10 +15,11 @@ find_package(tf2_eigen REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(finenav_core REQUIRED)
 find_package(finenav_util REQUIRED)
+find_package(generate_parameter_library REQUIRED)
+
+# C++ dependencies
 find_package(Eigen3 REQUIRED)
 find_package(Sophus REQUIRED)
-find_package(fmt REQUIRED)
-find_package(generate_parameter_library REQUIRED)
 
 include_directories(include)
 
@@ -43,6 +45,7 @@ ament_target_dependencies(${PROJECT_NAME}
         geometry_msgs
         finenav_core
         finenav_util
+        generate_parameter_library
 )
 target_link_libraries(${PROJECT_NAME}
         Eigen3::Eigen
@@ -62,11 +65,6 @@ install(TARGETS ${PROJECT_NAME}
         RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include)
-# Install the generated parameter header so downstream packages can find it
-install(
-        FILES ${CMAKE_CURRENT_BINARY_DIR}/include/finenav_localizer/localizer_params.hpp
-        DESTINATION include/finenav_localizer
-)
 
 ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})
