@@ -6,12 +6,9 @@
   <maintainer email="wangjinghui@sjtu.edu.cn">Jinghui Wang</maintainer>
   <license>MPL-2.0</license>
 
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
-  <depend>rclcpp</depend>
-  <depend>finenav_core</depend>
-  <depend>finenav_util</depend>
-  <depend>Eigen3</depend>
+  <depend>finenav_engine</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

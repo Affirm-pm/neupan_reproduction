@@ -7,26 +7,25 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Release")
 endif()
 
-find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(finenav_core REQUIRED)
-find_package(finenav_util REQUIRED)
-find_package(Eigen3 REQUIRED)
-find_package(generate_parameter_library REQUIRED)
+find_package(ament_cmake_auto REQUIRED)
 
-include_directories(include)
+set(finenav_dependencies
+        finenav_core
+        finenav_localizer
+        finenav_navigator
+        finenav_motion_decorator
+        finenav_interfaces
+        finenav_util
+)
 
-add_subdirectory(smoke_test)
-add_subdirectory(control_layer_smoke)
-# TODO: re-enable when finenav_engine/navigator is fixed
-# add_subdirectory(interface_demo)
+foreach(dep IN LISTS finenav_dependencies)
+    find_package(${dep} REQUIRED)
+endforeach()
 
-install(DIRECTORY include/ DESTINATION include)
+ament_auto_find_build_dependencies()
 
-if(BUILD_TESTING)
-    find_package(ament_cmake_gtest REQUIRED)
-endif()
+add_subdirectory(getting_started)
+#add_subdirectory(create_custom_map)
+#add_subdirectory(create_custom_planner)
 
-ament_export_include_directories(include)
-ament_export_dependencies(generate_parameter_library)
-ament_package()
+ament_auto_package()
