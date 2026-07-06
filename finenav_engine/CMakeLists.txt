@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(finenav_engine) # Header-only
+project(finenav_engine)
 
 find_package(ament_cmake REQUIRED)
 
