@@ -19,12 +19,14 @@
 #include "finenav_core/plan/control_layer.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/navigator.hpp"
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
 
 class FineNavEngine {
 public:
-    // ── 生命周期 ─────────────────────────────────────────────────────────
+    // ── Lifecycle ──────────────────────────────────────────────────────────
+
     explicit FineNavEngine(const std::shared_ptr<rclcpp::Node>& node);
 
     FineNavEngine(const FineNavEngine&) = delete;
@@ -33,31 +35,80 @@ public:
     FineNavEngine& operator=(FineNavEngine&&) = default;
     ~FineNavEngine() = default;
 
-    // ── 访问器 ───────────────────────────────────────────────────────────
+    // ── Accessors ──────────────────────────────────────────────────────────
+
     const std::shared_ptr<rclcpp::Node>& getNode() const { return node_; }
     FineNavLocalizer* getLocalizer() { return localizer_.get(); }
     Navigator* getNavigator() { return navigator_.get(); }
 
-    // ── 模板成员（声明）──────────────────────────────────────────────────
+    // ── Map resources ──────────────────────────────────────────────────────
 
+    /**
+     * @brief Create or retrieve a named MapServer instance.
+     *        If a map with @p name already exists, returns the existing one.
+     * @tparam MapT  Must satisfy SpatialContainer.
+     * @return A shared_ptr to the MapServer (never null for a valid type match).
+     */
     template <typename MapT>
     [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<finenav::core::MapServer<MapT>> createMapResource(const std::string& name);
+    std::shared_ptr<finenav::core::MapServer<MapT>> createMapResource(
+        const std::string& name);
 
+    /**
+     * @brief Look up an existing MapServer by name.
+     * @return The MapServer, or nullptr if not found or type mismatch.
+     */
     template <typename MapT>
-    [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<finenav::core::MapServer<MapT>> getMapResource(const std::string& name);
+    [[nodiscard]]
+    std::shared_ptr<finenav::core::MapServer<MapT>> getMapResource(
+        const std::string& name);
 
+    /**
+     * @brief Remove a MapServer by name.
+     * @return true if a resource was removed.
+     */
+    bool removeMapResource(const std::string& name);
+
+    // ── Control layers ─────────────────────────────────────────────────────
+
+    /**
+     * @brief Create or retrieve a named ControlLayer instance.
+     *        If a layer with @p name already exists, returns it (ignoring
+     *        the template arguments — the first creation wins).
+     * @tparam PlannersT       PlannerSet<...> listing supported planners.
+     * @tparam ExecutionPolicy  SingleShotPolicy or ContinuousPolicy.
+     * @return A shared_ptr to the ControlLayer.
+     */
     template <typename PlannersT, typename ExecutionPolicy = finenav::core::SingleShotPolicy>
     [[nodiscard("ControlLayer was created but the handle was lost!")]]
     std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>> createControlLayer(
         const std::string& name, ExecutionPolicy policy = ExecutionPolicy{});
+
+    /**
+     * @brief Look up an existing ControlLayer by name.
+     * @return The layer, or nullptr if not found.
+     */
+    [[nodiscard]]
+    std::shared_ptr<void> getControlLayer(const std::string& name);
+
+    /**
+     * @brief Remove a ControlLayer by name.
+     * @return true if a layer was removed.
+     */
+    bool removeControlLayer(const std::string& name);
+
+    // ── Pipeline ───────────────────────────────────────────────────────────
 
     struct PipelineIO {
         std::string input_topic;
         std::string output_topic;
     };
 
+    /**
+     * @brief Wire one or more ControlLayers into a sequential pipeline.
+     *        The first layer receives @p io.input_topic; the last publishes
+     *        on @p io.output_topic.  Intermediate topics are auto-generated.
+     */
     template <typename... LayersT>
     void registerPipeline(const PipelineIO& io, std::shared_ptr<LayersT>... layers);
 
@@ -72,29 +123,28 @@ private:
 
     std::shared_ptr<rclcpp::Node> node_;
 
-    // ── Engine-level singletons ──────────────────────────────────────────
+    // ── Engine-level singletons ────────────────────────────────────────────
     std::unique_ptr<FineNavLocalizer> localizer_;
     std::unique_ptr<Navigator>        navigator_;
 
-    // ── Held resources ───────────────────────────────────────────────────
+    // ── Named resources ────────────────────────────────────────────────────
     std::vector<std::pair<std::string, std::any>> map_resources_;
-    std::vector<std::shared_ptr<void>>            held_layers_;
+    std::vector<std::pair<std::string, std::any>> layers_;
 };
 
-// ══════════════════════════════════════════════════════════════════════════
-//  构造函数
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+//  Constructor
+// ══════════════════════════════════════════════════════════════════════════════
 
 inline FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
     : node_(node) {
-    RCLCPP_INFO(node_->get_logger(), "Initializing...");
+    FINENAV_LOG_INFO(node_->get_logger(), "Initializing...");
 
     localizer_ = std::make_unique<FineNavLocalizer>(node_);
-    RCLCPP_INFO(node_->get_logger(), "Localizer ready.");
+    FINENAV_LOG_INFO(node_->get_logger(), "Localizer ready.");
 
     navigator_ = std::make_unique<Navigator>(node_);
 
-    // 注入机器人位姿提供函数，供 BT 条件节点（IsGoalReached、IsStuck 等）读取
     navigator_->set_robot_pose_provider([this]() -> geometry_msgs::msg::Pose {
         const auto& state = localizer_->getState();
         geometry_msgs::msg::Pose p;
@@ -109,7 +159,6 @@ inline FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
         return p;
     });
 
-    // 注入机器人速度提供函数，供 IsGoalReached 等条件节点读取
     navigator_->set_robot_twist_provider([this]() -> geometry_msgs::msg::Twist {
         const auto& state = localizer_->getState();
         geometry_msgs::msg::Twist t;
@@ -121,14 +170,14 @@ inline FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
         t.angular.z = state.omega.z();
         return t;
     });
-    RCLCPP_INFO(node_->get_logger(), "Navigator ready.");
+    FINENAV_LOG_INFO(node_->get_logger(), "Navigator ready.");
 
-    RCLCPP_INFO(node_->get_logger(), "All singletons initialized.");
+    FINENAV_LOG_INFO(node_->get_logger(), "All singletons initialized.");
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-//  模板成员函数实现
-// ══════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+//  Map resources
+// ══════════════════════════════════════════════════════════════════════════════
 
 template <typename MapT>
 std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::createMapResource(
@@ -155,17 +204,64 @@ std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapResource(
     return nullptr;
 }
 
+inline bool FineNavEngine::removeMapResource(const std::string& name) {
+    auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
+                           [&](const auto& pair) { return pair.first == name; });
+    if (it != map_resources_.end()) {
+        map_resources_.erase(it);
+        return true;
+    }
+    return false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Control layers
+// ══════════════════════════════════════════════════════════════════════════════
+
 template <typename PlannersT, typename ExecutionPolicy>
 std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>
 FineNavEngine::createControlLayer(const std::string& name, ExecutionPolicy policy) {
+    // Idempotent: return existing layer if already registered.
+    auto it = std::find_if(layers_.begin(), layers_.end(),
+                           [&](const auto& pair) { return pair.first == name; });
+    if (it != layers_.end()) {
+        auto existing = std::any_cast<
+            std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>>(
+            it->second);
+        FINENAV_LOG_WARN(node_->get_logger(),
+            "ControlLayer '{}' already exists — returning existing instance.", name);
+        return existing;
+    }
+
     auto layer = std::make_shared<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>(
         node_, name, std::move(policy));
     layer->set_robot_state_provider([this]() -> finenav::core::RobotState {
         return localizer_->getRobotState().value_or(finenav::core::RobotState{});
     });
-    held_layers_.push_back(layer);
+    layers_.emplace_back(name, layer);
     return layer;
 }
+
+inline std::shared_ptr<void> FineNavEngine::getControlLayer(const std::string& name) {
+    auto it = std::find_if(layers_.begin(), layers_.end(),
+                           [&](const auto& pair) { return pair.first == name; });
+    if (it != layers_.end()) return std::any_cast<std::shared_ptr<void>>(it->second);
+    return nullptr;
+}
+
+inline bool FineNavEngine::removeControlLayer(const std::string& name) {
+    auto it = std::find_if(layers_.begin(), layers_.end(),
+                           [&](const auto& pair) { return pair.first == name; });
+    if (it != layers_.end()) {
+        layers_.erase(it);
+        return true;
+    }
+    return false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Pipeline
+// ══════════════════════════════════════════════════════════════════════════════
 
 template <typename... LayersT>
 void FineNavEngine::registerPipeline(const PipelineIO& io,
@@ -190,9 +286,9 @@ void FineNavEngine::wire_layers(std::shared_ptr<FirstT> first,
                                 std::shared_ptr<SecondT> second,
                                 std::shared_ptr<RestT>... rest) {
     std::string internal_topic = first->getName() + "_to_" + second->getName();
-    RCLCPP_WARN_STREAM(node_->get_logger(),
-        "Connecting " << first->getName() << " → " << second->getName()
-        << " via topic: " << internal_topic);
+    FINENAV_LOG_INFO(node_->get_logger(),
+        "Connecting {} -> {} via topic: {}",
+        first->getName(), second->getName(), internal_topic);
     first->setOutputTopic(internal_topic);
     second->setInputTopic(internal_topic);
     wire_layers(second, rest...);
