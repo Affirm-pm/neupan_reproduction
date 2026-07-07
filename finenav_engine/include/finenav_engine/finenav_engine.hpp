@@ -4,11 +4,8 @@
 
 #pragma once
 
-#include <algorithm>
-#include <any>
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include <geometry_msgs/msg/pose.hpp>
@@ -23,6 +20,19 @@
 
 namespace finenav {
 
+/**
+ * @brief FineNavEngine — factory + connector for the navigation framework.
+ *
+ * ## Usage flow
+ * 1. createMap<MapT>(name)          — user keeps the returned shared_ptr
+ * 2. createLayer<PlannersT>(name)   — user keeps the returned shared_ptr
+ * 3. layer->bind_map_view(map, ...) — user connects map to layer
+ * 4. connect(in, layer, out)        — engine wires the pipeline topics
+ *
+ * The engine does NOT store user resources.  The user owns the shared_ptrs
+ * and is responsible for their lifetime.  Templates parameters stay at the
+ * call site and never propagate through the engine's own type.
+ */
 class FineNavEngine {
 public:
     // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -41,81 +51,44 @@ public:
     FineNavLocalizer* getLocalizer() { return localizer_.get(); }
     Navigator* getNavigator() { return navigator_.get(); }
 
-    // ── Map resources ──────────────────────────────────────────────────────
+    // ── Factory: map ──────────────────────────────────────────────────────
 
     /**
-     * @brief Create or retrieve a named MapServer instance.
-     *        If a map with @p name already exists, returns the existing one.
+     * @brief Create a named MapServer.  The caller owns the returned pointer.
      * @tparam MapT  Must satisfy SpatialContainer.
-     * @return A shared_ptr to the MapServer (never null for a valid type match).
      */
     template <typename MapT>
-    [[nodiscard("Map resource was created but the handle was lost!")]]
-    std::shared_ptr<finenav::core::MapServer<MapT>> createMapResource(
-        const std::string& name);
+    [[nodiscard("MapServer created but handle was lost!")]]
+    std::shared_ptr<finenav::core::MapServer<MapT>> createMapServer(const std::string& name);
+
+    // ── Factory: layer ────────────────────────────────────────────────────
 
     /**
-     * @brief Look up an existing MapServer by name.
-     * @return The MapServer, or nullptr if not found or type mismatch.
-     */
-    template <typename MapT>
-    [[nodiscard]]
-    std::shared_ptr<finenav::core::MapServer<MapT>> getMapResource(
-        const std::string& name);
-
-    /**
-     * @brief Remove a MapServer by name.
-     * @return true if a resource was removed.
-     */
-    bool removeMapResource(const std::string& name);
-
-    // ── Control layers ─────────────────────────────────────────────────────
-
-    /**
-     * @brief Create or retrieve a named ControlLayer instance.
-     *        If a layer with @p name already exists, returns it (ignoring
-     *        the template arguments — the first creation wins).
+     * @brief Create a named ControlLayer.  The caller owns the returned pointer.
      * @tparam PlannersT       PlannerSet<...> listing supported planners.
      * @tparam ExecutionPolicy  SingleShotPolicy or ContinuousPolicy.
-     * @return A shared_ptr to the ControlLayer.
      */
     template <typename PlannersT, typename ExecutionPolicy = finenav::core::SingleShotPolicy>
-    [[nodiscard("ControlLayer was created but the handle was lost!")]]
+    [[nodiscard("ControlLayer created but handle was lost!")]]
     std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>> createControlLayer(
         const std::string& name, ExecutionPolicy policy = ExecutionPolicy{});
 
-    /**
-     * @brief Look up an existing ControlLayer by name.
-     * @return The layer, or nullptr if not found.
-     */
-    [[nodiscard]]
-    std::shared_ptr<void> getControlLayer(const std::string& name);
+    // ── Connector ─────────────────────────────────────────────────────────
 
-    /**
-     * @brief Remove a ControlLayer by name.
-     * @return true if a layer was removed.
-     */
-    bool removeControlLayer(const std::string& name);
-
-    // ── Pipeline ───────────────────────────────────────────────────────────
-
-    struct PipelineIO {
-        std::string input_topic;
-        std::string output_topic;
+    struct Pipeline {
+        std::string input;
+        std::string output;
     };
 
     /**
      * @brief Wire one or more ControlLayers into a sequential pipeline.
-     *        The first layer receives @p io.input_topic; the last publishes
-     *        on @p io.output_topic.  Intermediate topics are auto-generated.
+     *        The first layer subscribes to @p p.input; the last publishes
+     *        on @p p.output.  Intermediate topics are auto-generated.
      */
     template <typename... LayersT>
-    void registerPipeline(const PipelineIO& io, std::shared_ptr<LayersT>... layers);
+    void connectPipeline(const Pipeline& p, std::shared_ptr<LayersT>... layers);
 
 private:
-    template <typename T>
-    void wire_layers(std::shared_ptr<T>) {}
-
     template <typename FirstT, typename SecondT, typename... RestT>
     void wire_layers(std::shared_ptr<FirstT> first,
                      std::shared_ptr<SecondT> second,
@@ -126,10 +99,6 @@ private:
     // ── Engine-level singletons ────────────────────────────────────────────
     std::unique_ptr<FineNavLocalizer> localizer_;
     std::unique_ptr<Navigator>        navigator_;
-
-    // ── Named resources ────────────────────────────────────────────────────
-    std::vector<std::pair<std::string, std::any>> map_resources_;
-    std::vector<std::pair<std::string, std::any>> layers_;
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -176,103 +145,45 @@ inline FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  Map resources
+//  Factory: map
 // ══════════════════════════════════════════════════════════════════════════════
 
 template <typename MapT>
-std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::createMapResource(
+std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::createMapServer(
     const std::string& name) {
-    auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
-                           [&](const auto& pair) { return pair.first == name; });
-    if (it == map_resources_.end()) {
-        auto new_map = std::make_shared<finenav::core::MapServer<MapT>>(
-            node_, name, localizer_.get());
-        map_resources_.emplace_back(name, new_map);
-        return new_map;
-    }
-    return std::any_cast<std::shared_ptr<finenav::core::MapServer<MapT>>>(it->second);
-}
-
-template <typename MapT>
-std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapResource(
-    const std::string& name) {
-    auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
-                           [&](const auto& pair) { return pair.first == name; });
-    if (it != map_resources_.end()) {
-        return std::any_cast<std::shared_ptr<finenav::core::MapServer<MapT>>>(it->second);
-    }
-    return nullptr;
-}
-
-inline bool FineNavEngine::removeMapResource(const std::string& name) {
-    auto it = std::find_if(map_resources_.begin(), map_resources_.end(),
-                           [&](const auto& pair) { return pair.first == name; });
-    if (it != map_resources_.end()) {
-        map_resources_.erase(it);
-        return true;
-    }
-    return false;
+    return std::make_shared<finenav::core::MapServer<MapT>>(
+        node_, name, localizer_.get());
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  Control layers
+//  Factory: layer
 // ══════════════════════════════════════════════════════════════════════════════
 
 template <typename PlannersT, typename ExecutionPolicy>
 std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>
 FineNavEngine::createControlLayer(const std::string& name, ExecutionPolicy policy) {
-    // Idempotent: return existing layer if already registered.
-    auto it = std::find_if(layers_.begin(), layers_.end(),
-                           [&](const auto& pair) { return pair.first == name; });
-    if (it != layers_.end()) {
-        auto existing = std::any_cast<
-            std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>>(
-            it->second);
-        FINENAV_LOG_WARN(node_->get_logger(),
-            "ControlLayer '{}' already exists — returning existing instance.", name);
-        return existing;
-    }
-
     auto layer = std::make_shared<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>(
         node_, name, std::move(policy));
     layer->set_robot_state_provider([this]() -> finenav::core::RobotState {
         return localizer_->getRobotState().value_or(finenav::core::RobotState{});
     });
-    layers_.emplace_back(name, layer);
     return layer;
 }
 
-inline std::shared_ptr<void> FineNavEngine::getControlLayer(const std::string& name) {
-    auto it = std::find_if(layers_.begin(), layers_.end(),
-                           [&](const auto& pair) { return pair.first == name; });
-    if (it != layers_.end()) return std::any_cast<std::shared_ptr<void>>(it->second);
-    return nullptr;
-}
-
-inline bool FineNavEngine::removeControlLayer(const std::string& name) {
-    auto it = std::find_if(layers_.begin(), layers_.end(),
-                           [&](const auto& pair) { return pair.first == name; });
-    if (it != layers_.end()) {
-        layers_.erase(it);
-        return true;
-    }
-    return false;
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
-//  Pipeline
+//  Connector
 // ══════════════════════════════════════════════════════════════════════════════
 
 template <typename... LayersT>
-void FineNavEngine::registerPipeline(const PipelineIO& io,
-                                     std::shared_ptr<LayersT>... layers) {
-    static_assert(sizeof...(layers) >= 1, "Pipeline must have at least one layer!");
+void FineNavEngine::connectPipeline(const Pipeline& p,
+                            std::shared_ptr<LayersT>... layers) {
+    static_assert(sizeof...(layers) >= 1, "connectPipeline() requires at least one layer!");
     auto layer_tuple = std::make_tuple(layers...);
 
-    std::get<0>(layer_tuple)->setInputTopic(io.input_topic);
+    std::get<0>(layer_tuple)->setInputTopic(p.input);
 
     constexpr auto last_idx = sizeof...(layers) - 1;
-    std::get<last_idx>(layer_tuple)->setOutputTopic(io.output_topic);
+    std::get<last_idx>(layer_tuple)->setOutputTopic(p.output);
 
     if constexpr (sizeof...(layers) >= 2) {
         wire_layers(layers...);
