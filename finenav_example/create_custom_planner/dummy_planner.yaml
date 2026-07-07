@@ -1,7 +1,13 @@
 dummy_planner:
-  max_iterations:
-    type: int
-    default_value: 1000
-    description: "Maximum planning iterations"
+  linear_speed:
+    type: double
+    default_value: 0.5
+    description: "Forward speed (m/s)"
     validation:
-      gt<>: [0]
+      gt<>: [0.0]
+  angular_speed:
+    type: double
+    default_value: 1.0
+    description: "Angular speed (rad/s)"
+    validation:
+      gt<>: [0.0]

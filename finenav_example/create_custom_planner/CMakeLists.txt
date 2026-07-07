@@ -1,7 +1,11 @@
+find_package(generate_parameter_library REQUIRED)
+
 generate_parameter_library(dummy_planner_params dummy_planner.yaml)
 
-add_executable(create_custom_planner create_custom_planner.cpp)
-target_include_directories(create_custom_planner PRIVATE ${CMAKE_SOURCE_DIR}/include)
-ament_target_dependencies(create_custom_planner rclcpp finenav_core finenav_util finenav_engine)
-target_link_libraries(create_custom_planner dummy_planner_params Eigen3::Eigen)
-install(TARGETS create_custom_planner DESTINATION lib/${PROJECT_NAME})
+add_library(dummy_planner SHARED src/dummy_planner.cpp)
+target_include_directories(dummy_planner PUBLIC include)
+ament_target_dependencies(dummy_planner finenav_core)
+target_link_libraries(dummy_planner dummy_planner_params)
+
+install(TARGETS dummy_planner ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
+install(DIRECTORY include/ DESTINATION include)
