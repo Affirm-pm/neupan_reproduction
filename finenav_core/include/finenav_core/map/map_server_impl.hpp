@@ -13,15 +13,10 @@ namespace finenav::core {
 // --- MapServer::declare_parameters --------------------------------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::declare_parameters() {
-    // update_rate_hz
+    // update_rate_hz (manual validation — no ROS range to avoid to_value=0.0 bug)
     {
         auto desc = rcl_interfaces::msg::ParameterDescriptor{};
         desc.description = "Sensor fusion update rate (Hz). Must be > 0.0.";
-        rcl_interfaces::msg::FloatingPointRange range;
-        range.from_value = 0.0;
-        range.to_value   = 0.0;  // no upper bound
-        range.step       = 0.0;
-        desc.floating_point_range = {range};
         pnode_->declare_parameter<double>("update_rate_hz", update_rate_hz_, desc);
         update_rate_hz_ = pnode_->get_parameter("update_rate_hz").as_double();
         if (update_rate_hz_ <= 0.0) {
@@ -35,11 +30,6 @@ void MapServer<MapT>::declare_parameters() {
     {
         auto desc = rcl_interfaces::msg::ParameterDescriptor{};
         desc.description = "Map window shift check rate (Hz). Must be > 0.0.";
-        rcl_interfaces::msg::FloatingPointRange range;
-        range.from_value = 0.0;
-        range.to_value   = 0.0;
-        range.step       = 0.0;
-        desc.floating_point_range = {range};
         pnode_->declare_parameter<double>("shift_rate_hz", shift_rate_hz_, desc);
         shift_rate_hz_ = pnode_->get_parameter("shift_rate_hz").as_double();
         if (shift_rate_hz_ <= 0.0) {

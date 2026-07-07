@@ -5,8 +5,6 @@
 #pragma once
 
 #include <rclcpp/rclcpp.hpp>
-#include <rcl_interfaces/msg/parameter_descriptor.hpp>
-#include <rcl_interfaces/msg/floating_point_range.hpp>
 
 namespace finenav::core {
 
@@ -36,12 +34,6 @@ struct ContinuousPolicy {
         rcl_interfaces::msg::ParameterDescriptor desc;
         desc.description =
             "Control loop frequency for ContinuousPolicy (Hz). Must be > 0.0.";
-
-        rcl_interfaces::msg::FloatingPointRange range;
-        range.from_value = 0.0;    // closest to strict > 0 that ROS supports
-        range.to_value   = 0.0;    // 0.0 = no upper bound
-        range.step       = 0.0;
-        desc.floating_point_range = {range};
 
         node.declare_parameter<double>("frequency_hz", frequency_hz, desc);
         frequency_hz = node.get_parameter("frequency_hz").as_double();
