@@ -65,11 +65,12 @@ public:
      * @brief Bind a MapServer to this layer so planners can read the map.
      *
      * At every plan() call the framework acquires a read-lock from @p server,
-     * passes the locked const MapT& to @p builder, and holds the lock until
-     * plan() returns via BoundMapView::lock_guard.
+     * passes the locked const MapT& to @p builder together with the currently
+     * active planner name, and holds the lock until plan() returns via
+     * BoundMapView::lock_guard.
      *
+     * @param builder  (const MapT&, const std::string& active_planner_id) → MapViewsVariant
      * @tparam MapT      Must satisfy SpatialContainer.
-     * @tparam BuilderFn (const MapT&) → MapViewsVariant-compatible
      */
     template <typename MapT, typename BuilderFn>
     void bind_map_view(std::shared_ptr<MapServer<MapT>> server, BuilderFn&& builder);
@@ -88,7 +89,7 @@ private:
         std::shared_ptr<void>  lock_guard;
     };
 
-    using MapViewFactory = std::function<BoundMapView()>;
+    using MapViewFactory = std::function<BoundMapView(const std::string& active_planner_id)>;
 
     // ── Methods ────────────────────────────────────────────────────────────
 

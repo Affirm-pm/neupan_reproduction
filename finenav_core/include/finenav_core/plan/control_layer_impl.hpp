@@ -163,7 +163,7 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
         }
 
         auto& ctx   = opt_ctx.value();
-        auto  bound = map_view_factory_();
+        auto  bound = map_view_factory_(active_planner_id_);
 
         using ExpectedPtrType = std::shared_ptr<typename PlannerT::IMapView>;
         if (auto* ptr = std::get_if<ExpectedPtrType>(&bound.view_variant)) {
@@ -311,24 +311,22 @@ void ControlLayer<PlannersT, ExecutionPolicy>::bind_map_view(
 {
     static_assert(SpatialContainer<MapT>, // Use `static_assert` instead of `requires` to prevent clangd error.
         "MapT must satisfy SpatialContainer.");
-    static_assert(std::is_invocable_v<BuilderFn, const MapT&>,
-        "BuilderFn must be callable with (const MapT&).");
-    static_assert(std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>,
+    static_assert(std::is_invocable_v<BuilderFn, const MapT&, const std::string&>,
+        "BuilderFn must be callable with (const MapT&, const std::string& active_planner_id).");
+    static_assert(std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&, const std::string&>,
                                       MapViewsVariant>,
         "BuilderFn must return a type convertible to MapViewsVariant.");
-    std::function<MapViewsVariant(const MapT&)> erased_builder =
+    std::function<MapViewsVariant(const MapT&, const std::string&)> erased_builder =
         std::forward<BuilderFn>(builder);
     std::weak_ptr<MapServer<MapT>> weak_server = server;
 
-    map_view_factory_ = [weak_server, erased_builder = std::move(erased_builder)]() -> BoundMapView
-    {
+    map_view_factory_ = [weak_server,
+                         erased_builder = std::move(erased_builder)]
+                        (const std::string& active_planner_id) -> BoundMapView {
         auto srv = weak_server.lock();
-        if (!srv) {
-            return BoundMapView{};
-        }
-
+        if (!srv) { return BoundMapView{}; }
         auto locked = std::make_shared<LockedMapRO<MapT>>(srv->getLockedReadView());
-        MapViewsVariant view_variant = erased_builder(locked->get());
+        MapViewsVariant view_variant = erased_builder(locked->get(), active_planner_id);
         return BoundMapView{std::move(view_variant), std::move(locked)};
     };
 }
