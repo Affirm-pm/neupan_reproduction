@@ -183,10 +183,7 @@ inline bool FineNavEngine::removeMapServer(const std::string& name) {
 template <typename... Planners, typename PolicyT>
 void FineNavEngine::createControlLayer(const std::string& name, PolicyT policy) {
     auto layer = std::make_shared<finenav::core::ControlLayer<Planners...>>(
-        node_, name, std::move(policy));
-    layer->set_robot_state_provider([this]() -> finenav::core::RobotState {
-        return localizer_->getRobotState().value_or(finenav::core::RobotState{});
-    });
+        node_, name, std::move(policy), localizer_.get());
     layers_[name] = std::any(std::move(layer));
 }
 

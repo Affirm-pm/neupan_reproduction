@@ -45,7 +45,6 @@ public:
     using ActionServer    = finenav::util::SimpleActionServer<ActionT>;
     using PrePlanCallback = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback = std::function<bool(PostPlanContext&)>;
-    using RobotStateProvider = std::function<RobotState()>;
     using ExecutionPolicyVariant = std::variant<SingleShotPolicy, ContinuousPolicy>;
 
     // ── Construction ───────────────────────────────────────────────────────
@@ -53,7 +52,8 @@ public:
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,
         const std::string& layer_name,
-        ExecutionPolicyVariant policy = SingleShotPolicy{});
+        ExecutionPolicyVariant policy = SingleShotPolicy{},
+        IRobotStateProvider* state_provider = nullptr);
 
     // ── Configuration ──────────────────────────────────────────────────────
 
@@ -76,9 +76,8 @@ public:
     template <typename MapT, typename BuilderFn>
     void bind_map_view(std::shared_ptr<MapServer<MapT>> server, BuilderFn&& builder);
 
-    void set_on_pre_plan(PrePlanCallback cb)               { on_pre_plan_           = std::move(cb); }
-    void set_on_post_plan(PostPlanCallback cb)             { on_post_plan_          = std::move(cb); }
-    void set_robot_state_provider(RobotStateProvider prov) { robot_state_provider_  = std::move(prov); }
+    void set_on_pre_plan(PrePlanCallback cb)   { on_pre_plan_  = std::move(cb); }
+    void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
 
     const std::string& get_active_planner_id() const { return active_planner_id_; }
 
@@ -136,10 +135,10 @@ private:
 
     // ── Callbacks ──────────────────────────────────────────────────────────
 
-    MapViewFactory      map_view_factory_;
-    PrePlanCallback     on_pre_plan_;
-    PostPlanCallback    on_post_plan_;
-    RobotStateProvider  robot_state_provider_;
+    MapViewFactory              map_view_factory_;
+    PrePlanCallback             on_pre_plan_;
+    PostPlanCallback            on_post_plan_;
+    IRobotStateProvider*        state_provider_{nullptr};
 
     // ── Data ───────────────────────────────────────────────────────────────
 

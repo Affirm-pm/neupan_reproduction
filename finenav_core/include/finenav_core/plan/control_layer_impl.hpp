@@ -20,8 +20,10 @@ template <typename... Planners>
 ControlLayer<Planners...>::ControlLayer(
     rclcpp::Node::SharedPtr node,
     const std::string& layer_name,
-    ExecutionPolicyVariant policy)
-    : node_(node), layer_name_(layer_name), policy_(std::move(policy))
+    ExecutionPolicyVariant policy,
+    IRobotStateProvider* state_provider)
+    : node_(node), layer_name_(layer_name), policy_(std::move(policy)),
+      state_provider_(state_provider)
 {
     rclcpp::NodeOptions pnode_opts;
     pnode_opts.append_parameter_override(
@@ -121,13 +123,19 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
         FINENAV_LOG_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
         return false;
     }
-    if (!robot_state_provider_) {
+    if (!state_provider_) {
         FINENAV_LOG_ERROR(pnode_->get_logger(),
-            "RobotStateProvider not set! Call set_robot_state_provider() first.");
+            "IRobotStateProvider not set — cannot plan without robot state.");
         return false;
     }
 
-    RobotState current_robot_state = robot_state_provider_();
+    auto maybe_state = state_provider_->getRobotState();
+    if (!maybe_state.has_value()) {
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
+            "Failed to get current robot state — localizer may not be initialized yet.");
+        return false;
+    }
+    RobotState current_robot_state = *maybe_state;
 
     finenav_interfaces::msg::Trajectory current_ref_msg;
     {
