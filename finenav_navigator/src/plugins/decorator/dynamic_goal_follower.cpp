@@ -8,7 +8,7 @@
 
 #include "finenav_navigator/plugins/decorator/dynamic_goal_follower.hpp"
 
-namespace finenav
+namespace finenav::navigator
 {
 
 DynamicGoalFollower::DynamicGoalFollower(
@@ -141,7 +141,7 @@ void DynamicGoalFollower::onTargetPose(
   last_msg_received_ = true;
 }
 
-}  // namespace finenav
+}  // namespace finenav::navigator
 
 #include "finenav_navigator/thirdparty/plugins.hpp"
-CreateRosNodePlugin(finenav::DynamicGoalFollower, "DynamicGoalFollower");
+CreateRosNodePlugin(finenav::navigator::DynamicGoalFollower, "DynamicGoalFollower");

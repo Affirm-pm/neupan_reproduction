@@ -6,7 +6,7 @@
 
 #include <Eigen/Core>
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  KalmanFilter  —  standard linear discrete-time KF (dynamic matrices)
@@ -109,5 +109,5 @@ protected:
     Eigen::MatrixXd P_;   ///< covariance    (dim_x × dim_x)
 };
 
-}  // namespace finenav
+}  // namespace finenav::localizer
 

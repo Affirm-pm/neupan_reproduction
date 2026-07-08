@@ -7,7 +7,7 @@
 #include <string>
 #include "behaviortree_cpp/control_node.h"
 
-namespace finenav
+namespace finenav::navigator
 {
 /**
  * @brief The RecoveryNode has only two children and returns SUCCESS if and only if the first child
@@ -72,4 +72,4 @@ private:
   void halt() override;
 };
 
-}  // namespace finenav
+}  // namespace finenav::navigator

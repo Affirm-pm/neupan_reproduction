@@ -8,9 +8,9 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include "finenav_util/common/log_macros.hpp"
 
-namespace finenav {
+namespace finenav::navigator {
 
-Navigator::Navigator(rclcpp::Node::SharedPtr parent_node,
+BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
                      finenav::core::IRobotStateProvider* state_provider)
     : state_provider_(state_provider)
 {
@@ -32,7 +32,7 @@ Navigator::Navigator(rclcpp::Node::SharedPtr parent_node,
     action_server_ = std::make_unique<ActionServer>(
         pnode_,
         params_.action_name,
-        std::bind(&Navigator::execute, this));
+        std::bind(&BtNavigator::execute, this));
 
     // ── 初始化行为树引擎 ──────────────────────────────────────────────────────
     bt_engine_ = std::make_unique<BehaviorTreeEngine>(pnode_);
@@ -45,7 +45,7 @@ Navigator::Navigator(rclcpp::Node::SharedPtr parent_node,
     FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Initialized and spinning.");
 }
 
-void Navigator::execute()
+void BtNavigator::execute()
 {
     FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Executing action...");
 
@@ -125,4 +125,4 @@ void Navigator::execute()
     }
 }
 
-} // namespace finenav
+} // namespace finenav::navigator

@@ -15,10 +15,10 @@
 
 #include "finenav_navigator/navigator_params.hpp"
 
-namespace finenav {
+namespace finenav::navigator {
 
 /**
- * @brief Navigator — 行为树驱动的任务级导航器。
+ * @brief BtNavigator — 行为树驱动的任务级导航器。
  *
  * 遵循框架 NodeThread 设计模式：
  *  - 内部持有私有子节点 pnode_（名称固定为 "finenav_navigator"）
@@ -28,19 +28,19 @@ namespace finenav {
  * @param parent_node    宿主节点（用于获取 use_sim_time 及命名空间继承）
  * @param state_provider 机器人状态提供者（由 FineNavEngine 自动注入）
  */
-class Navigator {
+class BtNavigator {
 public:
     using ActionT      = finenav_interfaces::action::NavigateToPose;
     using ActionServer = finenav::util::SimpleActionServer<ActionT>;
 
-    explicit Navigator(rclcpp::Node::SharedPtr parent_node,
+    explicit BtNavigator(rclcpp::Node::SharedPtr parent_node,
                        finenav::core::IRobotStateProvider* state_provider = nullptr);
 
     // 禁止复制
-    Navigator(const Navigator&)            = delete;
-    Navigator& operator=(const Navigator&) = delete;
+    BtNavigator(const BtNavigator&)            = delete;
+    BtNavigator& operator=(const BtNavigator&) = delete;
 
-    ~Navigator() = default;
+    ~BtNavigator() = default;
 
     std::string getActionName() const { return params_.action_name; }
 
@@ -62,5 +62,5 @@ private:
     BT::Tree tree_;
 };
 
-} // namespace finenav
+} // namespace finenav::navigator
 

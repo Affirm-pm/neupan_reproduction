@@ -7,7 +7,7 @@
 
 #include "finenav_navigator/plugins/decorator/rate_controller.hpp"
 
-namespace finenav
+namespace finenav::navigator
 {
 
 RateController::RateController(
@@ -72,10 +72,10 @@ BT::NodeStatus RateController::tick()
   return status();
 }
 
-}  // namespace finenav
+}  // namespace finenav::navigator
 
 #include "behaviortree_cpp/bt_factory.h"
 BT_REGISTER_NODES(factory)
 {
-  factory.registerNodeType<finenav::RateController>("RateController");
+  factory.registerNodeType<finenav::navigator::RateController>("RateController");
 }

@@ -12,7 +12,7 @@
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  Constructor
@@ -789,6 +789,6 @@ NavStateD FineNavLocalizer::force2DOutput(const NavStateD& s) const
     return out;
 }
 
-}  // namespace finenav
+}  // namespace finenav::localizer
 
 

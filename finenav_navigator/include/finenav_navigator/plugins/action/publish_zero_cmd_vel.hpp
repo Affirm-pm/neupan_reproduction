@@ -7,7 +7,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include "finenav_navigator/thirdparty/bt_topic_pub_node.hpp"
 
-namespace finenav {
+namespace finenav::navigator {
 
 /**
  * @brief PublishZeroCmdVel — 向指定话题发布一条零速度指令（linear/angular 全为 0）。
@@ -40,5 +40,5 @@ public:
     }
 };
 
-} // namespace finenav
+} // namespace finenav::navigator
 

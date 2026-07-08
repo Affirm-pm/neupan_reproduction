@@ -24,7 +24,7 @@
 #include "finenav_util/ros/node_thread.hpp"
 #include "finenav_localizer/localizer_params.hpp"
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  FineNavLocalizer  —  timer-driven ESKF localizer with time-delay compensation
@@ -201,5 +201,5 @@ private:
     rclcpp::Logger logger_;
 };
 
-}  // namespace finenav
+}  // namespace finenav::localizer
 

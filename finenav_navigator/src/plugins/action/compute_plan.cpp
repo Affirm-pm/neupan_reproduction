@@ -5,7 +5,7 @@
 #include "finenav_navigator/plugins/action/compute_plan.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
-namespace finenav {
+namespace finenav::navigator {
 
 ComputePlanAction::ComputePlanAction(
     const std::string& name,
@@ -51,4 +51,4 @@ BT::NodeStatus ComputePlanAction::onResultReceived(const WrappedResult& result) 
 }
 
 #include "finenav_navigator/thirdparty/plugins.hpp"
-CreateRosNodePlugin(finenav::ComputePlanAction, "ComputePlan");
+CreateRosNodePlugin(finenav::navigator::ComputePlanAction, "ComputePlan");

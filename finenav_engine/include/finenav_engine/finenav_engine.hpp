@@ -51,8 +51,8 @@ public:
     // ── Accessors ──────────────────────────────────────────────────────────
 
     const std::shared_ptr<rclcpp::Node>& getNode() const { return node_; }
-    FineNavLocalizer* getLocalizer() { return localizer_.get(); }
-    Navigator* getNavigator() { return navigator_.get(); }
+    finenav::localizer::FineNavLocalizer* getLocalizer() { return localizer_.get(); }
+    finenav::navigator::BtNavigator* getNavigator() { return navigator_.get(); }
 
     // ── Factory: map ──────────────────────────────────────────────────────
 
@@ -145,8 +145,8 @@ private:
     std::unordered_map<std::string, std::any> layers_;
 
     // ── Engine-level singletons ────────────────────────────────────────────
-    std::unique_ptr<FineNavLocalizer>  localizer_;
-    std::unique_ptr<Navigator>         navigator_;
+    std::unique_ptr<finenav::localizer::FineNavLocalizer> localizer_;
+    std::unique_ptr<finenav::navigator::BtNavigator>        navigator_;
     rclcpp_action::Client<finenav_interfaces::action::NavigateToPose>::SharedPtr nav_client_;
 };
 

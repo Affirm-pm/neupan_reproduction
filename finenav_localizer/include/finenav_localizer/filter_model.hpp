@@ -7,7 +7,7 @@
 #include <Eigen/Core>
 #include <sophus/so3.hpp>
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  Dimension of the error-state vector: [δp(3) | δθ(3) | δv(3) | δω(3)]
@@ -292,4 +292,4 @@ public:
 using NavigationModelF = NavigationModel<float>;
 using NavigationModelD = NavigationModel<double>;
 
-}  // namespace finenav
+}  // namespace finenav::localizer

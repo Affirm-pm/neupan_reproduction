@@ -5,7 +5,7 @@
 #include <string>
 #include "finenav_navigator/plugins/control/recovery_node.hpp"
 
-namespace finenav
+namespace finenav::navigator
 {
 
 RecoveryNode::RecoveryNode(
@@ -115,10 +115,10 @@ void RecoveryNode::halt()
   current_child_idx_ = 0;
 }
 
-}  // namespace finenav
+}  // namespace finenav::navigator
 
 #include "behaviortree_cpp/bt_factory.h"
 BT_REGISTER_NODES(factory)
 {
-  factory.registerNodeType<finenav::RecoveryNode>("RecoveryNode");
+  factory.registerNodeType<finenav::navigator::RecoveryNode>("RecoveryNode");
 }

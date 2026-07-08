@@ -15,7 +15,7 @@
 #include "finenav_localizer/filter_model.hpp"
 #include "finenav_localizer/kalman_filter/time_delay_kalman_filter.hpp"
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  ESKF<Model>  —  Error-State Kalman Filter with time-delay compensation
@@ -449,5 +449,5 @@ private:
 using ESKFd = ESKF<NavigationModel<double>>;
 using ESKFf = ESKF<NavigationModel<float>>;
 
-}  // namespace finenav
+}  // namespace finenav::localizer
 

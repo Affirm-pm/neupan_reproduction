@@ -8,7 +8,7 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "finenav_util/common/log_macros.hpp"
 
-namespace finenav {
+namespace finenav::navigator {
 
 BehaviorTreeEngine::BehaviorTreeEngine(rclcpp::Node::SharedPtr node)
   : logger_(node->get_logger())

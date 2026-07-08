@@ -9,7 +9,7 @@
 #include "finenav_interfaces/action/compute_plan.hpp"
 #include "finenav_navigator/thirdparty/bt_action_node.hpp"
 
-namespace finenav {
+namespace finenav::navigator {
 
 /**
  * @brief A behavior tree ActionNode that requests a plan from finenav_interfaces::action::ComputePlan action server

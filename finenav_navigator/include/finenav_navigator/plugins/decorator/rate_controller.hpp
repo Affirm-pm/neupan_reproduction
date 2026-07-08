@@ -9,7 +9,7 @@
 
 #include "behaviortree_cpp/decorator_node.h"
 
-namespace finenav
+namespace finenav::navigator
 {
 
 /**
@@ -63,4 +63,4 @@ private:
   bool first_time_;
 };
 
-}  // namespace finenav
+}  // namespace finenav::navigator

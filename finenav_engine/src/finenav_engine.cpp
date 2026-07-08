@@ -19,10 +19,10 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
     : node_(node) {
     FINENAV_LOG_INFO(node_->get_logger(), "Initializing...");
 
-    localizer_ = std::make_unique<FineNavLocalizer>(node_);
+    localizer_ = std::make_unique<finenav::localizer::FineNavLocalizer>(node_);
     FINENAV_LOG_INFO(node_->get_logger(), "Localizer ready.");
 
-    navigator_ = std::make_unique<Navigator>(node_, localizer_.get());
+    navigator_ = std::make_unique<finenav::navigator::BtNavigator>(node_, localizer_.get());
     FINENAV_LOG_INFO(node_->get_logger(), "Navigator ready.");
 
     nav_client_ = rclcpp_action::create_client<NavAction>(
