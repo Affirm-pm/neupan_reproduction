@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.22)
 project(finenav_engine)
 
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 set(finenav_dependencies
         finenav_core
@@ -16,11 +19,31 @@ foreach(dep IN LISTS finenav_dependencies)
     find_package(${dep} REQUIRED)
 endforeach()
 
+add_library(finenav_engine SHARED
+        src/finenav_engine.cpp
+)
+ament_target_dependencies(finenav_engine
+        rclcpp
+        rclcpp_action
+        geometry_msgs
+        ${finenav_dependencies}
+)
+target_include_directories(finenav_engine PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+
+install(TARGETS finenav_engine
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
 install(DIRECTORY include/
         DESTINATION include/
 )
 
 ament_export_include_directories(include)
+ament_export_libraries(finenav_engine)
 ament_export_dependencies(${finenav_dependencies})
 
 ament_package()

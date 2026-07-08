@@ -8,18 +8,17 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
-#include <rclcpp/rclcpp.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
-#include <geometry_msgs/msg/pose.hpp>
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
+#include "geometry_msgs/msg/pose.hpp"
+#include "finenav_interfaces/action/navigate_to_pose.hpp"
 
 #include "finenav_core/map/map_server.hpp"
 #include "finenav_core/plan/control_layer.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/navigator.hpp"
 #include "finenav_util/common/log_macros.hpp"
-#include "finenav_interfaces/action/navigate_to_pose.hpp"
 
 namespace finenav {
 
@@ -119,9 +118,6 @@ public:
 
     // ── Navigation control ──────────────────────────────────────────────────
 
-    using NavAction  = finenav_interfaces::action::NavigateToPose;
-    using NavClient  = rclcpp_action::Client<NavAction>;
-
     /**
      * @brief Start navigating to a goal pose.
      * @param goal   Target pose in the world frame.
@@ -151,53 +147,8 @@ private:
     // ── Engine-level singletons ────────────────────────────────────────────
     std::unique_ptr<FineNavLocalizer>  localizer_;
     std::unique_ptr<Navigator>         navigator_;
-    NavClient::SharedPtr               nav_client_;
+    rclcpp_action::Client<finenav_interfaces::action::NavigateToPose>::SharedPtr nav_client_;
 };
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  Constructor
-// ══════════════════════════════════════════════════════════════════════════════
-
-inline FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
-    : node_(node) {
-    FINENAV_LOG_INFO(node_->get_logger(), "Initializing...");
-
-    localizer_ = std::make_unique<FineNavLocalizer>(node_);
-    FINENAV_LOG_INFO(node_->get_logger(), "Localizer ready.");
-
-    navigator_ = std::make_unique<Navigator>(node_, localizer_.get());
-    FINENAV_LOG_INFO(node_->get_logger(), "Navigator ready.");
-
-    nav_client_ = rclcpp_action::create_client<NavAction>(
-        node_, navigator_->getActionName());
-    FINENAV_LOG_INFO(node_->get_logger(), "Navigation client ready.");
-
-    FINENAV_LOG_INFO(node_->get_logger(), "All singletons initialized.");
-}
-
-inline void FineNavEngine::navigateTo(const geometry_msgs::msg::Pose& goal,
-                                       const std::string& bt_id) {
-    if (!nav_client_->wait_for_action_server(std::chrono::seconds(1))) {
-        FINENAV_LOG_ERROR(node_->get_logger(),
-            "Navigator action server not available — cannot start navigation.");
-        return;
-    }
-
-    auto goal_msg = NavAction::Goal();
-    goal_msg.pose.pose         = goal;
-    goal_msg.pose.header.stamp = node_->now();
-    goal_msg.pose.header.frame_id = "map";
-    goal_msg.behavior_tree     = bt_id;
-
-    nav_client_->async_send_goal(goal_msg);
-    FINENAV_LOG_INFO(node_->get_logger(),
-        "Navigation goal sent: (%.2f, %.2f, %.2f)", goal.position.x, goal.position.y, goal.position.z);
-}
-
-inline void FineNavEngine::cancelNavigation() {
-    nav_client_->async_cancel_all_goals();
-    FINENAV_LOG_INFO(node_->get_logger(), "Navigation cancelled.");
-}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  Factory: map
@@ -221,10 +172,6 @@ std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(cons
             "getMapServer('{}'): type mismatch — stored MapT differs from requested type.", name);
         return nullptr;
     }
-}
-
-inline bool FineNavEngine::removeMapServer(const std::string& name) {
-    return maps_.erase(name) > 0;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -251,10 +198,6 @@ FineNavEngine::getControlLayer(const std::string& name) {
             "getControlLayer('{}'): type mismatch — stored planner types differ from requested.", name);
         return nullptr;
     }
-}
-
-inline bool FineNavEngine::removeControlLayer(const std::string& name) {
-    return layers_.erase(name) > 0;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
