@@ -16,11 +16,11 @@ namespace finenav::core {
 // Constructor
 // ==============================================================================
 
-template <typename PlannersT, typename ExecutionPolicy>
-ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
+template <typename PlannersT>
+ControlLayer<PlannersT>::ControlLayer(
     rclcpp::Node::SharedPtr node,
     const std::string& layer_name,
-    ExecutionPolicy policy)
+    ExecutionPolicyVariant policy)
     : node_(node), layer_name_(layer_name), policy_(std::move(policy))
 {
     rclcpp::NodeOptions pnode_opts;
@@ -30,9 +30,11 @@ ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
     pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
-    if constexpr (requires { policy_.declare_parameters(*pnode_); }) {
-        policy_.declare_parameters(*pnode_);
-    }
+    std::visit([this](auto& p) {
+        if constexpr (requires { p.declare_parameters(*pnode_); }) {
+            p.declare_parameters(*pnode_);
+        }
+    }, policy_);
 
     if (!layer_name.empty()) {
         action_server_ = std::make_unique<ActionServer>(
@@ -54,23 +56,23 @@ ControlLayer<PlannersT, ExecutionPolicy>::ControlLayer(
 // Topic / Port Setup
 // ==============================================================================
 
-template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::setInputTopic(const std::string& topic) {
+template <typename PlannersT>
+void ControlLayer<PlannersT>::setInputTopic(const std::string& topic) {
     input_topic_ = topic;
 }
 
-template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::setOutputTopic(const std::string& topic) {
+template <typename PlannersT>
+void ControlLayer<PlannersT>::setOutputTopic(const std::string& topic) {
     output_topic_ = topic;
 }
 
-template <typename PlannersT, typename ExecutionPolicy>
-std::string ControlLayer<PlannersT, ExecutionPolicy>::getName() const {
+template <typename PlannersT>
+std::string ControlLayer<PlannersT>::getName() const {
     return pnode_->get_name();
 }
 
-template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::setupDataPorts() {
+template <typename PlannersT>
+void ControlLayer<PlannersT>::setupDataPorts() {
     if (!input_topic_.empty()) {
         plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::Trajectory>(
             input_topic_, 10,
@@ -85,8 +87,8 @@ void ControlLayer<PlannersT, ExecutionPolicy>::setupDataPorts() {
 // Utilities
 // ==============================================================================
 
-template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::PlanRefCallback(
+template <typename PlannersT>
+void ControlLayer<PlannersT>::PlanRefCallback(
     const finenav_interfaces::msg::Trajectory& msg)
 {
     std::lock_guard<std::mutex> lock(plan_ref_mutex_);
@@ -97,8 +99,8 @@ void ControlLayer<PlannersT, ExecutionPolicy>::PlanRefCallback(
 // Shared Helpers
 // ==============================================================================
 
-template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::resetActivePlanner() {
+template <typename PlannersT>
+void ControlLayer<PlannersT>::resetActivePlanner() {
     std::apply([&](auto&... planners) {
         ([&](auto& p) {
             using PlannerT = std::decay_t<decltype(p)>;
@@ -113,8 +115,8 @@ void ControlLayer<PlannersT, ExecutionPolicy>::resetActivePlanner() {
     }, planners_instance_);
 }
 
-template <typename PlannersT, typename ExecutionPolicy>
-bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose goal_pose) {
+template <typename PlannersT>
+bool ControlLayer<PlannersT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     if (!map_view_factory_) {
         FINENAV_LOG_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
         return false;
@@ -214,8 +216,8 @@ bool ControlLayer<PlannersT, ExecutionPolicy>::planOnce(geometry_msgs::msg::Pose
 // execute() — Episode Entry-Point
 // ==============================================================================
 
-template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::execute() {
+template <typename PlannersT>
+void ControlLayer<PlannersT>::execute() {
     FINENAV_LOG_INFO(pnode_->get_logger(), "New goal received — starting episode.");
 
     auto goal          = action_server_->get_current_goal();
@@ -225,15 +227,15 @@ void ControlLayer<PlannersT, ExecutionPolicy>::execute() {
     resetActivePlanner();
 
     // 按策略执行
-    executeImpl(policy_);
+    std::visit([this](auto& p) { this->executeImpl(p); }, policy_);
 }
 
 // ==============================================================================
 // executeImpl — SingleShotPolicy
 // ==============================================================================
 
-template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(SingleShotPolicy&) {
+template <typename PlannersT>
+void ControlLayer<PlannersT>::executeImpl(SingleShotPolicy&) {
     auto goal_pose = action_server_->get_current_goal()->goal;
 
     if (action_server_->is_cancel_requested()) {
@@ -256,8 +258,8 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(SingleShotPolicy&) {
 // executeImpl — ContinuousPolicy
 // ==============================================================================
 
-template <typename PlannersT, typename ExecutionPolicy>
-void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(ContinuousPolicy& policy) {
+template <typename PlannersT>
+void ControlLayer<PlannersT>::executeImpl(ContinuousPolicy& policy) {
     auto goal_pose = action_server_->get_current_goal()->goal;
     rclcpp::Rate rate(policy.frequency_hz);
 
@@ -303,9 +305,9 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(ContinuousPolicy& pol
 // bind_map_view
 // ==============================================================================
 
-template <typename PlannersT, typename ExecutionPolicy>
+template <typename PlannersT>
 template <typename MapT, typename BuilderFn>
-void ControlLayer<PlannersT, ExecutionPolicy>::bind_map_view(
+void ControlLayer<PlannersT>::bind_map_view(
     std::shared_ptr<MapServer<MapT>> server,
     BuilderFn&& builder)
 {

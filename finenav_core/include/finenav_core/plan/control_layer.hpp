@@ -6,6 +6,7 @@
 
 #include <any>
 #include <mutex>
+#include <variant>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
@@ -33,9 +34,8 @@ namespace finenav::core {
  * plan-once flow: pre-callback → read-lock MapView → planner.plan() → post-callback.
  *
  * @tparam PlannersT       PlannerSet<...> listing the supported planner types.
- * @tparam ExecutionPolicy  SingleShotPolicy or ContinuousPolicy.
  */
-template <typename PlannersT, typename ExecutionPolicy = SingleShotPolicy>
+template <typename PlannersT>
 class ControlLayer {
 public:
     // ── Types ──────────────────────────────────────────────────────────────
@@ -46,13 +46,14 @@ public:
     using PrePlanCallback = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback = std::function<bool(PostPlanContext&)>;
     using RobotStateProvider = std::function<RobotState()>;
+    using ExecutionPolicyVariant = std::variant<SingleShotPolicy, ContinuousPolicy>;
 
     // ── Construction ───────────────────────────────────────────────────────
 
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,
         const std::string& layer_name,
-        ExecutionPolicy policy = ExecutionPolicy{});
+        ExecutionPolicyVariant policy = SingleShotPolicy{});
 
     // ── Configuration ──────────────────────────────────────────────────────
 
@@ -103,7 +104,6 @@ private:
     void execute();
 
     /// Policy dispatch.
-    /** @brief Policy dispatch */
     void executeImpl(SingleShotPolicy& policy);
     void executeImpl(ContinuousPolicy&   policy);
 
@@ -132,7 +132,7 @@ private:
 
     typename PlannersT::Tuple planners_instance_;
     std::string               active_planner_id_;
-    ExecutionPolicy           policy_;
+    ExecutionPolicyVariant   policy_;
 
     // ── Callbacks ──────────────────────────────────────────────────────────
 
