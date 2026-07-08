@@ -3,11 +3,15 @@
 // All rights reserved.
 
 #include "finenav_navigator/navigator.hpp"
+
 #include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/twist.hpp>
 
 namespace finenav {
 
-Navigator::Navigator(rclcpp::Node::SharedPtr parent_node)
+Navigator::Navigator(rclcpp::Node::SharedPtr parent_node,
+                     finenav::core::IRobotStateProvider* state_provider)
+    : state_provider_(state_provider)
 {
     // ── 创建私有子节点（参数前缀由 yaml 的顶层 key "finenav_navigator" 决定）──
     rclcpp::NodeOptions pnode_opts;
@@ -79,11 +83,27 @@ void Navigator::execute()
         }
 
         // 每 tick 前将最新机器人位姿和速度注入 Blackboard，供条件节点读取
-        if (robot_pose_provider_) {
-            blackboard->set<geometry_msgs::msg::Pose>("robot_pose", robot_pose_provider_());
-        }
-        if (robot_twist_provider_) {
-            blackboard->set<geometry_msgs::msg::Twist>("robot_twist", robot_twist_provider_());
+        if (state_provider_) {
+            if (auto rs = state_provider_->getRobotState()) {
+                geometry_msgs::msg::Pose p;
+                p.position.x    = rs->position.x();
+                p.position.y    = rs->position.y();
+                p.position.z    = rs->position.z();
+                p.orientation.w = rs->orientation.w();
+                p.orientation.x = rs->orientation.x();
+                p.orientation.y = rs->orientation.y();
+                p.orientation.z = rs->orientation.z();
+                blackboard->set<geometry_msgs::msg::Pose>("robot_pose", p);
+
+                geometry_msgs::msg::Twist t;
+                t.linear.x  = rs->linear_velocity.x();
+                t.linear.y  = rs->linear_velocity.y();
+                t.linear.z  = rs->linear_velocity.z();
+                t.angular.x = rs->angular_velocity.x();
+                t.angular.y = rs->angular_velocity.y();
+                t.angular.z = rs->angular_velocity.z();
+                blackboard->set<geometry_msgs::msg::Twist>("robot_twist", t);
+            }
         }
 
         auto status = tree_.tickExactlyOnce();

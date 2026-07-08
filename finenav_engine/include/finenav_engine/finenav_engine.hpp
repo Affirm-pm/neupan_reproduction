@@ -10,8 +10,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <geometry_msgs/msg/pose.hpp>
-#include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_core/map/map_server.hpp"
@@ -144,33 +142,7 @@ inline FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
     localizer_ = std::make_unique<FineNavLocalizer>(node_);
     FINENAV_LOG_INFO(node_->get_logger(), "Localizer ready.");
 
-    navigator_ = std::make_unique<Navigator>(node_);
-
-    navigator_->set_robot_pose_provider([this]() -> geometry_msgs::msg::Pose {
-        const auto& state = localizer_->getState();
-        geometry_msgs::msg::Pose p;
-        p.position.x    = state.p.x();
-        p.position.y    = state.p.y();
-        p.position.z    = state.p.z();
-        const auto q    = state.R.unit_quaternion();
-        p.orientation.w = q.w();
-        p.orientation.x = q.x();
-        p.orientation.y = q.y();
-        p.orientation.z = q.z();
-        return p;
-    });
-
-    navigator_->set_robot_twist_provider([this]() -> geometry_msgs::msg::Twist {
-        const auto& state = localizer_->getState();
-        geometry_msgs::msg::Twist t;
-        t.linear.x  = state.v.x();
-        t.linear.y  = state.v.y();
-        t.linear.z  = state.v.z();
-        t.angular.x = state.omega.x();
-        t.angular.y = state.omega.y();
-        t.angular.z = state.omega.z();
-        return t;
-    });
+    navigator_ = std::make_unique<Navigator>(node_, localizer_.get());
     FINENAV_LOG_INFO(node_->get_logger(), "Navigator ready.");
 
     FINENAV_LOG_INFO(node_->get_logger(), "All singletons initialized.");

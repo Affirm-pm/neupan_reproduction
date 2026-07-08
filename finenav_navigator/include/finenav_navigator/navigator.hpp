@@ -4,11 +4,9 @@
 
 #pragma once
 
-#include <functional>
 #include <rclcpp/rclcpp.hpp>
-#include <geometry_msgs/msg/pose.hpp>
-#include <geometry_msgs/msg/twist.hpp>
 
+#include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_navigator/behavior_tree_engine.hpp"
 
 #include "finenav_util/ros/simple_action_server.hpp"
@@ -27,19 +25,16 @@ namespace finenav {
  *  - pnode_ 由 NodeThread 在独立线程中 spin，对外部调用方完全透明
  *  - 构造函数完成全部初始化，无需二阶段 initialize()
  *
- * 使用前须调用 set_robot_state_provider() 注入位姿提供函数；
- * FineNavEngine::createControlLayer() 会自动完成注入。
- *
- * @param parent_node  宿主节点（用于获取 use_sim_time 及命名空间继承）
+ * @param parent_node    宿主节点（用于获取 use_sim_time 及命名空间继承）
+ * @param state_provider 机器人状态提供者（由 FineNavEngine 自动注入）
  */
 class Navigator {
 public:
-    using ActionT            = finenav_interfaces::action::NavigateToPose;
-    using ActionServer       = finenav::util::SimpleActionServer<ActionT>;
-    using RobotPoseProvider  = std::function<geometry_msgs::msg::Pose()>;
-    using RobotTwistProvider = std::function<geometry_msgs::msg::Twist()>;
+    using ActionT      = finenav_interfaces::action::NavigateToPose;
+    using ActionServer = finenav::util::SimpleActionServer<ActionT>;
 
-    explicit Navigator(rclcpp::Node::SharedPtr parent_node);
+    explicit Navigator(rclcpp::Node::SharedPtr parent_node,
+                       finenav::core::IRobotStateProvider* state_provider = nullptr);
 
     // 禁止复制
     Navigator(const Navigator&)            = delete;
@@ -47,44 +42,20 @@ public:
 
     ~Navigator() = default;
 
-    /**
-     * @brief 注入机器人位姿提供函数。
-     *
-     * 每次 BT tick 前调用，将最新位姿写入 Blackboard ("robot_pose")，
-     * 供 IsGoalReached、IsStuck 等条件节点读取。
-     * 由 FineNavEngine 在构造时自动注入。
-     */
-    void set_robot_pose_provider(RobotPoseProvider provider) {
-        robot_pose_provider_ = std::move(provider);
-    }
-
-    /**
-     * @brief 注入机器人速度提供函数。
-     *
-     * 每次 BT tick 前调用，将最新速度写入 Blackboard ("robot_twist")，
-     * 供 IsGoalReached 等条件节点读取。
-     * 由 FineNavEngine 在构造时自动注入。
-     */
-    void set_robot_twist_provider(RobotTwistProvider provider) {
-        robot_twist_provider_ = std::move(provider);
-    }
-
 private:
     void execute();
 
     // ── ROS 基础设施 ──────────────────────────────────────────────────────────
-    rclcpp::Node::SharedPtr       pnode_;
-    std::unique_ptr<finenav::util::NodeThread>   pnode_thread_;
+    rclcpp::Node::SharedPtr                     pnode_;
+    std::unique_ptr<finenav::util::NodeThread>  pnode_thread_;
 
     // ── 业务组件 ──────────────────────────────────────────────────────────────
     std::unique_ptr<BehaviorTreeEngine> bt_engine_;
     std::unique_ptr<ActionServer>       action_server_;
+    finenav::core::IRobotStateProvider* state_provider_{nullptr};
 
     finenav_navigator::Params                         params_;
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;
-
-    RobotPoseProvider  robot_pose_provider_;
-    RobotTwistProvider robot_twist_provider_;
 
     BT::Tree tree_;
 };

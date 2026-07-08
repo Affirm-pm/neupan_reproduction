@@ -16,6 +16,7 @@
     <depend>generate_parameter_library</depend>
     <depend>eigen</depend>
     <depend>eigen3_cmake_module</depend>
+    <depend>finenav_core</depend>
     <depend>finenav_interfaces</depend>
     <depend>finenav_util</depend>
 
