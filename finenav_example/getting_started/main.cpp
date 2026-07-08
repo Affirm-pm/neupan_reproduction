@@ -14,18 +14,20 @@
 #include "dummy_map.hpp"
 #include "dummy_planner.hpp"
 
-using namespace finenav::example;
-using namespace finenav::core; // TODO: 看看能不能只用finenav而不用finenav::core
+using namespace finenav;
+
+using example::DummyPlanner;
+using example::DummyMap;
 
 /**
  *  @brief Define a MapView, which determine the rule for planner
  *  @details In this example, the rule is quite simple: the planner only considers the map occupied if the position is occupied in the map.
  */
-class ASimpleMapView : public DummyMapView {
+class ASimpleMapView : public DummyPlanner::IMapView {
 public:
     ASimpleMapView(const DummyMap& map_ptr) : map_(map_ptr) {}
-    bool isWalkable(const Position3D&) const override {
-        return !map_.isOccupied(Position3D());
+    bool isWalkable(const core::Position3D&) const override {
+        return !map_.isOccupied(core::Position3D());
     }
 private:
     const DummyMap& map_;
@@ -42,7 +44,7 @@ int main(int argc, char** argv) {
     engine->createMapServer<DummyMap>("my_map");
 
     // 2. Create ControlLayer — engine stores internally
-    engine->createControlLayer<DummyPlanner>("my_layer", ContinuousPolicy{10.0});
+    engine->createControlLayer<DummyPlanner>("my_layer", core::ContinuousPolicy{10.0});
 
     auto map_server    = engine->getMapServer<DummyMap>("my_map");
     auto control_layer = engine->getControlLayer<DummyPlanner>("my_layer");
