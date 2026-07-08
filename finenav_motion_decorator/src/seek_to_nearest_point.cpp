@@ -2,8 +2,8 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "seek_to_nearest_point.hpp"
-#include "detail/trim_utils.hpp"
+#include "finenav_motion_decorator/seek_to_nearest_point.hpp"
+#include "finenav_motion_decorator/detail/trim_utils.hpp"
 #include <stdexcept>
 #include <limits>
 #include <cstddef>

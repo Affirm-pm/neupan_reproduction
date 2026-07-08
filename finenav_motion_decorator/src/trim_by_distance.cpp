@@ -2,8 +2,8 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "trim_by_distance.hpp"
-#include "detail/trim_utils.hpp"
+#include "finenav_motion_decorator/trim_by_distance.hpp"
+#include "finenav_motion_decorator/detail/trim_utils.hpp"
 #include <stdexcept>
 #include <cmath>
 

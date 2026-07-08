@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "route/route_search.hpp"
+#include "finenav_route_planner/route/route_search.hpp"
 
 #include <cmath>
 #include <limits>

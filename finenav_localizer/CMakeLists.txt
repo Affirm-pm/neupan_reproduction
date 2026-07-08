@@ -36,7 +36,7 @@ add_library(${PROJECT_NAME} SHARED
 target_include_directories(${PROJECT_NAME} PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
 ament_target_dependencies(${PROJECT_NAME}
         rclcpp
@@ -59,14 +59,16 @@ if (BUILD_TESTING)
     add_subdirectory(eval)
 endif ()
 
-install(TARGETS ${PROJECT_NAME}
+install(TARGETS ${PROJECT_NAME} localizer_params
+        EXPORT ${PROJECT_NAME}Targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin
 )
-install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 
-ament_export_include_directories(include)
+ament_export_include_directories(include/${PROJECT_NAME})
+ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_libraries(${PROJECT_NAME})
 ament_export_dependencies(
         rclcpp

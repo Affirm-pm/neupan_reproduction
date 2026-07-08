@@ -73,5 +73,12 @@ if (BUILD_TESTING)
     target_link_libraries(route_test route_params)
 endif ()
 
-ament_auto_package()
+install(TARGETS astar_params bfs_params route_params
+        EXPORT export_${PROJECT_NAME}_params
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+)
+ament_export_targets(export_${PROJECT_NAME}_params HAS_LIBRARY_TARGET)
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
 

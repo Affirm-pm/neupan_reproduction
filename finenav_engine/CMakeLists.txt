@@ -30,7 +30,7 @@ ament_target_dependencies(finenav_engine
 )
 target_include_directories(finenav_engine PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
 
 install(TARGETS finenav_engine
@@ -39,10 +39,10 @@ install(TARGETS finenav_engine
         RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 install(DIRECTORY include/
-        DESTINATION include/
+        DESTINATION include/${PROJECT_NAME}
 )
 
-ament_export_include_directories(include)
+ament_export_include_directories(include/${PROJECT_NAME})
 ament_export_libraries(finenav_engine)
 ament_export_dependencies(${finenav_dependencies})
 

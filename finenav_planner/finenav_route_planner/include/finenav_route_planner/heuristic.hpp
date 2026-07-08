@@ -6,7 +6,7 @@
 
 #include <cmath>
 #include <algorithm>
-#include "vec3.hpp"
+#include "finenav_route_planner/vec3.hpp"
 
 namespace astar {
 

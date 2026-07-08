@@ -45,6 +45,10 @@ add_library(finenav_navigator SHARED
         src/naviagtor.cpp
         src/behavior_tree_engine.cpp
 )
+target_include_directories(finenav_navigator PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+)
 ament_target_dependencies(finenav_navigator
         ${dependencies}
 )
@@ -115,7 +119,8 @@ ament_target_dependencies(finenav_dynamic_goal_follower
 target_compile_definitions(finenav_dynamic_goal_follower PRIVATE BT_PLUGIN_EXPORT)
 
 # Install
-install(TARGETS finenav_navigator
+install(TARGETS finenav_navigator navigator_params
+        EXPORT ${PROJECT_NAME}Targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION lib/${PROJECT_NAME}
@@ -127,11 +132,12 @@ install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions finen
         RUNTIME DESTINATION bin
 )
 
-install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
 
 # Export
-ament_export_include_directories(include)
+ament_export_include_directories(include/${PROJECT_NAME})
+ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_libraries(finenav_navigator)
 ament_export_dependencies(${dependencies} Eigen3)
 

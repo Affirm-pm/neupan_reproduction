@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "smooth_path.hpp"
+#include "finenav_motion_decorator/smooth_path.hpp"
 
 #include <cmath>
 #include <stdexcept>

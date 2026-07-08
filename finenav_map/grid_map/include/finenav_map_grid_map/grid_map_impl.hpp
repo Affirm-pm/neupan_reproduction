@@ -6,7 +6,7 @@
 
 #include <limits>
 #include <algorithm>
-#include "grid_map.hpp"
+#include "finenav_map_grid_map/grid_map.hpp"
 #include <cmath>
 
 

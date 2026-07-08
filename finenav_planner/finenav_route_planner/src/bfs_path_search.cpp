@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "bfs_path_search.hpp"
+#include "finenav_route_planner/bfs_path_search.hpp"
 
 #include <cmath>
 #include <geometry_msgs/msg/pose.hpp>

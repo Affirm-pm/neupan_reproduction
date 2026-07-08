@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "i_motion_decorator.hpp"
+#include "finenav_motion_decorator/i_motion_decorator.hpp"
 #include <cstddef>
 
 namespace finenav {

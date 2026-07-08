@@ -24,7 +24,7 @@ add_library(${PROJECT_NAME} SHARED
 
 target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/occ_grid_2d_params_parameters>
 )
 
@@ -47,11 +47,7 @@ install(TARGETS ${PROJECT_NAME} occ_grid_2d_params
     RUNTIME DESTINATION bin
 )
 
-install(DIRECTORY include/
-    DESTINATION include
-)
-
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_dependencies(finenav_core finenav_util nav_msgs rclcpp)
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

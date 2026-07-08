@@ -18,5 +18,5 @@ rosidl_generate_interfaces(${PROJECT_NAME}
         DEPENDENCIES geometry_msgs std_msgs
 )
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
 

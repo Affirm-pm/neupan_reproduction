@@ -12,8 +12,8 @@
 #include <gtest/gtest.h>
 #include <cmath>
 
-#include "astar_algorithm.hpp"
-#include "bfs_path_search.hpp"
+#include "finenav_route_planner/astar_algorithm.hpp"
+#include "finenav_route_planner/bfs_path_search.hpp"
 #include "grid_map.hpp"
 
 // ── helpers ──────────────────────────────────────────────────────────────

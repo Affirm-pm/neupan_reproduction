@@ -13,9 +13,9 @@
 #include <limits>
 #include <cmath>
 
-#include "grid_search_utils.hpp"   // Connectivity, getNeighbors, calculateStepCost,
+#include "finenav_route_planner/grid_search_utils.hpp"   // Connectivity, getNeighbors, calculateStepCost,
                                     // cellDistance, reconstructPathImpl
-#include "heuristic.hpp"
+#include "finenav_route_planner/heuristic.hpp"
 
 namespace astar {
 

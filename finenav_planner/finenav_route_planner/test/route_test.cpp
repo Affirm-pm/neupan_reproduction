@@ -24,7 +24,7 @@
 
 #include <geometry_msgs/msg/pose.hpp>
 
-#include "route_path_search.hpp"
+#include "finenav_route_planner/route_path_search.hpp"
 #include "grid_map.hpp"
 
 namespace {

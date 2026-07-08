@@ -22,7 +22,7 @@ add_library(${PROJECT_NAME} INTERFACE)
 
 target_include_directories(${PROJECT_NAME} INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
 
 target_link_libraries(${PROJECT_NAME} INTERFACE
@@ -41,4 +41,11 @@ ament_export_dependencies(
         Eigen3
 )
 
-ament_auto_package()
+install(TARGETS grid_map_params
+        EXPORT export_${PROJECT_NAME}_params
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+)
+ament_export_targets(export_${PROJECT_NAME}_params HAS_LIBRARY_TARGET)
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

@@ -13,10 +13,10 @@
 #include "finenav_core/algo_configurator.hpp"
 #include "finenav_route_planner/route_params.hpp"
 
-#include "astar_algorithm.hpp"
-#include "imap_view.hpp"
-#include "route/route_graph.hpp"
-#include "route/route_search.hpp"
+#include "finenav_route_planner/astar_algorithm.hpp"
+#include "finenav_route_planner/imap_view.hpp"
+#include "finenav_route_planner/route/route_graph.hpp"
+#include "finenav_route_planner/route/route_search.hpp"
 
 namespace finenav {
 using finenav::core::Position3D;

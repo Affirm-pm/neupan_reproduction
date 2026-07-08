@@ -9,8 +9,8 @@
 #include "finenav_map_grid_map/grid_map_params.hpp"
 #include "finenav_core/algo_configurator.hpp"
 
-#include "grid_map_math.hpp"
-#include "grid_map_iterator.hpp"
+#include "finenav_map_grid_map/grid_map_math.hpp"
+#include "finenav_map_grid_map/grid_map_iterator.hpp"
 
 namespace finenav {
 using finenav::core::Position3D;
@@ -329,6 +329,6 @@ private:
 
 }
 
-#include "grid_map_impl.hpp"
+#include "finenav_map_grid_map/grid_map_impl.hpp"
 
 FINENAV_REGISTER_TEMPLATE_ALGO_CONFIG(finenav::GridMap, grid_map)

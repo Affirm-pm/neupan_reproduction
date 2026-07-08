@@ -16,4 +16,4 @@ add_subdirectory(create_custom_map)
 add_subdirectory(create_custom_planner)
 add_subdirectory(getting_started)
 
-ament_auto_package()
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

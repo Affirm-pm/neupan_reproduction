@@ -108,13 +108,17 @@ set(libraries mppi_controller mppi_critics)
 
 foreach(lib IN LISTS libraries)
   target_compile_options(${lib} PUBLIC -fconcepts)
-  target_include_directories(${lib} PUBLIC ${xsimd_INCLUDE_DIRS})  #  ${OpenMP_INCLUDE_DIRS}
+  target_include_directories(${lib} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
+    ${xsimd_INCLUDE_DIRS}
+  )
   target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd finenav_mppi_controller_params )
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
 
 install(
-  TARGETS ${libraries}
+  TARGETS ${libraries} finenav_mppi_controller_params
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -141,7 +145,7 @@ set(test_dependencies
 
 
 install(DIRECTORY include/
-  DESTINATION include/
+  DESTINATION include/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)
@@ -155,7 +159,8 @@ endif()
 
 
 ament_export_libraries(${libraries})
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(${dependencies_pkgs})
-ament_export_include_directories(include)
+ament_export_include_directories(include/${PROJECT_NAME})
 
 ament_package()
