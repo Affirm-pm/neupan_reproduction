@@ -4,8 +4,10 @@
 
 #pragma once
 
+#include <any>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <geometry_msgs/msg/pose.hpp>
@@ -24,14 +26,15 @@ namespace finenav {
  * @brief FineNavEngine — factory + connector for the navigation framework.
  *
  * ## Usage flow
- * 1. createMap<MapT>(name)          — user keeps the returned shared_ptr
- * 2. createLayer<PlannersT>(name)   — user keeps the returned shared_ptr
- * 3. layer->bind_map_view(map, ...) — user connects map to layer
- * 4. connect(in, layer, out)        — engine wires the pipeline topics
+ * 1. createMapServer<MapT>(name)        — engine stores the MapServer internally
+ * 2. createControlLayer<PlannersT>(name) — engine stores the ControlLayer internally
+ * 3. map_server    = getMapServer<MapT>(name)       — retrieve typed handle
+ * 4. control_layer = getControlLayer<PlannersT>(name)
+ * 5. control_layer->bind_map_view(map_server, ...) — user connects map to layer
+ * 6. connectPipeline(p, control_layers...)         — engine wires the pipeline topics
  *
- * The engine does NOT store user resources.  The user owns the shared_ptrs
- * and is responsible for their lifetime.  Templates parameters stay at the
- * call site and never propagate through the engine's own type.
+ * The engine owns all handles.  The user retrieves them by name + type at the
+ * call site.  FineNavEngine itself is non-template — pass it by pointer.
  */
 class FineNavEngine {
 public:
@@ -54,24 +57,49 @@ public:
     // ── Factory: map ──────────────────────────────────────────────────────
 
     /**
-     * @brief Create a named MapServer.  The caller owns the returned pointer.
+     * @brief Create a named MapServer and store it internally.
      * @tparam MapT  Must satisfy SpatialContainer.
      */
     template <typename MapT>
-    [[nodiscard("MapServer created but handle was lost!")]]
-    std::shared_ptr<finenav::core::MapServer<MapT>> createMapServer(const std::string& name);
+    void createMapServer(const std::string& name);
+
+    /**
+     * @brief Retrieve a previously-created MapServer by name and type.
+     * @return nullptr if not found or type mismatch.
+     */
+    template <typename MapT>
+    std::shared_ptr<finenav::core::MapServer<MapT>> getMapServer(const std::string& name);
+
+    /**
+     * @brief Remove a MapServer from the engine.  The handle (and map) is
+     *        destroyed once all external shared_ptrs to it are released.
+     * @return true if a map with the given name existed.
+     */
+    bool removeMapServer(const std::string& name);
 
     // ── Factory: layer ────────────────────────────────────────────────────
 
     /**
-     * @brief Create a named ControlLayer.  The caller owns the returned pointer.
-     * @tparam PlannersT       PlannerSet<...> listing supported planners.
-     * @tparam ExecutionPolicy  SingleShotPolicy or ContinuousPolicy.
+     * @brief Create a named ControlLayer and store it internally.
+     * @tparam PlannersT  PlannerSet<...> listing supported planners.
+     * @tparam PolicyT    SingleShotPolicy or ContinuousPolicy (deduced from argument).
      */
-    template <typename PlannersT, typename ExecutionPolicy = finenav::core::SingleShotPolicy>
-    [[nodiscard("ControlLayer created but handle was lost!")]]
-    std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>> createControlLayer(
-        const std::string& name, ExecutionPolicy policy = ExecutionPolicy{});
+    template <typename PlannersT, typename PolicyT = finenav::core::SingleShotPolicy>
+    void createControlLayer(const std::string& name, PolicyT policy = {});
+
+    /**
+     * @brief Retrieve a previously-created ControlLayer by name and type.
+     * @return nullptr if not found or type mismatch.
+     */
+    template <typename PlannersT>
+    std::shared_ptr<finenav::core::ControlLayer<PlannersT>> getControlLayer(const std::string& name);
+
+    /**
+     * @brief Remove a ControlLayer from the engine.  The handle (and layer) is
+     *        destroyed once all external shared_ptrs to it are released.
+     * @return true if a layer with the given name existed.
+     */
+    bool removeControlLayer(const std::string& name);
 
     // ── Connector ─────────────────────────────────────────────────────────
 
@@ -95,6 +123,10 @@ private:
                      std::shared_ptr<RestT>... rest);
 
     std::shared_ptr<rclcpp::Node> node_;
+
+    // ── Handle storage (engine owns all user-facing handles) ───────────────
+    std::unordered_map<std::string, std::any> maps_;
+    std::unordered_map<std::string, std::any> layers_;
 
     // ── Engine-level singletons ────────────────────────────────────────────
     std::unique_ptr<FineNavLocalizer> localizer_;
@@ -149,25 +181,60 @@ inline FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
 // ══════════════════════════════════════════════════════════════════════════════
 
 template <typename MapT>
-std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::createMapServer(
-    const std::string& name) {
-    return std::make_shared<finenav::core::MapServer<MapT>>(
+void FineNavEngine::createMapServer(const std::string& name) {
+    auto server = std::make_shared<finenav::core::MapServer<MapT>>(
         node_, name, localizer_.get());
+    maps_[name] = std::any(std::move(server));
+}
+
+template <typename MapT>
+std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(const std::string& name) {
+    auto it = maps_.find(name);
+    if (it == maps_.end()) return nullptr;
+    try {
+        return std::any_cast<std::shared_ptr<finenav::core::MapServer<MapT>>>(it->second);
+    } catch (const std::bad_any_cast&) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "getMapServer('{}'): type mismatch — stored MapT differs from requested type.", name);
+        return nullptr;
+    }
+}
+
+inline bool FineNavEngine::removeMapServer(const std::string& name) {
+    return maps_.erase(name) > 0;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  Factory: layer
 // ══════════════════════════════════════════════════════════════════════════════
 
-template <typename PlannersT, typename ExecutionPolicy>
-std::shared_ptr<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>
-FineNavEngine::createControlLayer(const std::string& name, ExecutionPolicy policy) {
-    auto layer = std::make_shared<finenav::core::ControlLayer<PlannersT, ExecutionPolicy>>(
+template <typename PlannersT, typename PolicyT>
+void FineNavEngine::createControlLayer(const std::string& name, PolicyT policy) {
+    auto layer = std::make_shared<finenav::core::ControlLayer<PlannersT>>(
         node_, name, std::move(policy));
     layer->set_robot_state_provider([this]() -> finenav::core::RobotState {
         return localizer_->getRobotState().value_or(finenav::core::RobotState{});
     });
-    return layer;
+    layers_[name] = std::any(std::move(layer));
+}
+
+template <typename PlannersT>
+std::shared_ptr<finenav::core::ControlLayer<PlannersT>>
+FineNavEngine::getControlLayer(const std::string& name) {
+    auto it = layers_.find(name);
+    if (it == layers_.end()) return nullptr;
+    try {
+        return std::any_cast<std::shared_ptr<finenav::core::ControlLayer<PlannersT>>>(
+            it->second);
+    } catch (const std::bad_any_cast&) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "getControlLayer('{}'): type mismatch — stored PlannersT differs from requested type.", name);
+        return nullptr;
+    }
+}
+
+inline bool FineNavEngine::removeControlLayer(const std::string& name) {
+    return layers_.erase(name) > 0;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

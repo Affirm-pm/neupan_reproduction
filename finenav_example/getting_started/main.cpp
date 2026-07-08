@@ -15,8 +15,12 @@
 #include "dummy_planner.hpp"
 
 using namespace finenav::example;
-using namespace finenav::core;
+using namespace finenav::core; // TODO: 看看能不能只用finenav而不用finenav::core
 
+/**
+ *  @brief Define a MapView, which determine the rule for planner
+ *  @details In this example, the rule is quite simple: the planner only considers the map occupied if the position is occupied in the map.
+ */
 class ASimpleMapView : public DummyMapView {
 public:
     ASimpleMapView(const DummyMap& map_ptr) : map_(map_ptr) {}
@@ -27,28 +31,36 @@ private:
     const DummyMap& map_;
 };
 
+
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
 
     auto node = rclcpp::Node::make_shared("hello_finenav");
     auto engine = std::make_shared<finenav::FineNavEngine>(node);
 
-    // 1. Create map
-    auto map = engine->createMapServer<DummyMap>("my_map");
+    // 1. Create MapServer — engine stores internally
+    engine->createMapServer<DummyMap>("my_map");
 
-    // 2. Create layer
+    // 2. Create ControlLayer — engine stores internally
     using Planners = PlannerSet<DummyPlanner>;
-    auto layer = engine->createControlLayer<Planners>("my_layer", ContinuousPolicy{10.0});    // TODO: 这里就不应该再允许输入参数了
+    engine->createControlLayer<Planners>("my_layer", ContinuousPolicy{10.0});    // TODO: 这里就不应该再允许输入参数了
+
+    // Retrieve typed handles from engine
+    auto map_server    = engine->getMapServer<DummyMap>("my_map");
+    auto control_layer = engine->getControlLayer<Planners>("my_layer"); // TODO： 暴露了过多接口
 
     // 3. Bind map to layer
-    layer->bind_map_view(map, [](const DummyMap& map) {
-        return std::make_shared<ASimpleMapView>(map);
+    control_layer->bind_map_view(map_server, [](const DummyMap& map_data, const std::string& active_planner) {
+        if (active_planner == "dummy_planner") { // Since only DummyPlanner is in the ControlLayer, the active_planner_id always return "dummy_planner"
+            return std::make_shared<ASimpleMapView>(map_data);
+        }
+        // TODO：测试下没绑定到map_view会报什么错
     });
 
     // 5. Post-plan: publish cmd_vel // TODO： 不止支持cmd_vel
     auto cmd_vel_pub = node->create_publisher<geometry_msgs::msg::Twist>(
         "/cmd_vel", 10);
-    layer->set_on_post_plan(
+    control_layer->set_on_post_plan(
         [cmd_vel_pub](finenav::core::PostPlanContext& ctx) -> bool {
             if (ctx.is_success && !ctx.result_traj.twists.empty()) {
                 cmd_vel_pub->publish(ctx.result_traj.twists[0]);
@@ -57,8 +69,10 @@ int main(int argc, char** argv) {
         });
 
     // 6. Connect pipeline
-    engine->connectPipeline({"line_path", "plan_result"}, layer);
+    engine->connectPipeline({"line_path", "plan_result"}, control_layer);
 
+
+    // TODO: start / pause / navigate to，这些都可以有C++ api
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");
     rclcpp::spin(node);
 
