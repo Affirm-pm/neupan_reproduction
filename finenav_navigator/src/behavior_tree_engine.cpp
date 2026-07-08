@@ -6,6 +6,7 @@
 
 #include <ament_index_cpp/get_package_prefix.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
 
@@ -22,7 +23,7 @@ BehaviorTreeEngine::BehaviorTreeEngine(rclcpp::Node::SharedPtr node)
 void BehaviorTreeEngine::registerPlugins(const std::vector<std::string>& plugins)
 {
 
-    RCLCPP_INFO(logger_, "FineNav Engine: Loading plugins from %zu sources...", plugins.size());
+    FINENAV_LOG_INFO(logger_, "FineNav Engine: Loading plugins from {} sources...", plugins.size());
 
     for (const auto& plugin_param : plugins) {
         const auto [pkg_name, sub_folder] = parseParamPath(plugin_param);
@@ -35,11 +36,11 @@ void BehaviorTreeEngine::registerPlugins(const std::vector<std::string>& plugins
             plugin_directory = std::filesystem::path(prefix) / sub_folder;
         }
         catch (const ament_index_cpp::PackageNotFoundError& e) {
-            RCLCPP_ERROR(logger_, "Plugin loading failed: Package '%s' not found.", pkg_name.c_str());
+            FINENAV_LOG_ERROR(logger_, "Plugin loading failed: Package '{}' not found.", pkg_name);
             continue;
         }
         if (!std::filesystem::exists(plugin_directory)) {
-            RCLCPP_WARN(logger_, "Plugin directory not found: %s", plugin_directory.c_str());
+            FINENAV_LOG_WARN(logger_, "Plugin directory not found: {}", plugin_directory.string());
             continue;
         }
 
@@ -55,7 +56,7 @@ void BehaviorTreeEngine::registerPlugins(const std::vector<std::string>& plugins
                 }
             }
         }
-        RCLCPP_INFO(logger_, "  -> Scanned '%s': Loaded %d plugins.", plugin_directory.c_str(), loaded_count);
+        FINENAV_LOG_INFO(logger_, "  -> Scanned '{}': Loaded {} plugins.", plugin_directory.string(), loaded_count);
     }
 }
 
@@ -72,11 +73,11 @@ void BehaviorTreeEngine::registerBehaviorTrees(const std::vector<std::string>& t
             tree_directory = std::filesystem::path(share_dir) / sub_folder;
         }
         catch (const ament_index_cpp::PackageNotFoundError& e) {
-            RCLCPP_ERROR(logger_, "BT loading failed: Package '%s' not found.", pkg_name.c_str());
+            FINENAV_LOG_ERROR(logger_, "BT loading failed: Package '{}' not found.", pkg_name);
             continue;
         }
         if (!std::filesystem::exists(tree_directory)) {
-            RCLCPP_WARN(logger_, "Plugin directory not found: %s", tree_directory.c_str());
+            FINENAV_LOG_WARN(logger_, "Plugin directory not found: {}", tree_directory.string());
             continue;
         }
 
@@ -89,7 +90,7 @@ void BehaviorTreeEngine::registerBehaviorTrees(const std::vector<std::string>& t
                 loaded_count++;
             }
         }
-        RCLCPP_INFO(logger_, "  -> Scanned '%s': Loaded %d trees.", tree_directory.c_str(), loaded_count);
+        FINENAV_LOG_INFO(logger_, "  -> Scanned '{}': Loaded {} trees.", tree_directory.string(), loaded_count);
     }
 }
 
@@ -116,15 +117,15 @@ bool BehaviorTreeEngine::loadPlugin(
         }
         else
         {
-            RCLCPP_ERROR(logger_, "Failed to load Plugin from file: %s.", filename.c_str());
+            FINENAV_LOG_ERROR(logger_, "Failed to load Plugin from file: {}.", filename.string());
             return false;
         }
-        RCLCPP_INFO(logger_, "Loaded ROS Plugin: %s", filename.c_str());
+        FINENAV_LOG_INFO(logger_, "Loaded ROS Plugin: {}", filename.string());
         return true;
     }
     catch(const std::exception& ex)
     {
-        RCLCPP_ERROR(logger_, "Failed to load ROS Plugin: %s \n %s", filename.c_str(),
+        FINENAV_LOG_ERROR(logger_, "Failed to load ROS Plugin: {} \n {}", filename.string(),
                      ex.what());
         return false;
     }
@@ -137,13 +138,13 @@ bool BehaviorTreeEngine::loadBehaviorTree(
     try
     {
         factory.registerBehaviorTreeFromFile(file_path.string());
-        RCLCPP_INFO(logger_, "Loaded BehaviorTree: %s", file_path.filename().c_str());
+        FINENAV_LOG_INFO(logger_, "Loaded BehaviorTree: {}", file_path.filename().string());
         return true;
     }
     catch(const std::exception& e)
     {
-        RCLCPP_ERROR(logger_, "Failed to load BehaviorTree: %s \n %s",
-                     file_path.filename().c_str(), e.what());
+        FINENAV_LOG_ERROR(logger_, "Failed to load BehaviorTree: {} \n {}",
+                     file_path.filename().string(), e.what());
         return false;
     }
 }

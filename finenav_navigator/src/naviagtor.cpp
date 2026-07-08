@@ -6,6 +6,7 @@
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
 
@@ -41,21 +42,21 @@ Navigator::Navigator(rclcpp::Node::SharedPtr parent_node,
     // ── 启动 spin 线程（最后执行，确保所有订阅/服务已注册）────────────────────
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
-    RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Initialized and spinning.");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Initialized and spinning.");
 }
 
 void Navigator::execute()
 {
-    RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Executing action...");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Executing action...");
 
     auto goal = action_server_->get_current_goal();
 
     try {
         tree_ = bt_engine_->factory().createTree(goal->behavior_tree);
     } catch (std::exception& ex) {
-        RCLCPP_ERROR(pnode_->get_logger(),
-            "[Navigator] Failed to create tree [%s]: %s",
-            goal->behavior_tree.c_str(), ex.what());
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
+            "[Navigator] Failed to create tree [{}]: {}",
+            goal->behavior_tree, ex.what());
         action_server_->terminate_all();
         return;
     }
@@ -64,20 +65,20 @@ void Navigator::execute()
     blackboard->set("goal", goal->pose.pose);
 
     rclcpp::WallRate loop_rate(params_.tick_frequency);
-    RCLCPP_INFO(pnode_->get_logger(),
-        "[Navigator] Starting navigation to (%.2f, %.2f)",
+    FINENAV_LOG_INFO(pnode_->get_logger(),
+        "[Navigator] Starting navigation to ({:.2f}, {:.2f})",
         goal->pose.pose.position.x, goal->pose.pose.position.y);
 
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
-            RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Cancellation requested.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Cancellation requested.");
             tree_.haltTree();
             action_server_->terminate_all();
             return;
         }
 
         if (action_server_->is_preempt_requested()) {
-            RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Preemption requested.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Preemption requested.");
             tree_.haltTree();
             return;
         }
@@ -109,11 +110,11 @@ void Navigator::execute()
         auto status = tree_.tickExactlyOnce();
 
         if (status == BT::NodeStatus::SUCCESS) {
-            RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Navigation succeeded.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Navigation succeeded.");
             action_server_->succeeded_current();
             return;
         } else if (status == BT::NodeStatus::FAILURE) {
-            RCLCPP_ERROR(pnode_->get_logger(), "[Navigator] Navigation failed.");
+            FINENAV_LOG_ERROR(pnode_->get_logger(), "[Navigator] Navigation failed.");
             action_server_->terminate_all();
             return;
         }
