@@ -71,9 +71,7 @@ public:
      * @tparam MapT      Must satisfy SpatialContainer.
      * @tparam BuilderFn (const MapT&) → MapViewsVariant-compatible
      */
-    template <SpatialContainer MapT, typename BuilderFn>
-    requires std::is_invocable_v<BuilderFn, const MapT&> &&
-             std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>, MapViewsVariant>
+    template <typename MapT, typename BuilderFn>
     void bind_map_view(std::shared_ptr<MapServer<MapT>> server, BuilderFn&& builder);
 
     void set_on_pre_plan(PrePlanCallback cb)               { on_pre_plan_           = std::move(cb); }

@@ -304,14 +304,18 @@ void ControlLayer<PlannersT, ExecutionPolicy>::executeImpl(ContinuousPolicy& pol
 // ==============================================================================
 
 template <typename PlannersT, typename ExecutionPolicy>
-template <SpatialContainer MapT, typename BuilderFn>
-requires std::is_invocable_v<BuilderFn, const MapT&> &&
-         std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>,
-                             typename ControlLayer<PlannersT, ExecutionPolicy>::MapViewsVariant>
+template <typename MapT, typename BuilderFn>
 void ControlLayer<PlannersT, ExecutionPolicy>::bind_map_view(
     std::shared_ptr<MapServer<MapT>> server,
     BuilderFn&& builder)
 {
+    static_assert(SpatialContainer<MapT>, // Use `static_assert` instead of `requires` to prevent clangd error.
+        "MapT must satisfy SpatialContainer.");
+    static_assert(std::is_invocable_v<BuilderFn, const MapT&>,
+        "BuilderFn must be callable with (const MapT&).");
+    static_assert(std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>,
+                                      MapViewsVariant>,
+        "BuilderFn must return a type convertible to MapViewsVariant.");
     std::function<MapViewsVariant(const MapT&)> erased_builder =
         std::forward<BuilderFn>(builder);
     std::weak_ptr<MapServer<MapT>> weak_server = server;
