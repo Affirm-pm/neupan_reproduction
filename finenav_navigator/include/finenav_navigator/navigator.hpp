@@ -42,6 +42,8 @@ public:
 
     ~Navigator() = default;
 
+    std::string getActionName() const { return params_.action_name; }
+
 private:
     void execute();
 

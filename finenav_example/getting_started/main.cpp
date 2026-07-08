@@ -9,6 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_engine/finenav_engine.hpp"
+#include <geometry_msgs/msg/pose.hpp>
 
 #include "dummy_map.hpp"
 #include "dummy_planner.hpp"
@@ -67,7 +68,12 @@ int main(int argc, char** argv) {
     engine->connectPipeline({"line_path", "plan_result"}, control_layer);
 
 
-    // TODO: start / pause / navigate to，这些都可以有C++ api
+    // 7. Navigate — C++ API, no ROS action client needed
+    geometry_msgs::msg::Pose goal;
+    goal.position.x = 5.0;
+    goal.position.y = 3.0;
+    engine->navigateTo(goal);
+
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");
     rclcpp::spin(node);
 
