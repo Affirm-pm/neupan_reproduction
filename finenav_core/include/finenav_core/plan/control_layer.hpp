@@ -17,7 +17,7 @@
 #include "finenav_core/map/map_server.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
-#include "finenav_core/plan/planner_set.hpp"
+#include "finenav_core/plan/generate_map_views_variant.hpp"
 #include "finenav_core/plan/ros_conversions.hpp"
 #include "finenav_core/algo_configurator.hpp"
 #include "finenav_core/param_handle_keeper.hpp"
@@ -33,14 +33,14 @@ namespace finenav::core {
  * It owns the planner instances, manages the ROS action server, and orchestrates the
  * plan-once flow: pre-callback → read-lock MapView → planner.plan() → post-callback.
  *
- * @tparam PlannersT       PlannerSet<...> listing the supported planner types.
+ * @tparam Planners  The planner types supported by this layer (one or more).
  */
-template <typename PlannersT>
+template <typename... Planners>
 class ControlLayer {
 public:
     // ── Types ──────────────────────────────────────────────────────────────
 
-    using MapViewsVariant = GenerateMapViewsVariant<PlannersT>;
+    using MapViewsVariant = GenerateMapViewsVariant<Planners...>;
     using ActionT         = finenav_interfaces::action::ComputePlan;
     using ActionServer    = finenav::util::SimpleActionServer<ActionT>;
     using PrePlanCallback = std::function<bool(PrePlanContext&)>;
@@ -130,7 +130,7 @@ private:
 
     // ── Planner state ──────────────────────────────────────────────────────
 
-    typename PlannersT::Tuple planners_instance_;
+    std::tuple<Planners...> planners_instance_;
     std::string               active_planner_id_;
     ExecutionPolicyVariant   policy_;
 

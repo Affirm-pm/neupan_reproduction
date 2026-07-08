@@ -81,18 +81,18 @@ public:
 
     /**
      * @brief Create a named ControlLayer and store it internally.
-     * @tparam PlannersT  PlannerSet<...> listing supported planners.
-     * @tparam PolicyT    SingleShotPolicy or ContinuousPolicy (deduced from argument).
+     * @tparam Planners  The planner types (one or more) supported by this layer.
+     * @tparam PolicyT   SingleShotPolicy or ContinuousPolicy (deduced from argument).
      */
-    template <typename PlannersT, typename PolicyT = finenav::core::SingleShotPolicy>
+    template <typename... Planners, typename PolicyT = finenav::core::SingleShotPolicy>
     void createControlLayer(const std::string& name, PolicyT policy = {});
 
     /**
      * @brief Retrieve a previously-created ControlLayer by name and type.
      * @return nullptr if not found or type mismatch.
      */
-    template <typename PlannersT>
-    std::shared_ptr<finenav::core::ControlLayer<PlannersT>> getControlLayer(const std::string& name);
+    template <typename... Planners>
+    std::shared_ptr<finenav::core::ControlLayer<Planners...>> getControlLayer(const std::string& name);
 
     /**
      * @brief Remove a ControlLayer from the engine.  The handle (and layer) is
@@ -208,9 +208,9 @@ inline bool FineNavEngine::removeMapServer(const std::string& name) {
 //  Factory: layer
 // ══════════════════════════════════════════════════════════════════════════════
 
-template <typename PlannersT, typename PolicyT>
+template <typename... Planners, typename PolicyT>
 void FineNavEngine::createControlLayer(const std::string& name, PolicyT policy) {
-    auto layer = std::make_shared<finenav::core::ControlLayer<PlannersT>>(
+    auto layer = std::make_shared<finenav::core::ControlLayer<Planners...>>(
         node_, name, std::move(policy));
     layer->set_robot_state_provider([this]() -> finenav::core::RobotState {
         return localizer_->getRobotState().value_or(finenav::core::RobotState{});
@@ -218,17 +218,17 @@ void FineNavEngine::createControlLayer(const std::string& name, PolicyT policy) 
     layers_[name] = std::any(std::move(layer));
 }
 
-template <typename PlannersT>
-std::shared_ptr<finenav::core::ControlLayer<PlannersT>>
+template <typename... Planners>
+std::shared_ptr<finenav::core::ControlLayer<Planners...>>
 FineNavEngine::getControlLayer(const std::string& name) {
     auto it = layers_.find(name);
     if (it == layers_.end()) return nullptr;
     try {
-        return std::any_cast<std::shared_ptr<finenav::core::ControlLayer<PlannersT>>>(
+        return std::any_cast<std::shared_ptr<finenav::core::ControlLayer<Planners...>>>(
             it->second);
     } catch (const std::bad_any_cast&) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "getControlLayer('{}'): type mismatch — stored PlannersT differs from requested type.", name);
+            "getControlLayer('{}'): type mismatch — stored planner types differ from requested.", name);
         return nullptr;
     }
 }

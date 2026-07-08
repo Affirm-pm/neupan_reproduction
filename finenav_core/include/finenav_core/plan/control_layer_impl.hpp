@@ -16,8 +16,8 @@ namespace finenav::core {
 // Constructor
 // ==============================================================================
 
-template <typename PlannersT>
-ControlLayer<PlannersT>::ControlLayer(
+template <typename... Planners>
+ControlLayer<Planners...>::ControlLayer(
     rclcpp::Node::SharedPtr node,
     const std::string& layer_name,
     ExecutionPolicyVariant policy)
@@ -56,23 +56,23 @@ ControlLayer<PlannersT>::ControlLayer(
 // Topic / Port Setup
 // ==============================================================================
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::setInputTopic(const std::string& topic) {
+template <typename... Planners>
+void ControlLayer<Planners...>::setInputTopic(const std::string& topic) {
     input_topic_ = topic;
 }
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::setOutputTopic(const std::string& topic) {
+template <typename... Planners>
+void ControlLayer<Planners...>::setOutputTopic(const std::string& topic) {
     output_topic_ = topic;
 }
 
-template <typename PlannersT>
-std::string ControlLayer<PlannersT>::getName() const {
+template <typename... Planners>
+std::string ControlLayer<Planners...>::getName() const {
     return pnode_->get_name();
 }
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::setupDataPorts() {
+template <typename... Planners>
+void ControlLayer<Planners...>::setupDataPorts() {
     if (!input_topic_.empty()) {
         plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::Trajectory>(
             input_topic_, 10,
@@ -87,8 +87,8 @@ void ControlLayer<PlannersT>::setupDataPorts() {
 // Utilities
 // ==============================================================================
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::PlanRefCallback(
+template <typename... Planners>
+void ControlLayer<Planners...>::PlanRefCallback(
     const finenav_interfaces::msg::Trajectory& msg)
 {
     std::lock_guard<std::mutex> lock(plan_ref_mutex_);
@@ -99,8 +99,8 @@ void ControlLayer<PlannersT>::PlanRefCallback(
 // Shared Helpers
 // ==============================================================================
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::resetActivePlanner() {
+template <typename... Planners>
+void ControlLayer<Planners...>::resetActivePlanner() {
     std::apply([&](auto&... planners) {
         ([&](auto& p) {
             using PlannerT = std::decay_t<decltype(p)>;
@@ -115,8 +115,8 @@ void ControlLayer<PlannersT>::resetActivePlanner() {
     }, planners_instance_);
 }
 
-template <typename PlannersT>
-bool ControlLayer<PlannersT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
+template <typename... Planners>
+bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     if (!map_view_factory_) {
         FINENAV_LOG_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
         return false;
@@ -216,8 +216,8 @@ bool ControlLayer<PlannersT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
 // execute() — Episode Entry-Point
 // ==============================================================================
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::execute() {
+template <typename... Planners>
+void ControlLayer<Planners...>::execute() {
     FINENAV_LOG_INFO(pnode_->get_logger(), "New goal received — starting episode.");
 
     auto goal          = action_server_->get_current_goal();
@@ -234,8 +234,8 @@ void ControlLayer<PlannersT>::execute() {
 // executeImpl — SingleShotPolicy
 // ==============================================================================
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::executeImpl(SingleShotPolicy&) {
+template <typename... Planners>
+void ControlLayer<Planners...>::executeImpl(SingleShotPolicy&) {
     auto goal_pose = action_server_->get_current_goal()->goal;
 
     if (action_server_->is_cancel_requested()) {
@@ -258,8 +258,8 @@ void ControlLayer<PlannersT>::executeImpl(SingleShotPolicy&) {
 // executeImpl — ContinuousPolicy
 // ==============================================================================
 
-template <typename PlannersT>
-void ControlLayer<PlannersT>::executeImpl(ContinuousPolicy& policy) {
+template <typename... Planners>
+void ControlLayer<Planners...>::executeImpl(ContinuousPolicy& policy) {
     auto goal_pose = action_server_->get_current_goal()->goal;
     rclcpp::Rate rate(policy.frequency_hz);
 
@@ -305,9 +305,9 @@ void ControlLayer<PlannersT>::executeImpl(ContinuousPolicy& policy) {
 // bind_map_view
 // ==============================================================================
 
-template <typename PlannersT>
+template <typename... Planners>
 template <typename MapT, typename BuilderFn>
-void ControlLayer<PlannersT>::bind_map_view(
+void ControlLayer<Planners...>::bind_map_view(
     std::shared_ptr<MapServer<MapT>> server,
     BuilderFn&& builder)
 {

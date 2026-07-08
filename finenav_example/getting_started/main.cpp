@@ -9,7 +9,6 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_engine/finenav_engine.hpp"
-#include "finenav_core/plan/planner_set.hpp" // TODO: 这个文件要搞掉
 
 #include "dummy_map.hpp"
 #include "dummy_planner.hpp"
@@ -42,19 +41,15 @@ int main(int argc, char** argv) {
     engine->createMapServer<DummyMap>("my_map");
 
     // 2. Create ControlLayer — engine stores internally
-    using Planners = PlannerSet<DummyPlanner>;
-    engine->createControlLayer<Planners>("my_layer", ContinuousPolicy{10.0});    // TODO: 这里就不应该再允许输入参数了
+    engine->createControlLayer<DummyPlanner>("my_layer", ContinuousPolicy{10.0});
 
-    // Retrieve typed handles from engine
     auto map_server    = engine->getMapServer<DummyMap>("my_map");
-    auto control_layer = engine->getControlLayer<Planners>("my_layer"); // TODO： 暴露了过多接口
+    auto control_layer = engine->getControlLayer<DummyPlanner>("my_layer");
 
     // 3. Bind map to layer
-    control_layer->bind_map_view(map_server, [](const DummyMap& map_data, const std::string& active_planner) {
-        if (active_planner == "dummy_planner") { // Since only DummyPlanner is in the ControlLayer, the active_planner_id always return "dummy_planner"
+    control_layer->bind_map_view(map_server, [node](const DummyMap& map_data, const std::string& active_planner) {
+            RCLCPP_INFO(node->get_logger(), "Binding map to planner: %s", active_planner.c_str());
             return std::make_shared<ASimpleMapView>(map_data);
-        }
-        // TODO：测试下没绑定到map_view会报什么错
     });
 
     // 5. Post-plan: publish cmd_vel // TODO： 不止支持cmd_vel
