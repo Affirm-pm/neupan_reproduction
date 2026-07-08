@@ -12,6 +12,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "geometry_msgs/msg/pose.hpp"
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include "finenav_interfaces/action/navigate_to_pose.hpp"
 
 #include "finenav_core/map/map_server.hpp"
@@ -148,6 +149,7 @@ private:
     std::unique_ptr<finenav::localizer::FineNavLocalizer> localizer_;
     std::unique_ptr<finenav::navigator::BtNavigator>        navigator_;
     rclcpp_action::Client<finenav_interfaces::action::NavigateToPose>::SharedPtr nav_client_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr                goal_sub_;
 };
 
 // ══════════════════════════════════════════════════════════════════════════════

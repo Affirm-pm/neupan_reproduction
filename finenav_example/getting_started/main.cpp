@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
     engine->createControlLayer<DummyPlanner>("my_layer", core::ContinuousPolicy{10.0});
 
     auto map_server    = engine->getMapServer<DummyMap>("my_map");
-    auto control_layer = engine->getControlLayer<DummyPlanner>("my_layer");
+    auto control_layer = engine->getControlLayer<DummyPlanner>("my_layer"); // TODO: 暴露了太多东西
 
     // 3. Bind map to layer
     control_layer->bind_map_view(map_server, [node](const DummyMap& map_data, const std::string& active_planner) {
@@ -68,13 +68,6 @@ int main(int argc, char** argv) {
 
     // 6. Connect pipeline
     engine->connectPipeline({"line_path", "plan_result"}, control_layer);
-
-
-    // 7. Navigate — C++ API, no ROS action client needed
-    geometry_msgs::msg::Pose goal;
-    goal.position.x = 5.0;
-    goal.position.y = 3.0;
-    engine->navigateTo(goal);
 
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");
     rclcpp::spin(node);

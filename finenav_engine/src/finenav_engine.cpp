@@ -29,6 +29,13 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
         node_, navigator_->getActionName());
     FINENAV_LOG_INFO(node_->get_logger(), "Navigation client ready.");
 
+    goal_sub_ = node_->create_subscription<geometry_msgs::msg::PoseStamped>(
+        "/goal_pose", 10,
+        [this](const geometry_msgs::msg::PoseStamped& msg) {
+            navigateTo(msg.pose);
+        });
+    FINENAV_LOG_INFO(node_->get_logger(), "Goal pose subscriber ready (/goal_pose).");
+
     FINENAV_LOG_INFO(node_->get_logger(), "All singletons initialized.");
 }
 
