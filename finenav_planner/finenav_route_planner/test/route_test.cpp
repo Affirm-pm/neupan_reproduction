@@ -24,7 +24,7 @@
 
 #include <geometry_msgs/msg/pose.hpp>
 
-#include "route_path_search.hpp"
+#include "finenav_route_planner/route_path_search.hpp"
 #include "grid_map.hpp"
 
 namespace {
@@ -101,9 +101,9 @@ finenav::PlanningContext<finenav::RoutePathSearch>
 makeCtx(double sx, double sy, double gx, double gy)
 {
     finenav::PlanningContext<finenav::RoutePathSearch> ctx;
-    ctx.robot_state.pose.position.x    = sx;
-    ctx.robot_state.pose.position.y    = sy;
-    ctx.robot_state.pose.orientation.w = 1.0;
+    ctx.robot_state.position.x() = sx;
+    ctx.robot_state.position.y() = sy;
+    ctx.robot_state.orientation.w() = 1.0;
     ctx.goal_pose.position.x    = gx;
     ctx.goal_pose.position.y    = gy;
     ctx.goal_pose.orientation.w = 1.0;

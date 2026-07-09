@@ -12,7 +12,7 @@
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  Constructor
@@ -107,7 +107,7 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
         [this]() { timerCallback(); });
 
     // ── 启动 spin 线程（最后执行，确保所有订阅/服务已注册）────────────────────
-    pnode_thread_ = std::make_unique<NodeThread>(pnode_);
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
     RCLCPP_INFO(
         logger_,
@@ -207,6 +207,38 @@ NavStateD FineNavLocalizer::getState() const
         s = force2DOutput(s);
     }
     return s;
+}
+
+std::optional<finenav::core::RobotState> FineNavLocalizer::getRobotState() const
+{
+    if (!is_initialized_.load(std::memory_order_acquire)) {
+        return std::nullopt;
+    }
+    std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);
+    NavStateD s = cached_state_;
+    // Follow the same contract as getState(): v in body frame.
+    s.v = s.R.inverse() * s.v;
+    if (params_.force_2d_mode) {
+        s = force2DOutput(s);
+    }
+    return finenav::core::RobotState{
+        s.p,
+        s.R.unit_quaternion(),
+        s.v,
+        s.omega
+    };
+}
+
+std::optional<finenav::core::RobotState> FineNavLocalizer::getRobotState(const rclcpp::Time& t) const
+{
+    auto s = getStateAt(t);
+    if (!s) return std::nullopt;
+    return finenav::core::RobotState{
+        s->p,
+        s->R.unit_quaternion(),
+        s->v,
+        s->omega
+    };
 }
 
 FineNavLocalizer::PMat FineNavLocalizer::getCovariance() const
@@ -757,6 +789,6 @@ NavStateD FineNavLocalizer::force2DOutput(const NavStateD& s) const
     return out;
 }
 
-}  // namespace finenav
+}  // namespace finenav::localizer
 
 

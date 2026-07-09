@@ -2,11 +2,16 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "bfs_path_search.hpp"
+#include "finenav_route_planner/bfs_path_search.hpp"
 
 #include <cmath>
 #include <geometry_msgs/msg/pose.hpp>
 
+using finenav::core::Position3D;
+using finenav::core::Region3D;
+using finenav::core::IOProfile;
+using finenav::core::PlanningContext;
+using finenav::core::OutputTrajectoryT;
 namespace finenav {
 
 void BfsPathSearch::configure(const ConfigType& params)
@@ -52,10 +57,10 @@ BfsPathSearch::Result BfsPathSearch::plan(
         return map_view.getCost(cellCentre(c));
     };
 
-    const auto& sp = ctx.robot_state.pose.position;
+    const auto& sp = ctx.robot_state.position;
     const auto& gp = ctx.goal_pose.position;
 
-    const astar::Vec3 start = worldToCell(sp.x, sp.y, sp.z);
+    const astar::Vec3 start = worldToCell(sp.x(), sp.y(), sp.z());
     const astar::Vec3 goal  = worldToCell(gp.x, gp.y, gp.z);
 
     // BFS = A* with Heuristic::Zero (h=0 → pure cost-based Dijkstra expansion)
@@ -72,7 +77,7 @@ BfsPathSearch::Result BfsPathSearch::plan(
     if (!cell_path)
         return std::nullopt;
 
-    OutputDataT<BfsPathSearch> output;
+    OutputTrajectoryT<BfsPathSearch> output;
     output.poses.reserve(cell_path->size());
 
     for (const auto& cell : *cell_path) {

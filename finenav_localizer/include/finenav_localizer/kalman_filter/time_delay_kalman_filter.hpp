@@ -9,7 +9,7 @@
 #include <iostream>
 #include <utility>
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  TimeDelayKalmanFilter  —  KF with state-expansion for delayed observations
@@ -257,5 +257,5 @@ private:
     int dim_x_ex_       = 0;
 };
 
-}  // namespace finenav
+}  // namespace finenav::localizer
 

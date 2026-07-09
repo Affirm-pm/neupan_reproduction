@@ -2,8 +2,8 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "trim_by_count.hpp"
-#include "detail/trim_utils.hpp"
+#include "finenav_motion_decorator/trim_by_count.hpp"
+#include "finenav_motion_decorator/detail/trim_utils.hpp"
 #include <stdexcept>
 
 namespace finenav {
@@ -15,9 +15,9 @@ TrimByCount::TrimByCount(std::size_t max_points) : max_points_(max_points)
     }
 }
 
-void TrimByCount::operator()(finenav_msgs::msg::Trajectory& traj) const
+void TrimByCount::operator()(finenav_interfaces::msg::Trajectory& traj) const
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
 
     // Determine current size from the first populated field
     std::size_t current_size = 0;

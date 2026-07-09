@@ -23,6 +23,7 @@
 
 #include "ros_node_params.hpp"
 #include <boost/signals2.hpp>
+#include "finenav_util/common/log_macros.hpp"
 
 namespace BT
 {
@@ -264,8 +265,8 @@ inline bool RosTopicSubNode<T>::createSubscriber(const std::string& topic_name)
     sub_instance_ = std::make_shared<SubscriberInstance>(node, topic_name);
     registry.insert_or_assign(subscriber_key_, sub_instance_);
 
-    RCLCPP_INFO(logger(), "Node [%s] created Subscriber to topic [%s]", name().c_str(),
-                topic_name.c_str());
+    FINENAV_LOG_INFO(logger(), "Node [{}] created Subscriber to topic [{}]", name(),
+                topic_name);
   }
   else
   {

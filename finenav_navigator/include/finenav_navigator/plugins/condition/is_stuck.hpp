@@ -9,7 +9,7 @@
 #include <geometry_msgs/msg/pose.hpp>
 #include "behaviortree_cpp/condition_node.h"
 
-namespace finenav {
+namespace finenav::navigator {
 
 /**
  * @brief IsStuck — 检测机器人是否在一段时间内没有充分移动（卡死）。
@@ -101,6 +101,6 @@ private:
     std::chrono::steady_clock::time_point last_tick_time_;
 };
 
-} // namespace finenav
+} // namespace finenav::navigator
 
 

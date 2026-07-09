@@ -22,6 +22,7 @@
 #include <rclcpp/version.h>
 #include <rclcpp/qos.hpp>
 #include "behaviortree_cpp/bt_factory.h"
+#include "finenav_util/common/log_macros.hpp"
 
 #include "ros_node_params.hpp"
 
@@ -277,8 +278,8 @@ inline bool RosServiceNode<T>::createClient(const std::string& service_name)
   bool found = srv_instance_->service_client->wait_for_service(wait_for_service_timeout_);
   if(!found)
   {
-    RCLCPP_ERROR(logger(), "%s: Service with name '%s' is not reachable.", name().c_str(),
-                 service_name_.c_str());
+    FINENAV_LOG_ERROR(logger(), "{}: Service with name '{}' is not reachable.", name(),
+                 service_name_);
   }
   return found;
 }

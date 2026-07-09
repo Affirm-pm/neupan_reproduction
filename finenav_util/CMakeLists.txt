@@ -27,7 +27,7 @@ ament_auto_add_library(${PROJECT_NAME} SHARED
 
 target_include_directories(${PROJECT_NAME} PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
 
 
@@ -37,4 +37,4 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 #    add_subdirectory(test)
 #endif ()
 
-ament_auto_package() # TODO: 之后讨论下是否添加 USE_SCOPED_HEADER_INSTALL_DIR 的问题
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

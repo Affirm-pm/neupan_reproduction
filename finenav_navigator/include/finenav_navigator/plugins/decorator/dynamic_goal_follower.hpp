@@ -14,7 +14,7 @@
 #include "behaviortree_cpp/decorator_node.h"
 #include "finenav_navigator/thirdparty/ros_node_params.hpp"
 
-namespace finenav
+namespace finenav::navigator
 {
 
 /**
@@ -115,4 +115,4 @@ private:
   bool has_last_goal_{false};
 };
 
-}  // namespace finenav
+}  // namespace finenav::navigator

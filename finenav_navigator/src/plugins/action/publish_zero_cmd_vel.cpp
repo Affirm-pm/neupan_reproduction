@@ -5,5 +5,5 @@
 #include "finenav_navigator/plugins/action/publish_zero_cmd_vel.hpp"
 #include "finenav_navigator/thirdparty/plugins.hpp"
 
-CreateRosNodePlugin(finenav::PublishZeroCmdVel, "PublishZeroCmdVel");
+CreateRosNodePlugin(finenav::navigator::PublishZeroCmdVel, "PublishZeroCmdVel");
 

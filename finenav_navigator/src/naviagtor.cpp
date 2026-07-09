@@ -3,11 +3,16 @@
 // All rights reserved.
 
 #include "finenav_navigator/navigator.hpp"
+
 #include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include "finenav_util/common/log_macros.hpp"
 
-namespace finenav {
+namespace finenav::navigator {
 
-Navigator::Navigator(rclcpp::Node::SharedPtr parent_node)
+BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
+                     finenav::core::IRobotStateProvider* state_provider)
+    : state_provider_(state_provider)
 {
     // ── 创建私有子节点（参数前缀由 yaml 的顶层 key "finenav_navigator" 决定）──
     rclcpp::NodeOptions pnode_opts;
@@ -27,7 +32,7 @@ Navigator::Navigator(rclcpp::Node::SharedPtr parent_node)
     action_server_ = std::make_unique<ActionServer>(
         pnode_,
         params_.action_name,
-        std::bind(&Navigator::execute, this));
+        std::bind(&BtNavigator::execute, this));
 
     // ── 初始化行为树引擎 ──────────────────────────────────────────────────────
     bt_engine_ = std::make_unique<BehaviorTreeEngine>(pnode_);
@@ -35,23 +40,23 @@ Navigator::Navigator(rclcpp::Node::SharedPtr parent_node)
     if (!params_.behavior_trees.empty()){ bt_engine_->registerBehaviorTrees(params_.behavior_trees); }
 
     // ── 启动 spin 线程（最后执行，确保所有订阅/服务已注册）────────────────────
-    pnode_thread_ = std::make_unique<NodeThread>(pnode_);
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
-    RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Initialized and spinning.");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Initialized and spinning.");
 }
 
-void Navigator::execute()
+void BtNavigator::execute()
 {
-    RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Executing action...");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Executing action...");
 
     auto goal = action_server_->get_current_goal();
 
     try {
         tree_ = bt_engine_->factory().createTree(goal->behavior_tree);
     } catch (std::exception& ex) {
-        RCLCPP_ERROR(pnode_->get_logger(),
-            "[Navigator] Failed to create tree [%s]: %s",
-            goal->behavior_tree.c_str(), ex.what());
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
+            "[Navigator] Failed to create tree [{}]: {}",
+            goal->behavior_tree, ex.what());
         action_server_->terminate_all();
         return;
     }
@@ -60,40 +65,56 @@ void Navigator::execute()
     blackboard->set("goal", goal->pose.pose);
 
     rclcpp::WallRate loop_rate(params_.tick_frequency);
-    RCLCPP_INFO(pnode_->get_logger(),
-        "[Navigator] Starting navigation to (%.2f, %.2f)",
+    FINENAV_LOG_INFO(pnode_->get_logger(),
+        "[Navigator] Starting navigation to ({:.2f}, {:.2f})",
         goal->pose.pose.position.x, goal->pose.pose.position.y);
 
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
-            RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Cancellation requested.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Cancellation requested.");
             tree_.haltTree();
             action_server_->terminate_all();
             return;
         }
 
         if (action_server_->is_preempt_requested()) {
-            RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Preemption requested.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Preemption requested.");
             tree_.haltTree();
             return;
         }
 
         // 每 tick 前将最新机器人位姿和速度注入 Blackboard，供条件节点读取
-        if (robot_pose_provider_) {
-            blackboard->set<geometry_msgs::msg::Pose>("robot_pose", robot_pose_provider_());
-        }
-        if (robot_twist_provider_) {
-            blackboard->set<geometry_msgs::msg::Twist>("robot_twist", robot_twist_provider_());
+        if (state_provider_) {
+            if (auto rs = state_provider_->getRobotState()) {
+                geometry_msgs::msg::Pose p;
+                p.position.x    = rs->position.x();
+                p.position.y    = rs->position.y();
+                p.position.z    = rs->position.z();
+                p.orientation.w = rs->orientation.w();
+                p.orientation.x = rs->orientation.x();
+                p.orientation.y = rs->orientation.y();
+                p.orientation.z = rs->orientation.z();
+                blackboard->set<geometry_msgs::msg::Pose>("robot_pose", p);
+
+                geometry_msgs::msg::Twist t;
+                t.linear.x  = rs->linear_velocity.x();
+                t.linear.y  = rs->linear_velocity.y();
+                t.linear.z  = rs->linear_velocity.z();
+                t.angular.x = rs->angular_velocity.x();
+                t.angular.y = rs->angular_velocity.y();
+                t.angular.z = rs->angular_velocity.z();
+                blackboard->set<geometry_msgs::msg::Twist>("robot_twist", t);
+            }
         }
 
         auto status = tree_.tickExactlyOnce();
 
         if (status == BT::NodeStatus::SUCCESS) {
-            RCLCPP_INFO(pnode_->get_logger(), "[Navigator] Navigation succeeded.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Navigation succeeded.");
             action_server_->succeeded_current();
             return;
         } else if (status == BT::NodeStatus::FAILURE) {
-            RCLCPP_ERROR(pnode_->get_logger(), "[Navigator] Navigation failed.");
+            FINENAV_LOG_ERROR(pnode_->get_logger(), "[Navigator] Navigation failed.");
             action_server_->terminate_all();
             return;
         }
@@ -104,4 +125,4 @@ void Navigator::execute()
     }
 }
 
-} // namespace finenav
+} // namespace finenav::navigator

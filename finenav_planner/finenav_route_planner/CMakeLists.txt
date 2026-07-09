@@ -19,7 +19,7 @@ generate_parameter_library(bfs_params    bfs.yaml)
 generate_parameter_library(route_params  route.yaml)
 
 # ── planner library ─────────────────────────────────────────────────────────
-ament_auto_add_library(finenav_route_planner_lib
+ament_auto_add_library(finenav_route_planner_lib SHARED
     # Grid search engine (A* / Dijkstra / BFS all handled by AStarAlgorithm)
     src/astar_algorithm.cpp
     # Grid planner wrappers (FineNav PlannerConcept)
@@ -48,7 +48,7 @@ if (BUILD_TESTING)
         src/astar_algorithm.cpp
         src/astar_path_search.cpp
     )
-    ament_target_dependencies(astar_test finenav_core finenav_util finenav_msgs rclcpp)
+    ament_target_dependencies(astar_test finenav_core finenav_util finenav_interfaces rclcpp)
     target_include_directories(astar_test PRIVATE test)
     target_link_libraries(astar_test astar_params)
 
@@ -57,7 +57,7 @@ if (BUILD_TESTING)
         src/astar_algorithm.cpp      # BFS reuses AStarAlgorithm
         src/bfs_path_search.cpp
     )
-    ament_target_dependencies(bfs_test finenav_core finenav_util finenav_msgs)
+    ament_target_dependencies(bfs_test finenav_core finenav_util finenav_interfaces)
     target_include_directories(bfs_test PRIVATE test)
     target_link_libraries(bfs_test bfs_params)
 
@@ -68,10 +68,17 @@ if (BUILD_TESTING)
         src/route/route_graph.cpp
         src/route/route_search.cpp
     )
-    ament_target_dependencies(route_test finenav_core finenav_util finenav_msgs geometry_msgs std_msgs)
+    ament_target_dependencies(route_test finenav_core finenav_util finenav_interfaces geometry_msgs std_msgs)
     target_include_directories(route_test PRIVATE test)
     target_link_libraries(route_test route_params)
 endif ()
 
-ament_auto_package()
+install(TARGETS astar_params bfs_params route_params
+        EXPORT export_${PROJECT_NAME}_params
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+)
+ament_export_targets(export_${PROJECT_NAME}_params HAS_LIBRARY_TARGET)
+ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
 

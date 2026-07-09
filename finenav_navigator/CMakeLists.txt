@@ -16,9 +16,9 @@ find_package(generate_parameter_library REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(finenav_msgs REQUIRED)
+find_package(finenav_interfaces REQUIRED)
 find_package(finenav_util REQUIRED)
-find_package(finenav_localizer REQUIRED)
+find_package(finenav_core REQUIRED)
 
 include_directories(include)
 
@@ -30,9 +30,9 @@ set(dependencies
         generate_parameter_library
         eigen3_cmake_module
         geometry_msgs
-        finenav_msgs
+        finenav_core
+        finenav_interfaces
         finenav_util
-        finenav_localizer
 )
 
 # Library
@@ -41,9 +41,13 @@ generate_parameter_library(
         src/finenav_navigator.yaml
 )
 
-add_library(finenav_navigator STATIC
+add_library(finenav_navigator SHARED
         src/naviagtor.cpp
         src/behavior_tree_engine.cpp
+)
+target_include_directories(finenav_navigator PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
 ament_target_dependencies(finenav_navigator
         ${dependencies}
@@ -115,7 +119,8 @@ ament_target_dependencies(finenav_dynamic_goal_follower
 target_compile_definitions(finenav_dynamic_goal_follower PRIVATE BT_PLUGIN_EXPORT)
 
 # Install
-install(TARGETS finenav_navigator
+install(TARGETS finenav_navigator navigator_params
+        EXPORT ${PROJECT_NAME}Targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION lib/${PROJECT_NAME}
@@ -127,11 +132,12 @@ install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions finen
         RUNTIME DESTINATION bin
 )
 
-install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
 install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
 
 # Export
-ament_export_include_directories(include)
+ament_export_include_directories(include/${PROJECT_NAME})
+ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_libraries(finenav_navigator)
 ament_export_dependencies(${dependencies} Eigen3)
 

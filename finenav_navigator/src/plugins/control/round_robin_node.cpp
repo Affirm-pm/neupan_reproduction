@@ -6,7 +6,7 @@
 
 #include "finenav_navigator/plugins/control/round_robin_node.hpp"
 
-namespace finenav
+namespace finenav::navigator
 {
 
 RoundRobinNode::RoundRobinNode(
@@ -85,10 +85,10 @@ void RoundRobinNode::halt()
   num_failed_children_ = 0;
 }
 
-}  // namespace finenav
+}  // namespace finenav::navigator
 
 #include "behaviortree_cpp/bt_factory.h"
 BT_REGISTER_NODES(factory)
 {
-  factory.registerNodeType<finenav::RoundRobinNode>("RoundRobin");
+  factory.registerNodeType<finenav::navigator::RoundRobinNode>("RoundRobin");
 }

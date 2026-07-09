@@ -4,7 +4,7 @@
 
 #include "finenav_util/cloud_publish_helper.hpp"
 
-namespace finenav_utils {
+namespace finenav::util {
 
 void CloudPublishHelper::configure(const std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>>& pub,
                     bool is_dense, const std::string& frame_id) {
@@ -49,5 +49,5 @@ bool CloudPublishHelper::hasSubscribers() const {
 
 
 
-} // namespace finenav_utils
+} // namespace finenav::util
 

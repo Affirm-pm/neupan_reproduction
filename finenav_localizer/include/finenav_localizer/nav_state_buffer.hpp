@@ -14,7 +14,7 @@
 
 #include "finenav_localizer/filter_model.hpp"
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  NavStateBuffer  —  rolling time-stamped history of NavStateD
@@ -194,5 +194,5 @@ private:
     std::deque<StampedState> buffer_;
 };
 
-}  // namespace finenav
+}  // namespace finenav::localizer
 

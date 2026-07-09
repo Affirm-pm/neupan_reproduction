@@ -15,8 +15,8 @@
 
     <depend>eigen</depend>
     <depend>sophus</depend>
-    <depend>fmt</depend>
 
+    <depend>finenav_core</depend>
     <depend>finenav_util</depend>
     <depend>generate_parameter_library</depend>
 

@@ -4,133 +4,155 @@
 
 #pragma once
 
-#include <chrono>
 #include <functional>
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <vector>
 
-#include <rclcpp/rclcpp.hpp>
-#include "finenav_util/algo_configurator.hpp"
-#include "finenav_util/node_thread.hpp"
-#include "finenav_localizer/finenav_localizer.hpp"
-#include "finenav_core/concepts.hpp"
+#include "rclcpp/rclcpp.hpp"
+#include "finenav_core/map/map_concept.hpp"
+#include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
-#include "finenav_core/map/update_source.hpp"
+#include "finenav_core/map/observation_source.hpp"
+#include "finenav_util/ros/node_thread.hpp"
+#include "finenav_core/param_handle_keeper.hpp"
 
-namespace finenav {
-
-// ==============================================================================
-// MapServer Declaration
-// ==============================================================================
+namespace finenav::core {
 
 /**
- * @brief MapServer — 管理一张地图实例的生命周期、并发访问与周期性更新。
+ * @brief MapServer — runtime orchestrator for a single SpatialContainer instance.
  *
- * - 通过 addUpdateSource() 注册数据源，由内部定时器定期将缓存消息融合进地图。
- * - 通过 getLockedReadView() / getLockedWriteView() 获取 RAII 锁视图，保证线程安全。
- * - 可选接入 FineNavLocalizer 实现地图窗口跟随机器人位移。
+ * MapServer owns the map, runs the sensor-fusion update loop, provides
+ * thread-safe RAII access for planner threads
  *
- * @tparam MapT  地图类型，必须满足 MapConcept。
+ * Sensor data is NOT fused synchronously on arrival.  It is moved into a
+ * per-source buffer and deferred until the next update cycle.  The update
+ * timer drains all buffers and fuses each observation into the map.
+ *
+ * @tparam MapT  Map type; must satisfy SpatialContainer at minimum.  If MapT
+ *               also satisfies ShiftableMap and a state provider is given, the
+ *               optional window-tracking feature is enabled at compile time.
  */
-template <MapConcept MapT>
+template <SpatialContainer MapT>
 class MapServer {
 public:
-    /**
-     * @brief 单个数据源的缓存与超时策略。
-     */
-    struct SourceBufferPolicy {
-        std::size_t max_buffer_size{32};       ///< 最大缓存帧数（0 = 无限制）
-        double observation_keep_time_sec{0.0}; ///< 消息最大保留时长（0 = 永不过期）
-        double source_timeout_sec{0.0};        ///< 数据源超时阈值（0 = 禁用）
-    };
 
-    using PreUpdateHook  = std::function<void(MapT& map)>;
-    using PostUpdateHook = std::function<void(const MapT& map)>;
-
+    /// Re-exported from ObservationSource.
     template <typename MsgT>
-    using Fuser = std::function<void(const MsgT& msg, const rclcpp::Time& stamp, MapT& map)>;
+    using Fuser = typename ObservationSource<MapT, MsgT>::Fuser;
+
+    /// Hook executed BEFORE / AFTER sensor fusion, with write lock held.
+    using PreUpdateHook  = std::function<void(const RobotState& robot_state, MapT& map)>;
+    using PostUpdateHook = std::function<void(const RobotState& robot_state, MapT& map)>;
 
     /**
-     * @brief 构造 MapServer，初始化内部定时器以定期执行地图更新。
-     * @param node           ROS 2 节点指针
-     * @param server_name    MapServer 的名称（同时作为私有子节点名）
-     * @param update_rate_hz 传感器融合定时器频率（Hz），默认 10 Hz
-     * @param localizer      可选的定位器指针；非空时启动地图位移定时器
-     * @param shift_rate_hz  地图位移定时器频率（Hz），默认 50 Hz
+     * @brief MapServer Constructor.
+     * @param node           Parent ROS node
+     * @param server_name    Unique name
+     * @param update_rate_hz Sensor fusion timer frequency (Hz), default 10.0
+     * @param state_provider Source of robot pose
+     * @param shift_rate_hz     Map window shift check frequency (Hz), default 50.0.
+     * @param shift_margin_ratio Distance-from-centre ratio that triggers a shift.
+     *                           0 = centre only, 1 = at window edge.  Default 0.5.
      */
-    explicit MapServer(
+    explicit MapServer( // TODO：2D情况能否正常fallback，需要测试 // TODO：评估是否需要参数热加载
         rclcpp::Node::SharedPtr node,
         const std::string& server_name,
-        double update_rate_hz = 10.0,
-        FineNavLocalizer* localizer = nullptr,
-        double shift_rate_hz = 50.0);
+        IRobotStateProvider* state_provider);
 
-    /** @brief 注册在每次地图更新周期**前**执行的回调。 */
-    void registerPreUpdateHook(std::function<void(MapT& map)> hook);
+    MapServer(const MapServer&) = delete;
+    MapServer& operator=(const MapServer&) = delete;
+    MapServer(MapServer&&) = delete;
+    MapServer& operator=(MapServer&&) = delete;
+    ~MapServer() = default;
 
-    /** @brief 注册在每次地图更新周期**后**执行的回调。 */
-    void registerPostUpdateHook(std::function<void(MapT& map)> hook);
+    /** @brief Register a hook called BEFORE sensor fusion, with write lock held. */
+    void registerPreUpdateHook(PreUpdateHook hook);
+
+    /** @brief Register a hook called AFTER sensor fusion, with write lock held. */
+    void registerPostUpdateHook(PostUpdateHook hook);
 
     /**
-     * @brief 获取 RAII 读视图（共享锁）。
-     * @return 受读锁保护的 LockedMapRO<MapT>
+     * @brief Acquire a RAII read-only view of the map.
+     * @return LockedMapRO<MapT> providing const access via operator-> and get()
      */
     LockedMapRO<MapT> getLockedReadView();
 
     /**
-     * @brief 获取 RAII 读写视图（独占锁）。用于主动即时修改地图。
-     * @return 受写锁保护的 LockedMapRW<MapT>
+     * @brief Acquire a RAII read-write view of the map.
+     * @return LockedMapRW<MapT> providing mutable access via operator-> and get()
      */
     LockedMapRW<MapT> getLockedWriteView();
 
     /**
-     * @brief 注册一个数据源，返回线程安全的推送闭包。
+     * @brief Register a sensor data source and return a thread-safe push handle.
      *
-     * 返回的闭包可从任意线程调用，数据将被缓存至内部队列，
-     * 并在下次 runUpdateCycle() 时由 fuser 融合进地图。
+     * The returned callable can be invoked from any thread. Messages are
+     * buffered internally and fused into the map by the update timer.
      *
-     * @tparam MsgT       消息类型
-     * @param source_name 数据源名称（用于日志）
-     * @param policy      缓存与超时策略
-     * @param fuser       融合函数：(const MsgT&, MapT&) -> void
-     * @return 线程安全的推送闭包：void(MsgT&&, const rclcpp::Time&)
+     * @tparam MsgT   Message type
+     * @param source_name Human-readable source identifier
+     * @param policy  Buffer size and timeout configuration
+     * @param fuser   Fusion callback: (const MsgT& msg, const rclcpp::Time& stamp, MapT& map)
+     * @return Thread-safe push handle: void(MsgT&& msg, const rclcpp::Time& stamp)
      */
     template <typename MsgT>
-    std::function<void(MsgT&&, const rclcpp::Time&)> addUpdateSource(
-        const std::string& source_name, SourceBufferPolicy policy, Fuser<MsgT> fuser);
+    std::function<void(MsgT&&, const rclcpp::Time&)> addObservationSource(
+        const std::string& source_name, ObservationBufferPolicy policy, Fuser<MsgT> fuser);
+
+    /**
+     * @brief Register a sensor data source backed by a ROS topic subscription.
+     *
+     * Messages are buffered internally and fused into the map by the update timer.
+     *
+     * @tparam MsgT   ROS message type (e.g., sensor_msgs::msg::PointCloud2)
+     * @param source_name Human-readable source identifier
+     * @param topic_name  ROS topic to subscribe to
+     * @param qos         Subscription QoS
+     * @param policy      Buffer size and timeout configuration
+     * @param fuser       Fusion callback: (const MsgT& msg, const rclcpp::Time& stamp, MapT& map)
+     */
+    template <typename MsgT>
+    void addObservationSource(
+        const std::string& source_name,
+        const std::string& topic_name,
+        const rclcpp::QoS& qos,
+        ObservationBufferPolicy policy,
+        Fuser<MsgT> fuser);
 
 private:
+    void declare_parameters();
     void runUpdateCycle(const rclcpp::Time& now);
     void runShiftCycle(const rclcpp::Time& now);
-
-    template <typename T>
-    void keep_alive(std::shared_ptr<T> handle);
 
     // ---- ROS infrastructure ----
     rclcpp::Node::SharedPtr     node_;
     std::string                 server_name_;
     rclcpp::Node::SharedPtr     pnode_;
-    std::unique_ptr<NodeThread> pnode_thread_;
+    std::unique_ptr<finenav::util::NodeThread> pnode_thread_;
 
     // ---- Map data & lock ----
     std::unique_ptr<MapT> map_instance_;
     std::shared_mutex     rw_mutex_;
 
-    // ---- Optional localizer for map shifting ----
-    FineNavLocalizer*            localizer_{nullptr};
+    // ---- Optional robot state provider for map shifting ----
+    IRobotStateProvider*         state_provider_{nullptr};
     rclcpp::TimerBase::SharedPtr shift_timer_;
 
     // ---- Hooks, sources & timers ----
-    std::vector<std::function<void(MapT&)>>          pre_update_hooks_;
-    std::vector<std::function<void(MapT&)>>          post_update_hooks_;
-    std::vector<std::shared_ptr<IUpdateSource<MapT>>> update_sources_;
-    std::vector<std::shared_ptr<void>>               held_param_handles_;
+    PreUpdateHook                                    pre_update_hook_;
+    PostUpdateHook                                   post_update_hook_;
+    std::vector<std::shared_ptr<IObservationSource<MapT>>> observation_sources_;
+    std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;
+    ParamHandleKeeper                                param_keeper_;
+    double                                           update_rate_hz_{10.0};
+    double                                           shift_rate_hz_{50.0};
+    double                                           shift_margin_ratio_{0.5};
     rclcpp::TimerBase::SharedPtr                     update_timer_;
 };
 
-}  // namespace finenav
+}  // namespace finenav::core
 
 #include "finenav_core/map/map_server_impl.hpp"
 

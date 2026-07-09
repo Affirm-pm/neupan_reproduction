@@ -1,6 +1,6 @@
-#include "finenav_util/node_thread.hpp"
+#include "finenav_util/ros/node_thread.hpp"
 
-namespace finenav {
+namespace finenav::util {
 
 NodeThread::NodeThread(rclcpp::Node::SharedPtr node) : node_(node) {
     executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
@@ -20,4 +20,4 @@ NodeThread::~NodeThread() {
     thread_->join();
 }
 
-}  // namespace finenav
+}  // namespace finenav::util

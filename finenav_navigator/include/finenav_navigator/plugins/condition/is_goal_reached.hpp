@@ -9,7 +9,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include "behaviortree_cpp/condition_node.h"
 
-namespace finenav {
+namespace finenav::navigator {
 
 /**
  * @brief IsGoalReached — 检查机器人是否已到达目标（位置 + 速度 + 角度三重判定）。
@@ -105,5 +105,5 @@ private:
     }
 };
 
-} // namespace finenav
+} // namespace finenav::navigator
 

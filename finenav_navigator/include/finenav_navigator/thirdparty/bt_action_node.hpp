@@ -20,6 +20,7 @@
 #include <optional>
 #include <rclcpp/executors.hpp>
 #include <rclcpp/allocator/allocator_common.hpp>
+#include "finenav_util/common/log_macros.hpp"
 #include "behaviortree_cpp/action_node.h"
 #include "behaviortree_cpp/bt_factory.h"
 #include "rclcpp_action/rclcpp_action.hpp"
@@ -336,8 +337,8 @@ inline bool RosActionNode<T>::createClient(const std::string& action_name)
       client_instance_->action_client->wait_for_action_server(wait_for_server_timeout_);
   if(!found)
   {
-    RCLCPP_ERROR(logger(), "%s: Action server with name '%s' is not reachable.",
-                 name().c_str(), action_name_.c_str());
+    FINENAV_LOG_ERROR(logger(), "{}: Action server with name '{}' is not reachable.",
+                 name(), action_name_);
   }
   return found;
 }
@@ -406,7 +407,7 @@ inline NodeStatus RosActionNode<T>::tick()
     // Send new goal directly — no cancel — server's pending slot handles preemption.
     if(goal_received_ && shouldResendGoal())
     {
-      RCLCPP_DEBUG(logger(), "shouldResendGoal() == true, resending goal.");
+      FINENAV_LOG_DEBUG(logger(), "shouldResendGoal() == true, resending goal.");
       auto resend_status = doSendGoal();
       if(resend_status != NodeStatus::RUNNING)
       {
@@ -520,14 +521,14 @@ inline void RosActionNode<T>::cancelGoal()
         // Goal may have been rejected by the server (null handle)
         if(!goal_handle_)
         {
-          RCLCPP_WARN(logger(), "cancelGoal: goal was rejected by server, nothing to cancel.");
+          FINENAV_LOG_WARN(logger(), "cancelGoal: goal was rejected by server, nothing to cancel.");
           return;
         }
       }
     }
     else
     {
-      RCLCPP_WARN(logger(), "cancelGoal called on an empty goal_handle");
+      FINENAV_LOG_WARN(logger(), "cancelGoal called on an empty goal_handle");
       return;
     }
   }
@@ -543,24 +544,24 @@ inline void RosActionNode<T>::cancelGoal()
 
     if(executor.spin_until_future_complete(future_cancel, server_timeout_) != SUCCESS)
     {
-      RCLCPP_ERROR(logger(), "Failed to cancel action server for [%s]",
-                   action_name_.c_str());
+      FINENAV_LOG_ERROR(logger(), "Failed to cancel action server for [{}]",
+                   action_name_);
     }
 
     if(executor.spin_until_future_complete(future_result, server_timeout_) != SUCCESS)
     {
-      RCLCPP_ERROR(logger(), "Failed to get result call failed :( for [%s]",
-                   action_name_.c_str());
+      FINENAV_LOG_ERROR(logger(), "Failed to get result call failed :( for [{}]",
+                   action_name_);
     }
   }
   catch(const std::exception& ex)
   {
     // Defensive: goal may have become stale due to race conditions during
     // preemption / resend. Log a warning rather than crashing.
-    RCLCPP_WARN(logger(),
-                "cancelGoal: goal handle no longer known to client [%s] (%s). "
+    FINENAV_LOG_WARN(logger(),
+                "cancelGoal: goal handle no longer known to client [{}] ({}). "
                 "Goal was likely already completed by the server.",
-                action_name_.c_str(), ex.what());
+                action_name_, ex.what());
   }
 }
 
@@ -610,7 +611,7 @@ inline NodeStatus RosActionNode<T>::doSendGoal()
   goal_options.result_callback = [this](const WrappedResult& result) {
     if(goal_handle_ && goal_handle_->get_goal_id() == result.goal_id)
     {
-      RCLCPP_DEBUG(logger(), "result_callback");
+      FINENAV_LOG_DEBUG(logger(), "result_callback");
       result_ = result;
       emitWakeUpSignal();
     }
@@ -621,11 +622,11 @@ inline NodeStatus RosActionNode<T>::doSendGoal()
         auto gh = future_handle.get();
         if(!gh)
         {
-          RCLCPP_ERROR(logger(), "Goal was rejected by server");
+          FINENAV_LOG_ERROR(logger(), "Goal was rejected by server");
         }
         else
         {
-          RCLCPP_DEBUG(logger(), "Goal accepted by server, waiting for result");
+          FINENAV_LOG_DEBUG(logger(), "Goal accepted by server, waiting for result");
         }
       };
 

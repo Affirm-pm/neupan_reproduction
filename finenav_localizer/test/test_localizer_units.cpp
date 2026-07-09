@@ -14,7 +14,7 @@
 #include "finenav_localizer/finenav_localizer.hpp"
 
 using namespace std::chrono_literals;
-namespace fn = finenav;
+namespace fn = finenav::localizer;
 using Model = fn::NavigationModelD;
 
 // ============================================================================

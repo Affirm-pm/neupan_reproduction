@@ -2,8 +2,8 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "trim_by_aabb.hpp"
-#include "detail/trim_utils.hpp"
+#include "finenav_motion_decorator/trim_by_aabb.hpp"
+#include "finenav_motion_decorator/detail/trim_utils.hpp"
 #include <stdexcept>
 
 namespace finenav {
@@ -16,9 +16,9 @@ TrimByAABB::TrimByAABB(Eigen::AlignedBox3d bounds)
     }
 }
 
-void TrimByAABB::operator()(finenav_msgs::msg::Trajectory& traj) const
+void TrimByAABB::operator()(finenav_interfaces::msg::Trajectory& traj) const
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
 
     if (!(traj.valid_fields & T::TRAJ_POSE)) {
         throw std::runtime_error(

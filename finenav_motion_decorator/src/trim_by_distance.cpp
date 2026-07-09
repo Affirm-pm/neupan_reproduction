@@ -2,8 +2,8 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "trim_by_distance.hpp"
-#include "detail/trim_utils.hpp"
+#include "finenav_motion_decorator/trim_by_distance.hpp"
+#include "finenav_motion_decorator/detail/trim_utils.hpp"
 #include <stdexcept>
 #include <cmath>
 
@@ -16,9 +16,9 @@ TrimByDistance::TrimByDistance(double max_distance_m) : max_distance_m_(max_dist
     }
 }
 
-void TrimByDistance::operator()(finenav_msgs::msg::Trajectory& traj) const
+void TrimByDistance::operator()(finenav_interfaces::msg::Trajectory& traj) const
 {
-    using T = finenav_msgs::msg::Trajectory;
+    using T = finenav_interfaces::msg::Trajectory;
 
     if (!(traj.valid_fields & T::TRAJ_POSE)) {
         throw std::runtime_error(

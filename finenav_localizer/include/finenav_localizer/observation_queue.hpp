@@ -17,7 +17,7 @@
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 
-namespace finenav {
+namespace finenav::localizer {
 
 // ============================================================================
 //  AgedObservationQueue<MsgT>  —  smoothing-aware, mutex-protected FIFO
@@ -148,4 +148,4 @@ struct RelativePoseObs {
 
 using RelativePoseObsQueue = AgedObservationQueue<RelativePoseObs>;
 
-}  // namespace finenav
+}  // namespace finenav::localizer

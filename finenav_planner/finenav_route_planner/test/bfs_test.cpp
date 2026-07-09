@@ -12,8 +12,8 @@
 #include <gtest/gtest.h>
 #include <cmath>
 
-#include "astar_algorithm.hpp"
-#include "bfs_path_search.hpp"
+#include "finenav_route_planner/astar_algorithm.hpp"
+#include "finenav_route_planner/bfs_path_search.hpp"
 #include "grid_map.hpp"
 
 // ── helpers ──────────────────────────────────────────────────────────────
@@ -225,8 +225,8 @@ inline finenav::PlanningContext<finenav::BfsPathSearch>
 makeCtx(double sx, double sy, double gx, double gy)
 {
     finenav::PlanningContext<finenav::BfsPathSearch> ctx;
-    ctx.robot_state.pose.position.x = sx;
-    ctx.robot_state.pose.position.y = sy;
+    ctx.robot_state.position.x() = sx;
+    ctx.robot_state.position.y() = sy;
     ctx.goal_pose.position.x = gx;
     ctx.goal_pose.position.y = gy;
     return ctx;

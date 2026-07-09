@@ -20,6 +20,7 @@
 
 // Other includes
 #include "behaviortree_cpp/bt_factory.h"
+#include "finenav_util/common/log_macros.hpp"
 
 namespace nav2_behavior_tree
 {
@@ -104,8 +105,8 @@ BT::NodeStatus PauseResumeController::tick()
       // If any branch other than RESUMED returned SUCCESS, keep ticking
       return BT::NodeStatus::RUNNING;
     case BT::NodeStatus::FAILURE:
-      RCLCPP_ERROR(
-        logger_, "%s child returned FAILURE", state_names.at(state_).c_str());
+      FINENAV_LOG_ERROR(
+        logger_, "{} child returned FAILURE", state_names.at(state_));
       return BT::NodeStatus::FAILURE;
     default:
       throw std::runtime_error("A child node must never return IDLE");
@@ -127,7 +128,7 @@ void PauseResumeController::switchToNextState()
   }
 
   state_ = next_states.at(state_);
-  RCLCPP_INFO(logger_, "Switched to state: %s", state_names.at(state_).c_str());
+  FINENAV_LOG_INFO(logger_, "Switched to state: {}", state_names.at(state_));
 }
 
 void PauseResumeController::pauseServiceCallback(
@@ -136,14 +137,14 @@ void PauseResumeController::pauseServiceCallback(
   std::shared_ptr<Trigger::Response> response)
 {
   if (state_ != PAUSED) {
-    RCLCPP_INFO(logger_, "Received pause request");
+    FINENAV_LOG_INFO(logger_, "Received pause request");
     response->success = true;
     state_ = PAUSE_REQUESTED;
     return;
   }
 
   std::string warn_message = "PauseResumeController BT node already in state PAUSED";
-  RCLCPP_WARN(logger_, "%s", warn_message.c_str());
+  FINENAV_LOG_WARN(logger_, "{}", warn_message);
   response->success = false;
   response->message = warn_message;
 }
@@ -154,14 +155,14 @@ void PauseResumeController::resumeServiceCallback(
   std::shared_ptr<Trigger::Response> response)
 {
   if (state_ == PAUSED) {
-    RCLCPP_INFO(logger_, "Received resume request");
+    FINENAV_LOG_INFO(logger_, "Received resume request");
     response->success = true;
     state_ = RESUME_REQUESTED;
     return;
   }
 
   std::string warn_message = "PauseResumeController BT node not in state PAUSED";
-  RCLCPP_WARN(logger_, "%s", warn_message.c_str());
+  FINENAV_LOG_WARN(logger_, "{}", warn_message);
   response->success = false;
   response->message = warn_message;
 }

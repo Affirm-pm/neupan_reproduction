@@ -9,7 +9,7 @@
 // Pure BT plugin (no ROS node params needed) — uses BT::PLUGIN_SYMBOL
 BT_REGISTER_NODES(factory)
 {
-    factory.registerNodeType<finenav::IsGoalReached>("IsGoalReached");
-    factory.registerNodeType<finenav::IsStuck>("IsStuck");
+    factory.registerNodeType<finenav::navigator::IsGoalReached>("IsGoalReached");
+    factory.registerNodeType<finenav::navigator::IsStuck>("IsStuck");
 }
 

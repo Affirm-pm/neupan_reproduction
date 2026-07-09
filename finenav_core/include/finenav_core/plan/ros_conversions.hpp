@@ -5,10 +5,11 @@
 #pragma once
 
 #include <cstdint>
-#include "finenav_core/plan/data_packet.hpp"
-#include "finenav_msgs/msg/trajectory.hpp"
 
-namespace finenav {
+#include "finenav_core/plan/trajectory.hpp"
+#include "finenav_interfaces/msg/trajectory.hpp"
+
+namespace finenav::core {
 
 consteval uint32_t ProfileToMsgMask(const IOProfile& p) {
     uint32_t mask = 0;
@@ -22,8 +23,8 @@ consteval uint32_t ProfileToMsgMask(const IOProfile& p) {
 // TODO: func: checkConsistency
 
 template <IOProfile Config>
-void toROSMsg(const finenav::DataPacket<Config>& src,
-              finenav_msgs::msg::Trajectory& dst)
+void toROSMsg(const Trajectory<Config>& src,
+              finenav_interfaces::msg::Trajectory& dst)
 {
     dst.valid_fields = ProfileToMsgMask(Config);
     if constexpr (Config.pose)  dst.poses = src.poses;
@@ -33,8 +34,8 @@ void toROSMsg(const finenav::DataPacket<Config>& src,
 }
 
 template <IOProfile Config>
-void toROSMsg(finenav::DataPacket<Config>&& src,
-              finenav_msgs::msg::Trajectory& dst)
+void toROSMsg(Trajectory<Config>&& src,
+              finenav_interfaces::msg::Trajectory& dst)
 {
     dst.valid_fields = ProfileToMsgMask(Config);
     if constexpr (Config.pose)  dst.poses = std::move(src.poses);
@@ -44,8 +45,8 @@ void toROSMsg(finenav::DataPacket<Config>&& src,
 }
 
 template <IOProfile Config>
-void fromROSMsg(const finenav_msgs::msg::Trajectory& src,
-                finenav::DataPacket<Config>& dst)
+void fromROSMsg(const finenav_interfaces::msg::Trajectory& src,
+                Trajectory<Config>& dst)
 {
     uint32_t required = ProfileToMsgMask(Config);
     if ((src.valid_fields & required) != required) {
@@ -58,8 +59,8 @@ void fromROSMsg(const finenav_msgs::msg::Trajectory& src,
 }
 
 template <IOProfile Config>
-void fromROSMsg(finenav_msgs::msg::Trajectory&& src,
-                finenav::DataPacket<Config>& dst)
+void fromROSMsg(finenav_interfaces::msg::Trajectory&& src,
+                Trajectory<Config>& dst)
 {
     uint32_t required = ProfileToMsgMask(Config);
     if ((src.valid_fields & required) != required) {
@@ -71,4 +72,4 @@ void fromROSMsg(finenav_msgs::msg::Trajectory&& src,
     if constexpr (Config.time)  dst.times = std::move(src.time_from_start);
 }
 
-} // namespace finenav
+} // namespace finenav::core

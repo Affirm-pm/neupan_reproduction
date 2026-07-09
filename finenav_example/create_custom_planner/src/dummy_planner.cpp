@@ -1,0 +1,55 @@
+// Copyright (c) 2026.
+// IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+// All rights reserved.
+
+#include "dummy_planner.hpp"
+
+#include <cmath>
+
+namespace finenav::example {
+
+DummyPlanner::DummyPlanner() = default;
+
+void DummyPlanner::configure(const ConfigType& cfg) {
+    linear_speed_  = cfg.linear_speed;
+    angular_speed_ = cfg.angular_speed;
+}
+
+void DummyPlanner::reset() {}
+
+DummyPlanner::Result DummyPlanner::plan(const Context& ctx,const IMapView& map_view) {
+
+    using Trajectory = finenav::core::Trajectory<OutputProfile>;
+
+    double dx = ctx.goal_pose.position.x - ctx.robot_state.position.x();
+    double dy = ctx.goal_pose.position.y - ctx.robot_state.position.y();
+    double distance = std::hypot(dx, dy);
+
+    if (distance < 0.1) {
+        Trajectory result;
+        geometry_msgs::msg::Twist stop;
+        result.twists.push_back(stop);
+        return result;
+    }
+
+    double desired_yaw = std::atan2(dy, dx);
+
+    const auto& q = ctx.robot_state.orientation;
+    double siny = 2.0 * (q.w() * q.z() + q.x() * q.y());
+    double cosy = 1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z());
+    double current_yaw = std::atan2(siny, cosy);
+
+    double yaw_error = desired_yaw - current_yaw;
+    while (yaw_error >  M_PI) yaw_error -= 2 * M_PI;
+    while (yaw_error < -M_PI) yaw_error += 2 * M_PI;
+
+    geometry_msgs::msg::Twist cmd;
+    cmd.linear.x  = linear_speed_ * std::max(0.0, 1.0 - std::abs(yaw_error) / 1.5);
+    cmd.angular.z = angular_speed_ * yaw_error;
+
+    Trajectory result;
+    result.twists.push_back(cmd);
+    return result;
+}
+
+}  // namespace finenav::example

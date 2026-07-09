@@ -15,7 +15,7 @@
 #include "finenav_navigator/thirdparty/ros_node_params.hpp"
 #include "finenav_navigator/thirdparty/plugins.hpp"
 
-namespace finenav {
+namespace finenav::navigator {
 
 class BehaviorTreeEngine {
   public:

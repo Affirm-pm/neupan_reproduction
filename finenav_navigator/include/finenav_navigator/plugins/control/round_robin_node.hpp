@@ -8,7 +8,7 @@
 
 #include "behaviortree_cpp/control_node.h"
 
-namespace finenav
+namespace finenav::navigator
 {
 
 /** @brief Type of sequence node that ticks children in a round-robin fashion
@@ -83,4 +83,4 @@ private:
   bool wrap_around_{false};
 };
 
-}  // namespace finenav
+}  // namespace finenav::navigator
