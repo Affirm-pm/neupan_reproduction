@@ -8,24 +8,28 @@
 
 namespace finenav::localizer {
 
-// ============================================================================
-//  KalmanFilter  —  standard linear discrete-time KF (dynamic matrices)
-//
-//  Prediction:  x' = x_next,   P' = A·P·Aᵀ + Q
-//  Update:      K  = P·Cᵀ·(C·P·Cᵀ + R)⁻¹
-//               x' = x + K·(y − y_pred)
-//               P' = (I − K·C)·P·(I − K·C)ᵀ + K·R·Kᵀ   (Joseph form)
-//
-//  All matrices use double (Eigen::MatrixXd).  The class is header-only.
-// ============================================================================
+
+/**
+ *  @brief KalmanFilter  —  standard linear discrete-time KF
+ *  @code
+ *      Prediction:  x' = x_next,   P' = A·P·Aᵀ + Q
+ *      Update:      K  = P·Cᵀ·(C·P·Cᵀ + R)⁻¹
+ *                   x' = x + K·(y − y_pred)
+ *                   P' = (I − K·C)·P·(I − K·C)ᵀ + K·R·Kᵀ   (Joseph form)
+ *  @endcode
+ */
 class KalmanFilter {
 public:
     KalmanFilter()          = default;
     virtual ~KalmanFilter() = default;
 
-    // ---- Initialization ---------------------------------------------------
 
-    /// Minimal init: only x₀ and P₀ (A/B/C/Q/R must be set separately if needed).
+    /**
+     * @brief Set initial state, x₀ and P₀
+     * @param x initial state
+     * @param P0 initial covariance matrix
+     * @return True if success
+     */
     bool init(const Eigen::MatrixXd & x, const Eigen::MatrixXd & P0)
     {
         if (x.size() == 0 || P0.size() == 0) { return false; }
@@ -34,12 +38,14 @@ public:
         return true;
     }
 
-    // ---- Prediction step -------------------------------------------------
-
-    /// @param x_next  Pre-computed next state  (caller's responsibility to
-    ///                apply the non-linear model before calling predict).
-    /// @param A       State-transition Jacobian  (dim_x × dim_x).
-    /// @param Q       Process-noise covariance   (dim_x × dim_x).
+    /**
+     * @brief Predict step of the Kalman filter.
+     * @param x_next Pre-computed next state
+     * @param A State-transition Jacobian  (dim_x × dim_x)
+     * @param Q Process-noise covariance   (dim_x × dim_x)
+     * @return True if success
+     * @note Caller's responsibility to compute next step state with system model.
+     */
     bool predict(const Eigen::MatrixXd & x_next,
                  const Eigen::MatrixXd & A,
                  const Eigen::MatrixXd & Q)
@@ -55,11 +61,16 @@ public:
         return true;
     }
 
-    // ---- Update step ------------------------------------------------------
-
-    /// Full update with explicit prediction y_pred (useful when h(x) is
-    /// non-linear — caller linearises and passes y_pred = h(x̂)).
-    /// Uses Joseph form for numerical stability.
+    /**
+     * @brief Update step of the Kalman Filter.
+     * @param y measurement vector                 (dim_y × 1)
+     * @param y_pred predicted observation h(x̂)    (dim_y × 1)
+     * @param C observation Jacobian               (dim_y × dim_x)
+     * @param R observation-noise covariance       (dim_y × dim_y)
+     * @return True if success
+     * @note Caller's responsibility to compute predicted observation with observation model.
+     * @note Uses the Joseph form so the updated covariance stays symmetric and positive-definite.
+     */
     bool update(const Eigen::MatrixXd & y,
                 const Eigen::MatrixXd & y_pred,
                 const Eigen::MatrixXd & C,
@@ -90,7 +101,13 @@ public:
         return true;
     }
 
-    /// Simplified update: y_pred = C·x̂  (linear observation model).
+    /**
+     * @brief Update step of the Kalman Filter using linear observation model y_pred = C·x̂
+     * @param y measurement vector           (dim_y × 1)
+     * @param C observation Jacobian         (dim_y × dim_x)
+     * @param R observation-noise covariance (dim_y × dim_y)
+     * @return True if success
+     */
     bool update(const Eigen::MatrixXd & y,
                 const Eigen::MatrixXd & C,
                 const Eigen::MatrixXd & R)
@@ -99,7 +116,7 @@ public:
         return update(y, C * x_, C, R);
     }
 
-    // ---- Accessors --------------------------------------------------------
+    /// Accessors
     [[nodiscard]] Eigen::MatrixXd getX() const { return x_; }
     [[nodiscard]] Eigen::MatrixXd getP() const { return P_; }
     [[nodiscard]] double getXelement(int i) const { return x_(i); }
