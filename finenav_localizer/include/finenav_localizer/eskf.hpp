@@ -10,72 +10,33 @@
 
 #include <Eigen/Core>
 #include <sophus/so3.hpp>
+#include <rclcpp/clock.hpp>
 #include <rclcpp/logging.hpp>
 
 #include "finenav_localizer/filter_model.hpp"
 #include "finenav_localizer/kalman_filter/time_delay_kalman_filter.hpp"
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::localizer {
 
-// ============================================================================
-//  ESKF<Model>  —  Error-State Kalman Filter with time-delay compensation
-//
-//  Internally, the error-state covariance is maintained inside a
-//  TimeDelayKalmanFilter, which expands the state to:
-//
-//      x_ex = [ δx_k | δx_{k-1} | … | δx_{k-d+1} ]
-//
-//  This lets delayed observations update the covariance and nominal state
-//  correctly via cross-covariance blocks, without storing past nominal states.
-//
-//  ── Template parameter `Model` must expose ─────────────────────────────────
-//    typename Model::ScalarT          —  scalar type (float / double)
-//    typename Model::NavStateT        —  nominal state struct
-//    typename Model::ErrorVec         —  error-state column vector (kNavStateDim × 1)
-//    typename Model::FMat             —  (kNavStateDim × kNavStateDim)
-//    typename Model::QMat             —  (kNavStateDim × kNavStateDim)
-//    typename Model::PMat             —  (kNavStateDim × kNavStateDim)
-//    typename Model::Options          —  noise-parameter struct
-//
-//    Model::predictNominal(s, dt)     —  propagate nominal state forward
-//    Model::computeF(s, dt)           —  error-state transition Jacobian F
-//    Model::buildQ(opts, dt)          —  discrete process-noise matrix Q
-//    Model::applyErrorState(s, dx)    —  nominal ← nominal ⊕ dx
-//    Model::projectCovariance(P, dx)  —  ESKF covariance reset projection
-//
-//  ── Delay-handling design ──────────────────────────────────────────────────
-//  • Every predict(dt) call:
-//      1. Saves the PRE-propagation nominal into nominal_history_ (pushed to front).
-//         nominal_history_[0] = nominal one tick ago  (delay_step 1)
-//         nominal_history_[d-1] = nominal d ticks ago (delay_step d)
-//      2. Propagates the nominal state forward.
-//      3. Slides the TimeDelayKF extended covariance and accumulates delay times.
-//
-//  • findDelayStep(delay_sec) converts a wall-clock delay to the closest
-//    integer delay slot index to pass to update(..., delay_step).
-//
-//  • getStateAtDelay(d) returns nominal_history_[d-1], which is the nominal
-//    state at the time of capture of a delay_step=d observation.
-//    This is critical for computing correct innovations and Jacobians.
-//
-//  • update<ObsDim>(..., delay_step) calls updateWithDelay internally.
-//    After the KF update:
-//      1. dx_0 ← getLatestX()  (block 0 = current-time error correction)
-//      2. nominal ← applyErrorState(nominal, dx_0)
-//      3. For each historical slot i ≥ 1:
-//           dx_i ← getXAtSlot(i)  (past error correction from cross-covariance)
-//           nominal_history_[i−1] ← applyErrorState(history[i−1], dx_i)
-//         This keeps the nominal history consistent with the TDKF posterior,
-//         so future delayed observations compute correct innovations.
-//      4. P(0,0) ← projectCovariance(P(0,0), dx_0)   [leading block only]
-//      5. resetState() — zero all error-state slots in tdkf_
-//
-//  ── Thread safety ──────────────────────────────────────────────────────────
-//  Not thread-safe.  All calls must be serialized by the owner
-//  (FineNavLocalizer's timerCallback holds filter_mutex_).
-//
-//  This file is header-only (templates).
-// ============================================================================
+/**
+ * @brief ESKF<Model>  —  Error-State Kalman Filter with time-delay compensation
+ * @details
+ *      Keeps the error-state covariance inside a TimeDelayKalmanFilter, whose augmented
+ *      state stacks the current error with a bounded history of past errors:
+ * @code
+ *      x_ex = [ δx_k | δx_{k-1} | … | δx_{k-d+1} ]
+ * @endcode
+ *      A delayed observation then corrects both the current and past states through the
+ *      cross-covariance blocks.  The nominal state and a matching nominal_history_ are kept
+ *      alongside, so each delayed observation linearises at the nominal from its own time
+ *      of capture.
+ *
+ *      Not thread-safe: the owner (FineNavLocalizer::timerCallback) serialises all calls.
+ * @tparam Model navigation-model descriptor (see NavigationModel): exposes the state /
+ *               matrix types and the predictNominal / computeF / buildQ / applyErrorState
+ *               / projectCovariance hooks.
+ */
 template <typename Model>
 class ESKF {
 public:
@@ -88,13 +49,14 @@ public:
 
     static constexpr int kDim = kNavStateDim;  ///< 12
 
-    // ---- Construction -----------------------------------------------------
-
-    /// @param model_opts      Process-noise parameters forwarded to Model::buildQ.
-    /// @param max_delay_step  Number of delay slots (≥ 1).
-    ///                        Typically ceil(max_delay_sec * update_rate_hz).
-    ///                        Observations older than this many ticks are rejected.
-    /// @param init_cov        Initial state covariance P₀.
+    /**
+     * @brief Construct the filter and seed every delay slot with init_cov.
+     * @param model_opts process-noise parameters forwarded to Model::buildQ.
+     * @param max_delay_step number of delay slots (≥ 1), typically ceil(max_delay_sec ·
+     *                       update_rate_hz); observations older than this are rejected.
+     * @param init_cov initial state covariance P₀.
+     * @todo 看看这里的logger怎么处理
+     */
     explicit ESKF(typename Model::Options model_opts   = {},
                   int                    max_delay_step = 50,
                   PMat                   init_cov       = PMat::Identity() * static_cast<S>(1e-2))
@@ -106,21 +68,19 @@ public:
         tdkf_.init(x0, init_cov.template cast<double>(), max_delay_step);
     }
 
-    // ---- Predict step -----------------------------------------------------
-    //
-    //  Nominal-state propagation + error-state covariance propagation.
-    //
-    //  Since the error state is always reset to zero after every update(),
-    //  x_next passed to predictWithDelay is the zero vector.  Only the
-    //  covariance (and its cross-correlation blocks) advances in time.
-    //
-    //  After predict(), accumulateDelayTime(dt) updates accumulated_delay_times_
-    //  so that findDelayStep() returns meaningful indices.
+    /**
+     * @brief Propagate the nominal state and the error-state covariance by dt.
+     * @details
+     *      Saves the pre-propagation nominal into nominal_history_, advances the nominal,
+     *      then slides the TimeDelayKF covariance.  The error state stays zero (it is reset
+     *      after every update), so only the covariance and its cross blocks advance in time.
+     * @param dt time step [s]; non-positive dt is ignored with a warning.
+     */
     void predict(S dt)
     {
         if (dt <= static_cast<S>(0.0)) {
-            RCLCPP_WARN(logger_,
-                "[ESKF] predict() called with non-positive dt=%.6f — skipping.",
+            FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+                "[ESKF] predict() called with non-positive dt={:.6f} — skipping.",
                 static_cast<double>(dt));
             return;
         }
@@ -150,31 +110,30 @@ public:
         // Track elapsed time in each delay slot.
         accumulateDelayTime(static_cast<double>(dt));
 
-        RCLCPP_DEBUG(logger_,
-            "[ESKF] predict  dt=%.4f  |p|=%.3f  |v|=%.3f  |ω|=%.3f",
+        FINENAV_LOG_DEBUG(logger_,
+            "[ESKF] predict  dt={:.4f}  |p|={:.3f}  |v|={:.3f}  |ω|={:.3f}",
             static_cast<double>(dt),
             static_cast<double>(nominal_.p.norm()),
             static_cast<double>(nominal_.v.norm()),
             static_cast<double>(nominal_.omega.norm()));
     }
 
-    // ---- Dual-epoch observation update  (relative-pose / odometry) --------
-    //
-    //  For a measurement whose observation function spans TWO state epochs
-    //  (e.g. odometry: z = T_from^{-1} · T_to), the Jacobian decomposes into
-    //  two blocks:
-    //    H_to   — ∂z/∂δx at the "to"   epoch (delay_step_to   ticks ago)
-    //    H_from — ∂z/∂δx at the "from" epoch (delay_step_from ticks ago)
-    //
-    //  Both blocks are placed in the extended C_ex passed to the TDKF, so the
-    //  cross-covariance P(slot_to, slot_from) is naturally exploited.
-    //
-    //  @param innovation     z − h(x̂)                        (ObsDim × 1)
-    //  @param H_to           Jacobian for the "to"   epoch    (ObsDim × kDim)
-    //  @param H_from         Jacobian for the "from" epoch    (ObsDim × kDim)
-    //  @param R_noise        Observation-noise covariance     (ObsDim × ObsDim)
-    //  @param delay_step_to  Delay slot for the "to"   frame  (≥ 0)
-    //  @param delay_step_from Delay slot for the "from" frame (≥ delay_step_to)
+    /**
+     * @brief Dual-epoch observation update (relative-pose / odometry).
+     * @details
+     *      For a measurement spanning two state epochs (e.g. z = T_from⁻¹ · T_to) the
+     *      Jacobian splits into H_to and H_from, placed at their two slots in the extended
+     *      C_ex so the cross-covariance P(slot_to, slot_from) is exploited.
+     * @tparam ObsDim observation vector length.
+     * @param innovation z − h(x̂)                      (ObsDim × 1)
+     * @param H_to Jacobian for the "to"   epoch         (ObsDim × kDim)
+     * @param H_from Jacobian for the "from" epoch       (ObsDim × kDim)
+     * @param R_noise observation-noise covariance       (ObsDim × ObsDim)
+     * @param delay_step_to delay slot for the "to"   frame (≥ 0)
+     * @param delay_step_from delay slot for the "from" frame (≥ delay_step_to)
+     * @return false if the TDKF rejects the update.
+     * @todo 看看怎么搞掉
+     */
     template <int ObsDim>
     bool update(const Eigen::Matrix<S, ObsDim, 1>      & innovation,
                 const Eigen::Matrix<S, ObsDim, kDim>   & H_to,
@@ -192,7 +151,7 @@ public:
             return false;
         }
 
-        // ─��� 2–5. Identical post-update logic as single-block update ─────────
+        // ── 2–5. Identical post-update logic as the single-block update ─────
         const ErrorVec dx     = tdkf_.getLatestX().template cast<S>();
         const S        dx_norm = dx.norm();
 
@@ -215,27 +174,28 @@ public:
         tdkf_.setLeadingCovariance(P_projected.template cast<double>());
         tdkf_.resetState();
 
-        RCLCPP_DEBUG(logger_,
-            "[ESKF] dual update  ObsDim=%d  slot_to=%d  slot_from=%d  "
-            "|innov|=%.4f  |dx|=%.4f",
+        FINENAV_LOG_DEBUG(logger_,
+            "[ESKF] dual update  ObsDim={}  slot_to={}  slot_from={}  "
+            "|innov|={:.4f}  |dx|={:.4f}",
             ObsDim, delay_step_to, delay_step_from,
             static_cast<double>(innovation.norm()),
             static_cast<double>(dx_norm));
         return true;
     }
 
-    // ---- Generic observation update  (compile-time observation dimension) -
-    //
-    //  @tparam ObsDim    Observation vector length.
-    //  @param innovation  z − h(x̂)                       (ObsDim × 1)
-    //  @param H           Observation Jacobian             (ObsDim × kDim)
-    //  @param R_noise     Observation-noise covariance     (ObsDim × ObsDim)
-    //  @param delay_step  Delay slot (0 = no delay, from findDelayStep()).
-    //                     Default 0 is backward-compatible with callers that
-    //                     do not yet pass a delay.
-    //
-    //  Returns false if updateWithDelay rejects the observation (e.g.
-    //  delay_step ≥ max_delay_step) or if the KF gain is degenerate.
+    /**
+     * @brief Generic delayed observation update.
+     * @details
+     *      Applies the correction to the current nominal and, via the cross-covariance
+     *      blocks, back to nominal_history_ so future delayed observations linearise at a
+     *      consistent point.  Projects the leading covariance block and resets the error state.
+     * @tparam ObsDim observation vector length.
+     * @param innovation z − h(x̂)                   (ObsDim × 1)
+     * @param H observation Jacobian                 (ObsDim × kDim)
+     * @param R_noise observation-noise covariance   (ObsDim × ObsDim)
+     * @param delay_step delay slot (0 = no delay, from findDelayStep()).
+     * @return false if the observation is rejected (too old) or the KF gain is degenerate.
+     */
     template <int ObsDim>
     bool update(const Eigen::Matrix<S, ObsDim, 1>      & innovation,
                 const Eigen::Matrix<S, ObsDim, kDim>   & H,
@@ -293,20 +253,20 @@ public:
         // ── 5. Reset all error-state slots to zero (ESKF reset step) ────────
         tdkf_.resetState();
 
-        RCLCPP_DEBUG(logger_,
-            "[ESKF] update  ObsDim=%d  delay_step=%d  |innov|=%.4f  |dx|=%.4f",
+        FINENAV_LOG_DEBUG(logger_,
+            "[ESKF] update  ObsDim={}  delay_step={}  |innov|={:.4f}  |dx|={:.4f}",
             ObsDim, delay_step,
             static_cast<double>(innovation.norm()),
             static_cast<double>(dx_norm));
         return true;
     }
 
-    // ---- Delay-step helpers (mirrors autoware EKFModule) ------------------
-
-    /// Find the delay-slot index whose accumulated time is closest to
-    /// delay_time_sec.  Returns accumulated_delay_times_.size() if
-    /// delay_time_sec exceeds the maximum tracked delay (caller should
-    /// reject the observation).
+    /**
+     * @brief Find the delay slot whose accumulated time is closest to delay_time_sec.
+     * @param delay_time_sec observation age [s].
+     * @return closest slot index, or accumulated_delay_times_.size() when the age exceeds
+     *         the maximum tracked delay (caller should reject the observation).
+     */
     [[nodiscard]] std::size_t findDelayStep(double delay_time_sec) const
     {
         // If larger than the oldest slot, signal rejection.
@@ -336,24 +296,25 @@ public:
             : static_cast<std::size_t>(std::distance(accumulated_delay_times_.begin(), lower));
     }
 
-    /// Maximum delay time currently tracked (seconds).
-    /// Observations older than this should be discarded.
+    /**
+     * @brief Maximum delay time currently tracked [s]; older observations should be discarded.
+     */
     [[nodiscard]] double maxTrackedDelaySec() const
     {
         return accumulated_delay_times_.empty() ? 0.0 : accumulated_delay_times_.back();
     }
 
-    // ---- Accessors --------------------------------------------------------
+    /**
+     * @brief Current best-estimate nominal state.
+     */
     [[nodiscard]] const NavStateT & getState() const { return nominal_; }
 
-    /// Get the nominal state at a specific delay step.
-    ///   delay_step = 0  →  current nominal (same as getState())
-    ///   delay_step = d  →  nominal from d ticks ago (= nominal_history_[d−1])
-    ///
-    /// Use this to compute the innovation for a delayed observation:
-    ///   innov = z − h(getStateAtDelay(delay_step))
-    ///
-    /// Falls back to the oldest available entry if d exceeds history depth.
+    /**
+     * @brief Nominal state at a given delay step.
+     * @param delay_step 0 = current nominal; d = nominal from d ticks ago (nominal_history_[d−1]).
+     * @return the delayed nominal; falls back to the oldest available entry if d exceeds history depth.
+     * @note Use to form the innovation for a delayed observation: innov = z − h(getStateAtDelay(d)).
+     */
     [[nodiscard]] const NavStateT & getStateAtDelay(int delay_step) const
     {
         if (delay_step <= 0 || nominal_history_.empty()) {
@@ -366,32 +327,37 @@ public:
         return nominal_history_.back();  // oldest available
     }
 
-    /// Returns the leading block of the extended covariance — i.e. the
-    /// covariance of the CURRENT (latest) error-state estimate.
+    /**
+     * @brief Covariance of the current (latest) error-state estimate — the leading block.
+     */
     [[nodiscard]] PMat getCovariance() const
     {
         return tdkf_.getLatestP().template cast<S>();
     }
 
-    /// Returns the covariance block for a specific delay slot.
-    ///   delay_step = 0  →  current covariance (same as getCovariance())
-    ///   delay_step = d  →  P(d,d): covariance of the error-state d ticks ago
-    ///
-    /// Use this for a correct Mahalanobis gate on a delayed observation:
-    ///   S = H · getCovarianceAtDelay(delay_step) · H^T + R
+    /**
+     * @brief Covariance block P(d,d) for a given delay step.
+     * @param delay_step 0 = current covariance; d = covariance of the error-state d ticks ago.
+     * @return P(d,d); use for a correct Mahalanobis gate: S = H · P(d,d) · Hᵀ + R.
+     */
     [[nodiscard]] PMat getCovarianceAtDelay(int delay_step) const
     {
         return tdkf_.getPAtSlot(delay_step).template cast<S>();
     }
 
-    // ---- Mutators ---------------------------------------------------------
-
+    /**
+     * @brief Overwrite the nominal state.
+     */
+    
     void setState(const NavStateT & state) { nominal_ = state; }
     void setState(NavStateT       && state) { nominal_ = std::move(state); }
 
-    /// Overwrites the full extended covariance (all delay slots) with P.
-    /// Also resets accumulated_delay_times_ to 1e15 and clears nominal history.
-    /// Use this for a full initialisation / reinit after setInitialPose.
+    /**
+     * @brief Overwrite the full extended covariance (all delay slots) with P.
+     * @param P new state covariance applied to every slot.
+     * @note Also resets accumulated_delay_times_ and clears nominal_history_; use for a full
+     *       (re)initialisation after setInitialPose.
+     */
     void setCovariance(const PMat & P)
     {
         const Eigen::MatrixXd x0 = Eigen::MatrixXd::Zero(kDim, 1);
@@ -401,24 +367,34 @@ public:
         nominal_history_.clear();
     }
 
-    /// Convenience: reset nominal state AND full extended covariance atomically.
+    /**
+     * @brief Reset the nominal state and the full extended covariance atomically.
+     * @param state new nominal state.
+     * @param P new state covariance.
+     */
     void reinitialize(const NavStateT & state, const PMat & P)
     {
         nominal_ = state;
         setCovariance(P);  // also clears nominal_history_
     }
 
+    /**
+     * @brief Access / update the process-noise parameters.
+     */
     [[nodiscard]] const typename Model::Options & getModelOptions() const { return model_opts_; }
     void setModelOptions(const typename Model::Options & opts)             { model_opts_ = opts; }
 
+    /**
+     * @brief Number of delay slots.
+     */
     [[nodiscard]] int maxDelayStep() const { return tdkf_.maxDelayStep(); }
 
 private:
-    // ---- Internal helpers -------------------------------------------------
-
-    /// Shift accumulated_delay_times_ one slot to the right, insert 0.0 at
-    /// slot 0, and add dt to all existing slots.  Mirrors autoware's
-    /// EKFModule::accumulate_delay_time().
+    /**
+     * @brief Shift accumulated_delay_times_ right, set slot 0 to 0, and add dt to the rest.
+     * @param dt elapsed time since the previous predict [s].
+     * @note Mirrors autoware's EKFModule::accumulate_delay_time().
+     */
     void accumulateDelayTime(double dt)
     {
         std::copy_backward(
@@ -432,7 +408,6 @@ private:
         }
     }
 
-    // ---- Data members -----------------------------------------------------
     NavStateT               nominal_{};        ///< nominal (best-estimate) state
     /// Circular history of pre-propagation nominal states.
     /// nominal_history_[0] = nominal one tick ago  (delay_step = 1)
@@ -445,9 +420,8 @@ private:
     rclcpp::Logger          logger_;
 };
 
-// ---- Convenience aliases --------------------------------------------------
+/// Convenience aliases.
 using ESKFd = ESKF<NavigationModel<double>>;
 using ESKFf = ESKF<NavigationModel<float>>;
 
 }  // namespace finenav::localizer
-

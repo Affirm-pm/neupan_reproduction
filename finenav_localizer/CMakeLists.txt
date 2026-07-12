@@ -31,6 +31,7 @@ generate_parameter_library(
 
 # FineNav Localizer (ESKF-based localization module)
 add_library(${PROJECT_NAME} SHARED
+        src/eskf_localizer.cpp
         src/finenav_localizer.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
@@ -57,6 +58,7 @@ if (BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
     add_subdirectory(test)
     add_subdirectory(eval)
+    add_subdirectory(benchmark)
 endif ()
 
 install(TARGETS ${PROJECT_NAME} localizer_params

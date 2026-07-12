@@ -9,24 +9,20 @@
 
 namespace finenav::localizer {
 
-// ============================================================================
-//  Dimension of the error-state vector: [δp(3) | δθ(3) | δv(3) | δω(3)]
-// ============================================================================
+/// Dimension of the error-state vector: [δp(3) | δθ(3) | δv(3) | δω(3)].
 inline constexpr int kNavStateDim = 12;
 
-// ============================================================================
-//  NavState<S>  —  nominal state for the [p, R, v, ω] navigation model
-//
-//  All quantities are expressed in the *world* frame unless noted otherwise.
-//  Angular velocity ω is the body-frame angular rate (same convention as IMU).
-// ============================================================================
+/**
+ * @brief NavState<S>  —  nominal state for the [p, R, v, ω] navigation model.
+ * @details
+ *      All quantities are in the world frame unless noted; ω is the body-frame angular
+ *      rate (same convention as an IMU).
+ * @tparam S scalar type (float / double).
+ */
 template <typename S = double>
 struct NavState {
-    // Sophus::SO3<S> internally holds an Eigen::Quaternion<S> which may
-    // require 16-byte (SSE) or 32-byte (AVX) alignment.  When NavState is
-    // stored in heap containers (std::deque, std::vector) the allocator must
-    // honour this requirement; the macro below ensures it does.
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW // Ensure byte alignment when NavState in stored in heap containers
 
     using SO3T  = Sophus::SO3<S>;
     using Vec3T = Eigen::Matrix<S, 3, 1>;
@@ -48,25 +44,21 @@ struct NavState {
 using NavStateF = NavState<float>;
 using NavStateD = NavState<double>;
 
-// ============================================================================
-//  NavigationModel<S>  —  constant-velocity dead-reckoning model
-//
-//  Nominal-state propagation over dt:
-//      p  ←  p + v · dt
-//      R  ←  R · Exp(ω · dt)
-//      v  ←  v               (no external acceleration)
-//      ω  ←  ω               (no external angular acceleration)
-//
-//  Error-state layout (right-perturbation, 12-dim):
-//      [ δp(3) | δθ(3) | δv(3) | δω(3) ]
-//
-//  The class exposes only static methods so that it acts as a pure
-//  "model descriptor" consumed by ESKF<Model>.
-// ============================================================================
+/**
+ * @brief NavigationModel<S>  —  constant-velocity dead-reckoning model.
+ * @details
+ *      Nominal-state propagation over dt:
+ * @code
+ *      p ← p + v·dt      R ← R · Exp(ω·dt)      v ← v      ω ← ω
+ * @endcode
+ *      Error-state layout (right-perturbation, 12-dim): [ δp(3) | δθ(3) | δv(3) | δω(3) ].
+ *      Exposes only static methods, acting as a pure "model descriptor" consumed by ESKF<Model>.
+ * @tparam S scalar type (float / double).
+ */
 template <typename S = double>
 class NavigationModel {
 public:
-    // ---- Exported type aliases (required by ESKF) --------------------------
+    /// Types exported for ESKF<Model>.
     using ScalarT   = S;
     using SO3T      = Sophus::SO3<S>;
     using Vec3T     = Eigen::Matrix<S, 3, 1>;
@@ -77,13 +69,20 @@ public:
     using QMat      = Eigen::Matrix<S, kNavStateDim, kNavStateDim>;  ///< process-noise covariance
     using PMat      = Eigen::Matrix<S, kNavStateDim, kNavStateDim>;  ///< state covariance
 
-    // ---- Process-noise configuration --------------------------------------
-    struct Options { // Since we use a contant-velocity model, process error comes from variation of velocity
+    /**
+     * @brief Process-noise parameters (constant-velocity model: noise enters through v and ω).
+     */
+    struct Options {
         S vel_noise_std   = static_cast<S>(0.10);  ///< lin-velocity noise σ         [m/s/√s]
         S omega_noise_std = static_cast<S>(0.10);  ///< ang-velocity noise σ         [rad/s/√s]
     };
 
-    // ---- Nominal-state propagation ----------------------------------------
+    /**
+     * @brief Propagate the nominal state forward by dt (constant velocity / angular velocity).
+     * @param s current nominal state.
+     * @param dt time step [s].
+     * @return propagated nominal state.
+     */
     [[nodiscard]]
     static NavStateT predictNominal(const NavStateT& s, S dt) {
         NavStateT ns;
@@ -94,15 +93,19 @@ public:
         return ns;
     }
 
-    // ---- Error-state transition Jacobian  F  (12×12)  ---------------------
-    //
-    //  Derived from first-order perturbation of the nominal dynamics:
-    //    δp' = δp + δv·dt
-    //    δθ' ≈ Exp(−ω·dt)·δθ + I·dt·δω     (right-perturbation model;
-    //                                         Jr(ω·dt) ≈ I for small ω·dt)
-    //    δv' = δv
-    //    δω' = δω
-    //
+    /**
+     * @brief Error-state transition Jacobian F (12×12).
+     * @details
+     *      First-order perturbation of the nominal dynamics:
+     * @code
+     *      δp' = δp + δv·dt
+     *      δθ' ≈ Exp(−ω·dt)·δθ + I·dt·δω     (Jr(ω·dt) ≈ I for small ω·dt)
+     *      δv' = δv        δω' = δω
+     * @endcode
+     * @param s current nominal state.
+     * @param dt time step [s].
+     * @return F  (12×12).
+     */
     [[nodiscard]]
     static FMat computeF(const NavStateT& s, S dt) {
         FMat F = FMat::Identity();
@@ -119,7 +122,12 @@ public:
         return F;
     }
 
-    // ---- Discrete process-noise covariance  Q  (12×12) -------------------
+    /**
+     * @brief Discrete process-noise covariance Q (12×12).
+     * @param opts process-noise parameters.
+     * @param dt time step [s].
+     * @return Q with noise on δv and δω only (constant-velocity model).
+     */
     [[nodiscard]]
     static QMat buildQ(const Options& opts, S dt) {
         QMat Q = QMat::Zero();
@@ -137,8 +145,13 @@ public:
         return Q;
     }
 
-    // ---- Apply error-state correction to nominal state --------------------
-    //  After correction the caller is responsible for zeroing dx.
+    /**
+     * @brief Inject an error-state correction into the nominal state: nominal ⊕ dx.
+     * @param nominal current nominal state.
+     * @param dx error-state correction (12×1).
+     * @return corrected nominal state.
+     * @note The caller is responsible for zeroing dx afterwards.
+     */
     [[nodiscard]]
     static NavStateT applyErrorState(const NavStateT& nominal, const ErrorVec& dx) {
         NavStateT corrected;
@@ -149,9 +162,13 @@ public:
         return corrected;
     }
 
-    // ---- Covariance projection after error-state correction ---------------
-    //  P ← J·P·J^T,   J = I − 0.5·[δθ]×  in the (3,3) rotation block.
-    //  Ref: ESKF textbook eq. (3.63).
+    /**
+     * @brief ESKF covariance reset projection: P ← J·P·Jᵀ.
+     * @details J = I − 0.5·[δθ]× in the (3,3) rotation block (ESKF textbook eq. 3.63).
+     * @param P covariance before projection.
+     * @param dx applied error-state correction (12×1).
+     * @return projected covariance.
+     */
     [[nodiscard]]
     static PMat projectCovariance(const PMat& P, const ErrorVec& dx) {
         FMat J = FMat::Identity();
@@ -175,14 +192,19 @@ public:
         Eigen::Matrix<S, Dim, 1>            innovation;
     };
 
-    // ---- Observe 6-DOF pose  [p_world, R_world←body]  --------------------
-    //
-    //  h_p(x) = p,    ∂h_p/∂δp = I₃
-    //  h_θ(x) = δθ,   ∂h_θ/∂δθ = I₃   (linearised via log map)
-    //
-    //  H (6 × 12):
-    //    [ I₃   0    0   0 ]   ← position rows
-    //    [ 0    I₃   0   0 ]   ← rotation rows
+    /**
+     * @brief Observe 6-DOF pose [p_world, R_world←body].
+     * @details
+     * @code
+     *      h_p(x) = p,   ∂h_p/∂δp = I₃
+     *      h_θ(x) = δθ,  ∂h_θ/∂δθ = I₃   (linearised via log map)
+     *      H (6×12) = [ I₃ 0 0 0 ; 0 I₃ 0 0 ]
+     * @endcode
+     * @param nominal nominal state to linearise at.
+     * @param pos_obs observed position (world frame).
+     * @param rot_obs observed rotation (world ← body).
+     * @return H and innovation.
+     */
     [[nodiscard]]
     static ObsData<6> observePose(const NavStateT& nominal,
                                   const Vec3T&     pos_obs,
@@ -199,21 +221,20 @@ public:
         return {H, innov};
     }
 
-    // ---- Observe body-frame twist  [v_body, ω_body]  ----------------------
-    //
-    //  Both velocity and angular velocity are in the *body* frame.
-    //  State stores v in world frame, so the observation function is:
-    //    h_v(x) = R^T · v
-    //    h_ω(x) = ω
-    //
-    //  First-order Jacobian (right-perturbation  R = R̂·Exp(δθ)):
-    //    ∂h_v / ∂δθ = [R̂^T · v̂]×   (skew of nominal body-frame velocity)
-    //    ∂h_v / ∂δv = R̂^T
-    //    ∂h_ω / ∂δω = I₃
-    //
-    //  H (6 × 12):
-    //    [ 0   [R̂ᵀv̂]×   R̂ᵀ   0  ]   ← v_body rows
-    //    [ 0   0          0    I₃ ]   ← ω_body rows
+    /**
+     * @brief Observe body-frame twist [v_body, ω_body].
+     * @details
+     *      State stores v in world frame, so the observation function is h_v(x) = Rᵀ·v,
+     *      h_ω(x) = ω. First-order Jacobian (right-perturbation R = R̂·Exp(δθ)):
+     * @code
+     *      ∂h_v/∂δθ = [R̂ᵀv̂]×      ∂h_v/∂δv = R̂ᵀ      ∂h_ω/∂δω = I₃
+     *      H (6×12) = [ 0 [R̂ᵀv̂]× R̂ᵀ 0 ; 0 0 0 I₃ ]
+     * @endcode
+     * @param nominal nominal state to linearise at.
+     * @param lin_vel_obs_body observed linear velocity (body frame).
+     * @param ang_vel_obs_body observed angular velocity (body frame).
+     * @return H and innovation.
+     */
     [[nodiscard]]
     static ObsData<6> observeVelocity(const NavStateT& nominal,
                                       const Vec3T&     lin_vel_obs_body,
@@ -233,32 +254,23 @@ public:
 
         return {H, innov};
     }
-    // ---- Observe relative pose [Δp_body, ΔR] spanning two epochs  ----------
-    //
-    //  Implements the Stochastic-Cloning dual-epoch observation model.
-    //  Both the "from" and "to" nominal states are supplied by the caller
-    //  (retrieved from eskf_.getStateAtDelay(delay_step_from/to)).
-    //
-    //  from_state : nominal at the "from" epoch  (T_k,     delay slot d_from)
-    //  to_state   : nominal at the "to"   epoch  (T_{k+Δt}, delay slot d_to)
-    //
-    //  Measurement:
-    //    z_p = R_from^{-1} · (p_to − p_from)   [body-frame displacement]
-    //    z_R = R_from^{-1} · R_to               [relative rotation]
-    //
-    //  Predicted:
-    //    ẑ_p = R̂_from^{-1} · Δp̂   where  Δp̂ = p̂_to − p̂_from
-    //    ẑ_R = ΔR̂               where  ΔR̂  = R̂_from^{-1} · R̂_to
-    //
-    //  H_to   (6 × 12) — linearised w.r.t. "to" epoch error [δp, δθ, δv, δω]:
-    //    [ R̂_from^{-1}   0   0   0 ]   ← Δp rows
-    //    [ 0              I   0   0 ]   ← ΔR rows
-    //
-    //  H_from (6 × 12) — linearised w.r.t. "from" epoch error [δp, δθ, δv, δω]:
-    //    [ −R̂_from^{-1}   [R̂_from^{-1}·Δp̂]×   0   0 ]   ← Δp rows
-    //    [  0              −ΔR̂^T                0   0 ]   ← ΔR rows
-    //
-    //  R_noise must be a DISPLACEMENT covariance (m² / rad²), not velocity.
+
+    /**
+     * @brief Observe relative pose [Δp_body, ΔR] spanning two epochs (Stochastic Cloning).
+     * @details
+     *      Measurement:  z_p = R_from⁻¹·(p_to − p_from),   z_R = R_from⁻¹·R_to.
+     *      Predicted:    ẑ_p = R̂_from⁻¹·Δp̂  (Δp̂ = p̂_to − p̂_from),   ẑ_R = R̂_from⁻¹·R̂_to.
+     * @code
+     *      H_to   = [ R̂_from⁻¹   0                  0 0 ; 0   I      0 0 ]
+     *      H_from = [ −R̂_from⁻¹  [R̂_from⁻¹·Δp̂]×    0 0 ; 0  −ΔR̂ᵀ   0 0 ]
+     * @endcode
+     * @param from_state nominal at the "from" epoch.
+     * @param to_state nominal at the "to" epoch.
+     * @param delta_p_body_obs measured body-frame displacement.
+     * @param delta_R_obs measured relative rotation.
+     * @return H_to, H_from and innovation.
+     * @note R_noise (supplied by the caller) must be a DISPLACEMENT covariance (m² / rad²), not velocity.
+     */
     [[nodiscard]]
     static DualObsData<6> observeRelativePose(const NavStateT& from_state,
                                               const NavStateT& to_state,

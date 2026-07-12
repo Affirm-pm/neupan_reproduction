@@ -11,7 +11,7 @@
 #include <sophus/so3.hpp>
 
 #include "finenav_localizer/filter_model.hpp"
-#include "finenav_localizer/finenav_localizer.hpp"
+#include "finenav_localizer/eskf_localizer.hpp"
 
 using namespace std::chrono_literals;
 namespace fn = finenav::localizer;
@@ -69,24 +69,21 @@ class LocalizerTest : public ::testing::Test {
 protected:
     void SetUp() override
     {
-        node_ = rclcpp::Node::make_shared("localizer_unit_test");
-
-        rclcpp::NodeOptions pnode_opts;
-        pnode_opts.append_parameter_override("update_rate_hz",       100.0);
-        pnode_opts.append_parameter_override("pose_smoothing_steps", int64_t{1});
-        pnode_opts.append_parameter_override("pose_gate_dist",       20.0);
-        pnode_opts.append_parameter_override("model.vel_noise_std",   0.1);
-        pnode_opts.append_parameter_override("model.omega_noise_std", 0.1);
-
-        localizer_ = std::make_unique<fn::FineNavLocalizer>(node_, pnode_opts);
+        fn::EskfLocalizer::Config cfg;
+        cfg.update_rate_hz       = 100.0;
+        cfg.pose_smoothing_steps = 1;
+        cfg.pose_gate_dist       = 20.0;
+        cfg.vel_noise_std        = 0.1;
+        cfg.omega_noise_std      = 0.1;
+        localizer_ = std::make_unique<fn::EskfLocalizer>(cfg);
     }
 
     /// Build a minimal PoseMsg at (x, y, yaw) with diagonal σ² covariance.
-    static fn::FineNavLocalizer::PoseMsg makePose(
+    static fn::EskfLocalizer::PoseMsg makePose(
         double x, double y, double yaw, double pos_sigma,
         rclcpp::Time stamp)
     {
-        fn::FineNavLocalizer::PoseMsg m;
+        fn::EskfLocalizer::PoseMsg m;
         m.header.stamp    = stamp;
         m.header.frame_id = "map";
         m.pose.pose.position.x  = x;
@@ -107,14 +104,24 @@ protected:
         return m;
     }
 
-    rclcpp::Node::SharedPtr               node_;
-    std::unique_ptr<fn::FineNavLocalizer> localizer_;
+    /// Virtual clock — deterministic driving of the engine, no ROS timer.
+    [[nodiscard]] rclcpp::Time now() const
+    {
+        return rclcpp::Time(base_ns_ + step_ * dt_ns_, RCL_ROS_TIME);
+    }
+    /// Advance one cycle and drive the estimator.
+    void tick() { ++step_; localizer_->step(now()); }
+
+    static constexpr int64_t base_ns_ = 1'000'000'000LL;
+    static constexpr int64_t dt_ns_   = 10'000'000LL;   // 100 Hz
+    int64_t                             step_ = 0;
+    std::unique_ptr<fn::EskfLocalizer>  localizer_;
 };
 
 TEST_F(LocalizerTest, SetInitialPose_StateMatchesInputImmediately)
 {
     constexpr double x = 3.0, y = -1.5, yaw = 0.8;
-    localizer_->setInitialPose(makePose(x, y, yaw, 0.1, node_->now()));
+    localizer_->setInitialPose(makePose(x, y, yaw, 0.1, now()));
 
     const fn::NavStateD s = localizer_->getState();
     EXPECT_NEAR(s.p.x(), x,   1e-9);
@@ -130,14 +137,14 @@ TEST_F(LocalizerTest, SetInitialPose_StateMatchesInputImmediately)
 TEST_F(LocalizerTest, FeedPoseObservation_StateMovesTowardObservation)
 {
     // Initialise at origin with large uncertainty so the gate passes
-    localizer_->setInitialPose(makePose(0.0, 0.0, 0.0, 1.0, node_->now()));
-    rclcpp::sleep_for(20ms);
+    localizer_->setInitialPose(makePose(0.0, 0.0, 0.0, 1.0, now()));
 
     // Feed a pose observation 1 m away
     constexpr double obs_x = 1.0, obs_y = 0.0;
-    localizer_->feedObservation(makePose(obs_x, obs_y, 0.0, 0.1, node_->now()));
+    tick();  // one predict cycle before the observation
+    localizer_->feedObservation(makePose(obs_x, obs_y, 0.0, 0.1, now()));
 
-    rclcpp::sleep_for(150ms);  // let several timer ticks run
+    for (int i = 0; i < 10; ++i) { tick(); }  // process the observation deterministically
 
     const fn::NavStateD s = localizer_->getState();
     const double dist_init  = std::hypot(obs_x, obs_y);      // distance from 0,0 to obs
