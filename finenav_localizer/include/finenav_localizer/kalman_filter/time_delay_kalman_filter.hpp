@@ -155,36 +155,34 @@ public:
     {
         const int d_dim_x = dim_x_ex_ - dim_x_;  // (max_delay_step - 1) * dim_x
 
-        // ── Slide state vector ──────────────────────────────────────────────
-        // x_tmp = [x_next; x_[0 .. d_dim_x-1]]
-        Eigen::MatrixXd x_tmp = Eigen::MatrixXd::Zero(dim_x_ex_, 1);
-        x_tmp.block(0,      0, dim_x_,  1) = x_next;
-        x_tmp.block(dim_x_, 0, d_dim_x, 1) = x_.block(0, 0, d_dim_x, 1);
-        x_ = std::move(x_tmp);
 
-        // ── Update extended covariance ─────────────────────────────────────
-        //
-        //  Symbolically (using block notation [i,j]):
-        //    P_tmp[0,0] = A * P[0,0] * A' + Q
-        //    P_tmp[0, 1..] = A * P[0, 0..d-2]    (first row of new cross-cov)
-        //    P_tmp[1.., 0] = P[0..d-2, 0] * A'   (first col of new cross-cov)
-        //    P_tmp[1.., 1..] = P[0..d-2, 0..d-2] (inner block = old leading sub)
-        //
-        Eigen::MatrixXd P_tmp = Eigen::MatrixXd::Zero(dim_x_ex_, dim_x_ex_);
+        // ── Prevent heap allocate overhead per tick with resued scratch buffers ─────
+        // Slide state vector: x_scratch = [x_next; x_[0 .. d_dim_x-1]]
+        x_scratch_.resize(dim_x_ex_, 1);
+        x_scratch_.block(0,      0, dim_x_,  1) = x_next;
+        x_scratch_.block(dim_x_, 0, d_dim_x, 1) = x_.block(0, 0, d_dim_x, 1);
+        x_.swap(x_scratch_);
 
-        P_tmp.block(0,      0,      dim_x_,  dim_x_)  =
+        // ── Propagate extended covariance (block notation [i,j]) ────────────
+        //    [0,0]     = A·P[0,0]·Aᵀ + Q
+        //    [0, 1..]  = A·P[0, 0..d-2]        (first row of new cross-cov)
+        //    [1.., 0]  = P[0..d-2, 0]·Aᵀ       (first col of new cross-cov)
+        //    [1.., 1..] = P[0..d-2, 0..d-2]    (inner block = old leading sub)
+        P_scratch_.resize(dim_x_ex_, dim_x_ex_);
+
+        P_scratch_.block(0,      0,      dim_x_,  dim_x_)  =
             A * P_.block(0, 0, dim_x_, dim_x_) * A.transpose() + Q;
 
-        P_tmp.block(0,      dim_x_, dim_x_,  d_dim_x) =
+        P_scratch_.block(0,      dim_x_, dim_x_,  d_dim_x) =
             A * P_.block(0, 0, dim_x_, d_dim_x);
 
-        P_tmp.block(dim_x_, 0,      d_dim_x, dim_x_)  =
+        P_scratch_.block(dim_x_, 0,      d_dim_x, dim_x_)  =
             P_.block(0, 0, d_dim_x, dim_x_) * A.transpose();
 
-        P_tmp.block(dim_x_, dim_x_, d_dim_x, d_dim_x) =
+        P_scratch_.block(dim_x_, dim_x_, d_dim_x, d_dim_x) =
             P_.block(0, 0, d_dim_x, d_dim_x);
 
-        P_ = std::move(P_tmp);
+        P_.swap(P_scratch_);
         return true;
     }
 
@@ -265,6 +263,8 @@ public:
 private:
     Eigen::MatrixXd x_;   ///< augmented error-state vector  (dim_x_ex × 1)
     Eigen::MatrixXd P_;   ///< augmented covariance          (dim_x_ex × dim_x_ex)
+    Eigen::MatrixXd x_scratch_;  ///< reused predict scratch — swapped into x_ (no per-tick alloc)
+    Eigen::MatrixXd P_scratch_;  ///< reused predict scratch — swapped into P_ (no per-tick alloc)
     int max_delay_step_ = 1;
     int dim_x_          = 0;
     int dim_x_ex_       = 0;
