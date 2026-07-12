@@ -69,7 +69,6 @@ public:
      * @param R observation-noise covariance       (dim_y × dim_y)
      * @return True if success
      * @note Caller's responsibility to compute predicted observation with observation model.
-     * @note Uses the Joseph form so the updated covariance stays symmetric and positive-definite.
      */
     bool update(const Eigen::MatrixXd & y,
                 const Eigen::MatrixXd & y_pred,
@@ -93,10 +92,10 @@ public:
 
         x_ = x_ + K * (y - y_pred);
 
-        // Joseph form: P = (I-KC)P(I-KC)' + KRK'
-        const Eigen::MatrixXd I_KC =
-            Eigen::MatrixXd::Identity(P_.rows(), P_.cols()) - K * C;
-        P_ = I_KC * P_ * I_KC.transpose() + K * R * K.transpose();
+        // Standard covariance update: P = (I − K·C)·P = P − K·(C·P).
+        // It does not preserve symmetry under floating-point rounding, so we force it back with P ← ½(P + Pᵀ).
+        P_.noalias() -= K * PCT.transpose();
+        P_ = (0.5 * (P_ + P_.transpose())).eval();
 
         return true;
     }
