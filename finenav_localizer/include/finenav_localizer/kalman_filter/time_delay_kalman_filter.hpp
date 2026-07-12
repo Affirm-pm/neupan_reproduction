@@ -4,17 +4,20 @@
 
 #pragma once
 
-#include "finenav_localizer/kalman_filter/kalman_filter.hpp"
-
-#include <iostream>
+#include <algorithm>
 #include <utility>
+
+#include <rclcpp/clock.hpp>
+
+#include "finenav_localizer/kalman_filter/kf_math.hpp"
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::localizer {
 
 /**
  * @brief TimeDelayKalmanFilter  —  KF with state augmentation for delayed observations
  * @details
- *      Extends KalmanFilter by maintaining an augmented state vector that stacks the
+ *      Maintains an augmented state vector that stacks the
  *      current state together with a bounded history of past states:
  * @code
  *          x_ex = [ x_k | x_{k-1} | … | x_{k-d+1} ]   (dim_x · max_delay_step)
@@ -35,7 +38,7 @@ namespace finenav::localizer {
  *      via the cross-covariance blocks.
  *
  */
-class TimeDelayKalmanFilter : public KalmanFilter {
+class TimeDelayKalmanFilter {
 public:
     TimeDelayKalmanFilter() = default;
 
@@ -208,16 +211,16 @@ public:
                             const Eigen::MatrixXd & R)
     {
         if (slot_a >= max_delay_step_ || slot_b >= max_delay_step_) {
-            std::cerr << "[TimeDelayKF] updateWithTwoSlots: slot " << slot_a
-                      << " or " << slot_b
-                      << " >= max_delay_step=" << max_delay_step_ << " — ignoring.\n";
+            FINENAV_LOG_WARN_THROTTLE(rclcpp::get_logger("finenav.TimeDelayKF"), 2000,
+                "[TimeDelayKF] updateWithTwoSlots: slot {} or {} >= max_delay_step={} — ignoring.",
+                slot_a, slot_b, max_delay_step_);
             return false;
         }
         const int dim_y = static_cast<int>(y.rows());
         Eigen::MatrixXd C_ex = Eigen::MatrixXd::Zero(dim_y, dim_x_ex_);
         C_ex.block(0, dim_x_ * slot_a, dim_y, dim_x_) += C_a;
         C_ex.block(0, dim_x_ * slot_b, dim_y, dim_x_) += C_b;
-        return update(y, C_ex * x_, C_ex, R);
+        return kf::update(x_, P_, y, C_ex * x_, C_ex, R);
     }
 
     /**
@@ -238,9 +241,9 @@ public:
                          int                    delay_step)
     {
         if (delay_step >= max_delay_step_) {
-            std::cerr << "[TimeDelayKF] delay_step=" << delay_step
-                      << " >= max_delay_step=" << max_delay_step_
-                      << " — ignoring update.\n";
+            FINENAV_LOG_WARN_THROTTLE(rclcpp::get_logger("finenav.TimeDelayKF"), 2000,
+                "[TimeDelayKF] delay_step={} >= max_delay_step={} — ignoring update.",
+                delay_step, max_delay_step_);
             return false;
         }
 
@@ -251,7 +254,7 @@ public:
         C_ex.block(0, dim_x_ * delay_step, dim_y, dim_x_) = C;
 
         // y_pred = C_ex * x_ (note: in ESKF x_ is always ≈ 0)
-        return update(y, C_ex * x_, C_ex, R);
+        return kf::update(x_, P_, y, C_ex * x_, C_ex, R);
     }
 
     /// Introspection
@@ -260,6 +263,8 @@ public:
     [[nodiscard]] int dimXEx()       const { return dim_x_ex_; }
 
 private:
+    Eigen::MatrixXd x_;   ///< augmented error-state vector  (dim_x_ex × 1)
+    Eigen::MatrixXd P_;   ///< augmented covariance          (dim_x_ex × dim_x_ex)
     int max_delay_step_ = 1;
     int dim_x_          = 0;
     int dim_x_ex_       = 0;
