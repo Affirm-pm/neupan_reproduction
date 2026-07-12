@@ -17,7 +17,7 @@ namespace cfg {
 //   1 = Uniform circular motion, all ideal
 //   2 = Uniform circular, Session-B stress events
 //   3 = High-dynamic Lissajous figure-8, ideal
-constexpr int kScenario = 2;
+constexpr int kScenario = 3;
 
 // ── 2. Observation mode ───────────────────────────────────────────────────────
 //   At least one of kUsePose / kUseTwist must be true.
