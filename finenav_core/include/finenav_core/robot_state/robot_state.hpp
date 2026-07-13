@@ -117,6 +117,9 @@ protected:
     {
         std::lock_guard<std::mutex> lk(history_mutex_);
         history_duration_sec_ = sec;
+        if (!history_.empty()) {
+            prune(history_.back().stamp);
+        }
     }
 
 private:
