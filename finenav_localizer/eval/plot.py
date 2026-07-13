@@ -57,6 +57,9 @@ N_STD = 2.0
 # Ellipse density — one ellipse roughly every N seconds along the trajectory.
 ELLIPSE_INTERVAL_SEC = 0.2
 
+# Animation viewport — camera follows the robot with this window half-size (m).
+VIEWPORT_HALF_M = 0.5
+
 # ── Scenario → colour (tab10).  Add new labels here when more scenarios land. ─
 _KNOWN_SCENARIOS = [
     "CircleIdeal",                                            # Scenario 1
@@ -365,13 +368,10 @@ def _make_animation(df, csv_path, scenarios, has_pd):
     ax.grid(True, alpha=0.3)
     ax.set_xlabel("X [m]"); ax.set_ylabel("Y [m]")
 
-    # Axis limits from both GT and estimate, with a margin for the ellipse.
-    allx = np.concatenate([gx, ex]); ally = np.concatenate([gy, ey])
-    padx = 0.12 * (allx.max() - allx.min() + 1e-6)
-    pady = 0.12 * (ally.max() - ally.min() + 1e-6)
-    ax.set_xlim(allx.min() - padx, allx.max() + padx)
-    ax.set_ylim(ally.min() - pady, ally.max() + pady)
-    head_len = 0.06 * max(allx.max() - allx.min(), ally.max() - ally.min(), 1e-6)
+    # Camera follows the robot — viewport is a tight window around the estimate.
+    ax.set_xlim(ex[0] - VIEWPORT_HALF_M, ex[0] + VIEWPORT_HALF_M)
+    ax.set_ylim(ey[0] - VIEWPORT_HALF_M, ey[0] + VIEWPORT_HALF_M)
+    head_len = 0.08 * VIEWPORT_HALF_M
 
     ax.plot(gx, gy, color="0.65", lw=1.2, zorder=1, label="GT (full path)")
     est_line, = ax.plot([], [], "b--", lw=1.4, zorder=3, label="Est (so far)")
@@ -389,6 +389,9 @@ def _make_animation(df, csv_path, scenarios, has_pd):
 
     def update(i):
         est_line.set_data(ex[:i + 1], ey[:i + 1])
+        # Camera follows the current estimate.
+        ax.set_xlim(ex[i] - VIEWPORT_HALF_M, ex[i] + VIEWPORT_HALF_M)
+        ax.set_ylim(ey[i] - VIEWPORT_HALF_M, ey[i] + VIEWPORT_HALF_M)
         gt_pt.set_data([gx[i]], [gy[i]])
         if not np.isnan(gyaw[i]):
             gt_head.set_data([gx[i], gx[i] + head_len * math.cos(gyaw[i])],
