@@ -1,8 +1,7 @@
 // Copyright (c) 2026.
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
-//
-// Based on autoware::ekf_localizer::AgedObjectQueue (Apache-2.0).
+
 
 #pragma once
 
@@ -21,50 +20,43 @@
 
 namespace finenav::localizer {
 
-// ============================================================================
-//  AgedObservationQueue<MsgT>  —  smoothing-aware, mutex-protected FIFO
-//
-//  Based on autoware::ekf_localizer::AgedObjectQueue.
-//
-//  Smoothing mechanism
-//  ─────────────────────────────────────────────────────────────────────────
-//  Each push() enters the message with age = 0.
-//  pop_increment_age() returns the front message and:
-//    • if age + 1 < max_age → re-enqueues the message with age + 1
-//    • if age + 1 >= max_age → discards (the entry has been processed max_age times)
-//
-//  Combined with scaling R_eff = R * smoothing_steps inside applyUpdate(),
-//  this distributes a single observation over max_age filter ticks with a
-//  proportionally inflated noise covariance, producing smooth output.
-//
-//  Caller pattern (inside timerCallback):
-//
-//      const std::size_t n = queue.size();       // capture before loop
-//      for (std::size_t i = 0; i < n; ++i) {
-//          auto msg = queue.pop_increment_age();  // may re-enqueue at back
-//          // ... process msg ...
-//      }
-//
-//  Thread safety
-//  ─────────────────────────────────────────────────────────────────────────
-//  All public methods are mutex-protected.  push() is safe to call from
-//  external threads (e.g. ROS subscriber callbacks) while the timer callback
-//  is draining the queue.
-// ============================================================================
+/**
+ * @brief AgedObservationQueue<MsgT>  —  Observation FIFO with smoothing mechanism
+ * @details
+ *      Smoothing mechanism: each push() enters the message with age = 0. pop_increment_age() returns the front message and:
+ *      if age + 1 < max_age → re-enqueues the message with age + 1 ;
+ *      if age + 1 >= max_age → discards (processed max_age times).
+ *      Example:
+ * @code
+ *      const std::size_t n = queue.size();
+ *      for (std::size_t i = 0; i < n; ++i) {
+ *          auto msg = queue.pop_increment_age();  // may re-enqueue at back
+ *          // ... process msg ...
+ *      }
+ * @endcode
+ * @tparam MsgT message type stored in the queue.
+ */
 template <typename MsgT>
 class AgedObservationQueue {
 public:
     /// @param smoothing_steps  Number of times each observation is processed (≥ 1).
     ///                         Corresponds to AgedObjectQueue::max_age.
     /// @param max_queue_size   Hard capacity cap (prevents unbounded growth).
+    /**
+     * @brief
+     * @param smoothing_steps  Number of times each observation is processed (≥ 1). Corresponds to AgedObjectQueue::max_age.
+     * @param max_queue_size   Hard capacity cap.
+     */
     explicit AgedObservationQueue(std::size_t smoothing_steps,
                                   std::size_t max_queue_size = 64)
         : max_age_       (smoothing_steps > 0u ? smoothing_steps : 1u)
         , max_queue_size_(max_queue_size > max_age_ ? max_queue_size : max_age_)
     {}
 
-    // ── Push ─────────────────────────────────────────────────────────────────
-
+    /**
+     * @brief push message to observation buffer
+     * @param msg message
+     */
     void push(const MsgT & msg)
     {
         std::lock_guard<std::mutex> lk(mutex_);
@@ -79,10 +71,12 @@ public:
         ages_.push(0u);
     }
 
-    // ── Pop with aging ───────────────────────────────────────────────────────
 
-    /// Remove and return the front entry.  If its resulting age < max_age_,
-    /// re-enqueue a copy at the back so it is processed again next tick.
+    /**
+     * @brief Pop with age increment.
+     * @details If the resulting age < max_age_, re-enqueue a copy at the back.
+     * @return Poped message
+     */
     MsgT pop_increment_age()
     {
         std::lock_guard<std::mutex> lk(mutex_);
@@ -97,7 +91,6 @@ public:
         return msg;
     }
 
-    // ── Introspection ────────────────────────────────────────────────────────
 
     [[nodiscard]] std::size_t size() const
     {
@@ -129,15 +122,15 @@ private:
 using PoseObsQueue  = AgedObservationQueue<geometry_msgs::msg::PoseWithCovarianceStamped>;
 using TwistObsQueue = AgedObservationQueue<geometry_msgs::msg::TwistWithCovarianceStamped>;
 
-// ── Relative-pose (odometry) observation ─────────────────────────────────────
-//
-//  Stores the raw body-frame displacement increment from two consecutive
-//  odometry frames, plus both timestamps so that the ESKF can map each
-//  epoch to its exact delay slot independently.
-//
-//  NO state snapshot is stored here — both nominal states (from_state and
-//  to_state) are retrieved from the ESKF inside applyUpdate() using the
-//  two delay steps computed from stamp_from and stamp_to.
+/**
+ * @brief RelativePoseObs  —  odometry measurement spanning two epochs.
+ * @details
+ *      Stores the raw body-frame displacement from two consecutive odometry frames,
+ *      plus both timestamps so the ESKF maps each epoch to its own delay slot
+ *      independently.  No state snapshot is stored — the two nominal states are
+ *      retrieved from the ESKF inside applyUpdate() using the delay steps computed
+ *      from stamp_from and stamp_to.
+ */
 struct RelativePoseObs {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 

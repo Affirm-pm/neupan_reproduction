@@ -14,73 +14,64 @@
 
 namespace finenav::localizer {
 
-// ============================================================================
-//  Construction / configuration
-// ============================================================================
-EskfLocalizer::EskfLocalizer(const Config & config)
+
+EskfLocalizer::EskfLocalizer(const finenav_localizer::Params & params)
     : logger_(rclcpp::get_logger("finenav.EskfLocalizer"))
 {
-    configure(config);
+    configure(params);
 }
 
-void EskfLocalizer::configure(const Config & config)
+void EskfLocalizer::configure(const finenav_localizer::Params & params)
 {
-    config_ = config;
+    params_ = params;
 
     NavigationModelD::Options model_opts;
-    model_opts.vel_noise_std   = config_.vel_noise_std;
-    model_opts.omega_noise_std = config_.omega_noise_std;
+    model_opts.vel_noise_std   = params_.model.vel_noise_std;
+    model_opts.omega_noise_std = params_.model.omega_noise_std;
 
     // max_delay_step = ceil(max_delay_sec * update_rate_hz) + 1  (min 2).
     // maxTrackedDelaySec = (max_delay_step - 1) * dt, dt = 1/update_rate_hz.
     // Rule of thumb: max_delay_sec >= 2 / update_rate_hz (two periods of headroom).
-    const double min_recommended_delay_sec = 2.0 / config_.update_rate_hz;
-    if (config_.max_delay_sec < min_recommended_delay_sec) {
+    const double min_recommended_delay_sec = 2.0 / params_.update_rate_hz;
+    if (params_.max_delay_sec < min_recommended_delay_sec) {
         FINENAV_LOG_WARN(
             logger_,
             "[EskfLocalizer] max_delay_sec={:.4f} s is less than the recommended minimum "
             "{:.4f} s (= 2 / update_rate_hz).  The effective rejection threshold equals one "
             "EKF period ({:.4f} s), so observations that arrive just after a tick may be "
             "rejected under scheduling jitter.  Consider max_delay_sec >= {:.4f} s.",
-            config_.max_delay_sec, min_recommended_delay_sec,
-            1.0 / config_.update_rate_hz, min_recommended_delay_sec);
+            params_.max_delay_sec, min_recommended_delay_sec,
+            1.0 / params_.update_rate_hz, min_recommended_delay_sec);
     }
 
     const int max_delay_step = static_cast<int>(std::max(
         int64_t{2},
-        static_cast<int64_t>(std::ceil(config_.max_delay_sec * config_.update_rate_hz)) + 1));
+        static_cast<int64_t>(std::ceil(params_.max_delay_sec * params_.update_rate_hz)) + 1));
     eskf_ = ESKFd(model_opts, max_delay_step);
 
     pose_queue_ = std::make_unique<PoseObsQueue>(
-        static_cast<std::size_t>(std::max(int64_t{1}, config_.pose_smoothing_steps)),
-        static_cast<std::size_t>(config_.max_obs_queue_size));
+        static_cast<std::size_t>(std::max(int64_t{1}, params_.pose_smoothing_steps)),
+        static_cast<std::size_t>(params_.max_obs_queue_size));
     twist_queue_ = std::make_unique<TwistObsQueue>(
-        static_cast<std::size_t>(std::max(int64_t{1}, config_.twist_smoothing_steps)),
-        static_cast<std::size_t>(config_.max_obs_queue_size));
+        static_cast<std::size_t>(std::max(int64_t{1}, params_.twist_smoothing_steps)),
+        static_cast<std::size_t>(params_.max_obs_queue_size));
     rel_pose_queue_ = std::make_unique<RelativePoseObsQueue>(
-        static_cast<std::size_t>(std::max(int64_t{1}, config_.rel_pose_smoothing_steps)),
-        static_cast<std::size_t>(config_.max_rel_pose_queue_size));
+        static_cast<std::size_t>(std::max(int64_t{1}, params_.rel_pose_smoothing_steps)),
+        static_cast<std::size_t>(params_.max_rel_pose_queue_size));
 
     FINENAV_LOG_INFO(
         logger_,
         "[EskfLocalizer] Configured. rate={:.1f} Hz  max_delay={:.3f} s  max_delay_step={}  "
         "pose_smooth={}  twist_smooth={}",
-        config_.update_rate_hz, config_.max_delay_sec, eskf_.maxDelayStep(),
-        config_.pose_smoothing_steps, config_.twist_smoothing_steps);
+        params_.update_rate_hz, params_.max_delay_sec, eskf_.maxDelayStep(),
+        params_.pose_smoothing_steps, params_.twist_smoothing_steps);
 }
 
-void EskfLocalizer::setConfig(const Config & config)
+void EskfLocalizer::setConfig(const finenav_localizer::Params & params)
 {
-    // Live-update the per-tick-read tunables (gates, smoothing, passthrough,
-    // force_2d, max_dt, noise).  The estimator/queues are NOT rebuilt here, which
-    // matches the previous behaviour where a dynamic parameter update only
-    // refreshed the params struct read each tick.
-    config_ = config;
+    params_ = params;
 }
 
-// ============================================================================
-//  setInitialPose  (thread-safe via filter_mutex_)
-// ============================================================================
 void EskfLocalizer::setInitialPose(const PoseMsg & msg)
 {
     auto [pos, rot, R_obs] = extractObservation(msg);
@@ -120,9 +111,6 @@ void EskfLocalizer::setInitialPose(const PoseMsg & msg)
         pos.x(), pos.y(), pos.z());
 }
 
-// ============================================================================
-//  feedObservation  (thread-safe: queue has its own mutex)
-// ============================================================================
 void EskfLocalizer::feedObservation(const PoseMsg & msg)
 {
     pose_queue_->push(msg);
@@ -138,16 +126,13 @@ void EskfLocalizer::feedRelativePose(const RelativePoseObs & obs)
     rel_pose_queue_->push(obs);
 }
 
-// ============================================================================
-//  Getters  (shared_mutex — multiple readers allowed)
-// ============================================================================
 NavStateD EskfLocalizer::getState() const
 {
     std::shared_lock<std::shared_mutex> lk(cached_state_mutex_);
     NavStateD s = cached_state_;
     // External API contract: v is expressed in the body frame.
     s.v = s.R.inverse() * s.v;
-    if (config_.force_2d_mode) {
+    if (params_.force_2d_mode) {
         s = force2DOutput(s);
     }
     return s;
@@ -171,16 +156,13 @@ rclcpp::Time EskfLocalizer::getLastUpdateTime() const
     return cached_time_;
 }
 
-// ============================================================================
-//  step  — one estimator cycle (predict + drain queues + update + cache).
-//          The sole writer of eskf_.  No TF / no timer / time injected as `now`.
-// ============================================================================
+
 void EskfLocalizer::step(const rclcpp::Time & now)
 {
     // ==========================================
     // Case A: passthrough mode (zero calculation)
     // ==========================================
-    if (config_.passthrough) {
+    if (params_.passthrough) {
         bool has_new_data = false;
         NavStateD next_state;
 
@@ -237,10 +219,10 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     const rclcpp::Time & tick_time = now;
     std::lock_guard<std::mutex> lk(filter_mutex_);
 
-    const double future_reject_threshold = -1.0 / config_.update_rate_hz;
+    const double future_reject_threshold = -1.0 / params_.update_rate_hz;
 
     // ── 1. Compute dt ──────────────────────────────────────────────────────
-    double dt = 1.0 / config_.update_rate_hz;  // nominal fallback (first cycle)
+    double dt = 1.0 / params_.update_rate_hz;  // nominal fallback (first cycle)
     if (last_predict_time_.has_value()) {
         const double meas_dt = (tick_time - *last_predict_time_).seconds();
         if (meas_dt < 0.0) {
@@ -249,11 +231,11 @@ void EskfLocalizer::step(const rclcpp::Time & now)
             last_predict_time_ = tick_time;
             return;
         }
-        if (meas_dt > config_.max_dt_sec) {
+        if (meas_dt > params_.max_dt_sec) {
             FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
                 "[EskfLocalizer] Large dt ({:.4f} s > max {:.4f} s) — clamped.",
-                meas_dt, config_.max_dt_sec);
-            dt = config_.max_dt_sec;
+                meas_dt, params_.max_dt_sec);
+            dt = params_.max_dt_sec;
         } else {
             dt = meas_dt;
         }
@@ -367,15 +349,12 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     }
 }
 
-// ============================================================================
-//  applyUpdate  — Mahalanobis gate + ESKF update with delay compensation
-// ============================================================================
 void EskfLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
 {
     auto [pos_obs, rot_obs, R_raw] = extractObservation(msg);
 
     const Eigen::Matrix<double, 6, 6> R_eff =
-        R_raw * static_cast<double>(config_.pose_smoothing_steps);
+        R_raw * static_cast<double>(params_.pose_smoothing_steps);
 
     const auto obs = NavigationModelD::observePose(
         eskf_.getStateAtDelay(delay_step), pos_obs, rot_obs);
@@ -387,10 +366,10 @@ void EskfLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
 
     FINENAV_LOG_INFO_THROTTLE(logger_, 2000, "Mahalanobis distance: {:.1f}", d2);
 
-    if (d2 > config_.pose_gate_dist) {
+    if (d2 > params_.pose_gate_dist) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
             "[EskfLocalizer] applyUpdate<Pose> rejected by Mahalanobis gate "
-            "(d²={:.4f} > threshold={:.4f}).", d2, config_.pose_gate_dist);
+            "(d²={:.4f} > threshold={:.4f}).", d2, params_.pose_gate_dist);
         return;
     }
 
@@ -402,7 +381,7 @@ void EskfLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
     auto [lin_vel, ang_vel, R_raw] = extractObservation(msg);
 
     const Eigen::Matrix<double, 6, 6> R_eff =
-        R_raw * static_cast<double>(config_.twist_smoothing_steps);
+        R_raw * static_cast<double>(params_.twist_smoothing_steps);
 
     const auto obs = NavigationModelD::observeVelocity(
         eskf_.getStateAtDelay(delay_step), lin_vel, ang_vel);
@@ -412,10 +391,10 @@ void EskfLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
 
-    if (d2 > config_.twist_gate_dist) {
+    if (d2 > params_.twist_gate_dist) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
             "[EskfLocalizer] applyUpdate<Twist> rejected by Mahalanobis gate "
-            "(d²={:.4f} > threshold={:.4f}).", d2, config_.twist_gate_dist);
+            "(d²={:.4f} > threshold={:.4f}).", d2, params_.twist_gate_dist);
         return;
     }
 
@@ -426,7 +405,7 @@ void EskfLocalizer::applyUpdate(const RelativePoseObs & obs,
                                 int delay_step_to, int delay_step_from)
 {
     const Eigen::Matrix<double, 6, 6> R_eff =
-        obs.R_noise * static_cast<double>(config_.rel_pose_smoothing_steps);
+        obs.R_noise * static_cast<double>(params_.rel_pose_smoothing_steps);
 
     const NavStateD from_state = eskf_.getStateAtDelay(delay_step_from);
     const NavStateD to_state   = eskf_.getStateAtDelay(delay_step_to);
@@ -442,10 +421,10 @@ void EskfLocalizer::applyUpdate(const RelativePoseObs & obs,
     const double d2 = static_cast<double>(
         dual_obs.innovation.transpose() * S_approx.inverse() * dual_obs.innovation);
 
-    if (d2 > config_.rel_pose_gate_dist) {
+    if (d2 > params_.rel_pose_gate_dist) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
             "[EskfLocalizer] applyUpdate<RelPose> rejected by Mahalanobis gate "
-            "(d²={:.4f} > threshold={:.4f}).", d2, config_.rel_pose_gate_dist);
+            "(d²={:.4f} > threshold={:.4f}).", d2, params_.rel_pose_gate_dist);
         return;
     }
 
@@ -453,9 +432,6 @@ void EskfLocalizer::applyUpdate(const RelativePoseObs & obs,
                     R_eff, delay_step_to, delay_step_from);
 }
 
-// ============================================================================
-//  extractObservation  —  message → filter-ready quantities
-// ============================================================================
 std::tuple<EskfLocalizer::Vec3d, EskfLocalizer::SO3d, Eigen::Matrix<double, 6, 6>>
 EskfLocalizer::extractObservation(const PoseMsg & msg)
 {
@@ -496,9 +472,6 @@ EskfLocalizer::extractObservation(const TwistMsg & msg)
     return {lin, ang, R};
 }
 
-// ============================================================================
-//  force2DOutput  —  zero out z, roll, pitch; keep only x, y, yaw
-// ============================================================================
 NavStateD EskfLocalizer::force2DOutput(const NavStateD & s) const
 {
     NavStateD out = s;

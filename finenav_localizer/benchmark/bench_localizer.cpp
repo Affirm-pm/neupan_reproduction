@@ -79,16 +79,16 @@ fn::EskfLocalizer::TwistMsg makeTwist(double vx, double wz, const rclcpp::Time &
     return m;
 }
 
-fn::EskfLocalizer::Config makeConfig(int d)
+finenav_localizer::Params makeConfig(int d)
 {
-    fn::EskfLocalizer::Config c;
-    c.update_rate_hz        = kRateHz;
-    c.max_delay_sec         = static_cast<double>(d - 1) / kRateHz;  // → max_delay_step = d
-    c.pose_smoothing_steps  = 1;
-    c.twist_smoothing_steps = 1;
-    c.pose_gate_dist        = 1e9;
-    c.twist_gate_dist       = 1e9;
-    return c;
+    finenav_localizer::Params p;
+    p.update_rate_hz        = kRateHz;
+    p.max_delay_sec         = static_cast<double>(d - 1) / kRateHz;  // → max_delay_step = d
+    p.pose_smoothing_steps  = 1;
+    p.twist_smoothing_steps = 1;
+    p.pose_gate_dist        = 1e9;
+    p.twist_gate_dist       = 1e9;
+    return p;
 }
 
 // A warmed-up engine with a virtual clock; drive() = feed + one step().

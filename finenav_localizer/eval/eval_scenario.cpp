@@ -113,19 +113,19 @@ static double yawFromState(const fn::NavStateD& s)
 }
 
 /// Assemble the engine Config from cfg:: constants.
-static fn::EskfLocalizer::Config makeConfig()
+static finenav_localizer::Params makeConfig()
 {
-    fn::EskfLocalizer::Config c;
-    c.update_rate_hz        = cfg::kUpdateRateHz;
-    c.max_delay_sec         = cfg::kMaxDelaySec;
-    c.pose_smoothing_steps  = cfg::kPoseSmoothingSteps;
-    c.twist_smoothing_steps = cfg::kTwistSmoothingSteps;
-    c.pose_gate_dist        = cfg::kPoseGateDist;
-    c.twist_gate_dist       = cfg::kTwistGateDist;
-    c.max_dt_sec            = cfg::kMaxDtSec;
-    c.vel_noise_std         = cfg::kVelNoiseStd;
-    c.omega_noise_std       = cfg::kOmegaNoiseStd;
-    return c;
+    finenav_localizer::Params p;
+    p.update_rate_hz        = cfg::kUpdateRateHz;
+    p.max_delay_sec         = cfg::kMaxDelaySec;
+    p.pose_smoothing_steps  = cfg::kPoseSmoothingSteps;
+    p.twist_smoothing_steps = cfg::kTwistSmoothingSteps;
+    p.pose_gate_dist        = cfg::kPoseGateDist;
+    p.twist_gate_dist       = cfg::kTwistGateDist;
+    p.max_dt_sec            = cfg::kMaxDtSec;
+    p.model.vel_noise_std   = cfg::kVelNoiseStd;
+    p.model.omega_noise_std = cfg::kOmegaNoiseStd;
+    return p;
 }
 
 /// Initialise the filter at the exact GT pose with tight uncertainty.

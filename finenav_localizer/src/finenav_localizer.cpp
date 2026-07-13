@@ -21,9 +21,7 @@ finenav::core::RobotState toRobotState(const NavStateD & s)
 }
 }  // namespace
 
-// ============================================================================
-//  Constructor
-// ============================================================================
+
 FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
                                    rclcpp::NodeOptions pnode_overrides)
     : parent_node_(std::move(parent_node))
@@ -39,7 +37,7 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     // Parameters → inner engine Config.
     param_listener_ = std::make_unique<ParamListener>(pnode_);
     params_         = param_listener_->get_params();
-    eskf_localizer_ = std::make_unique<EskfLocalizer>(configFromParams(params_));
+    eskf_localizer_ = std::make_unique<EskfLocalizer>(params_);
 
     // Size the inherited RobotStateProvider history window from the same param.
     setHistoryDuration(params_.history_duration_sec);
@@ -61,38 +59,11 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
         params_.update_rate_hz, params_.publish_tf ? "true" : "false");
 }
 
-// ============================================================================
-//  Params → EskfLocalizer::Config
-// ============================================================================
-EskfLocalizer::Config FineNavLocalizer::configFromParams(const Params & p) const
-{
-    EskfLocalizer::Config c;
-    c.passthrough              = p.passthrough;
-    c.update_rate_hz           = p.update_rate_hz;
-    c.max_delay_sec            = p.max_delay_sec;
-    c.pose_smoothing_steps     = p.pose_smoothing_steps;
-    c.twist_smoothing_steps    = p.twist_smoothing_steps;
-    c.rel_pose_smoothing_steps = p.rel_pose_smoothing_steps;
-    c.pose_gate_dist           = p.pose_gate_dist;
-    c.twist_gate_dist          = p.twist_gate_dist;
-    c.rel_pose_gate_dist       = p.rel_pose_gate_dist;
-    c.max_dt_sec               = p.max_dt_sec;
-    c.max_obs_queue_size       = p.max_obs_queue_size;
-    c.max_rel_pose_queue_size  = p.max_rel_pose_queue_size;
-    c.force_2d_mode            = p.force_2d_mode;
-    c.vel_noise_std            = p.model.vel_noise_std;
-    c.omega_noise_std          = p.model.omega_noise_std;
-    return c;
-}
-
-// ============================================================================
-//  timerCallback — refresh params → step engine → TF → overrun check
-// ============================================================================
 void FineNavLocalizer::timerCallback()
 {
     if (param_listener_->is_old(params_)) {
         params_ = param_listener_->get_params();
-        eskf_localizer_->setConfig(configFromParams(params_));
+        eskf_localizer_->setConfig(params_);
     }
 
     const rclcpp::Time tick_time = pnode_->now();
@@ -134,24 +105,6 @@ void FineNavLocalizer::timerCallback()
             "({:.0f}% over). Consider reducing update_rate_hz or max_delay_step.",
             elapsed_sec * 1e3, period_sec * 1e3, (elapsed_sec / period_sec - 1.0) * 100.0);
     }
-}
-
-// ============================================================================
-//  Output API — delegate to the inner engine
-// ============================================================================
-NavStateD FineNavLocalizer::getState() const
-{
-    return eskf_localizer_->getState();
-}
-
-FineNavLocalizer::PMat FineNavLocalizer::getCovariance() const
-{
-    return eskf_localizer_->getCovariance();
-}
-
-rclcpp::Time FineNavLocalizer::getLastUpdateTime() const
-{
-    return eskf_localizer_->getLastUpdateTime();
 }
 
 }  // namespace finenav::localizer
