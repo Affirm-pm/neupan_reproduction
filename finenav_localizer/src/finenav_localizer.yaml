@@ -110,6 +110,14 @@ finenav_localizer:
     default_value: false,
     description: "Whether to broadcast the map->base_link TF transform on each filter update tick",
   }
+  max_consecutive_empty_ticks: {
+    type: int,
+    default_value: 10,
+    description: "Max consecutive empty ticks before freezing the filter",
+    validation: {
+      bounds<>: [1, 100000]
+    }
+  }
   model:
     vel_noise_std: {
       type: double,

@@ -103,6 +103,10 @@ private:
     PMat         cached_covariance_ = PMat::Identity() * 1e-2;
     rclcpp::Time cached_time_{0, 0, RCL_ROS_TIME};
 
+    /// Predict-guard: freeze the filter when all queues are empty for too long.
+    int consecutive_empty_ticks_{0};
+    int max_empty_ticks_{10};          // set from params in configure()
+
     rclcpp::Logger logger_;
 };
 

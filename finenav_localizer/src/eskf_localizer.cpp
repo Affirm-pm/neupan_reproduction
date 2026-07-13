@@ -24,6 +24,7 @@ EskfLocalizer::EskfLocalizer(const finenav_localizer::Params & params)
 void EskfLocalizer::configure(const finenav_localizer::Params & params)
 {
     params_ = params;
+    max_empty_ticks_ = static_cast<int>(params_.max_consecutive_empty_ticks);
 
     NavigationModelD::Options model_opts;
     model_opts.vel_noise_std   = params_.model.vel_noise_std;
@@ -69,7 +70,8 @@ void EskfLocalizer::configure(const finenav_localizer::Params & params)
 
 void EskfLocalizer::setConfig(const finenav_localizer::Params & params)
 {
-    params_ = params;
+    params_          = params;
+    max_empty_ticks_ = static_cast<int>(params_.max_consecutive_empty_ticks);
 }
 
 void EskfLocalizer::setInitialPose(const PoseMsg & msg)
@@ -85,8 +87,8 @@ void EskfLocalizer::setInitialPose(const PoseMsg & msg)
     PMat P = PMat::Zero();
     P.block<3, 3>(0, 0) = R_obs.block<3, 3>(0, 0);              // position
     P.block<3, 3>(3, 3) = R_obs.block<3, 3>(3, 3);              // rotation
-    P.block<3, 3>(6, 6) = Eigen::Matrix3d::Identity() * 100.0;  // linear vel (unknown)
-    P.block<3, 3>(9, 9) = Eigen::Matrix3d::Identity() * 100.0;  // angular vel (unknown)
+    P.block<3, 3>(6, 6) = Eigen::Matrix3d::Identity() * 1.0;   // linear vel (unknown, moderate initial confidence)
+    P.block<3, 3>(9, 9) = Eigen::Matrix3d::Identity() * 1.0;   // angular vel (unknown, moderate initial confidence)
 
     {
         std::lock_guard<std::mutex> lk(filter_mutex_);
@@ -214,6 +216,42 @@ void EskfLocalizer::step(const rclcpp::Time & now)
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
             "[EskfLocalizer] Not initialised — call setInitialPose() first.");
         return;
+    }
+
+    // ── Predict-guard: if ALL queues have been empty for too many consecutive
+    //     ticks, freeze the filter (constant-velocity predict alone has no
+    //     physical basis and the filter is better off holding its last good
+    //     estimate until a real observation arrives).
+    const bool all_empty = (pose_queue_->empty() && twist_queue_->empty() &&
+                            rel_pose_queue_->empty());
+    if (all_empty) {
+        consecutive_empty_ticks_++;
+        if (consecutive_empty_ticks_ == max_empty_ticks_) {
+            FINENAV_LOG_WARN_THROTTLE(logger_, 500,
+                "[EskfLocalizer] All observation queues empty for {} consecutive ticks "
+                "(≥ max {}) — freezing filter until an observation arrives.",
+                consecutive_empty_ticks_, max_empty_ticks_);
+        }
+        if (consecutive_empty_ticks_ >= max_empty_ticks_) {
+            // Frozen: only advance the output timestamp; state & covariance stay.
+            std::unique_lock<std::shared_mutex> cache_lk(cached_state_mutex_);
+            cached_time_ = now;
+            return;
+        }
+    } else {
+        if (consecutive_empty_ticks_ >= max_empty_ticks_) {
+            FINENAV_LOG_INFO_THROTTLE(logger_, 500,
+                "[EskfLocalizer] Observation arrived — unfreezing filter "
+                "(was frozen for {} ticks).",
+                consecutive_empty_ticks_);
+        }
+        if (consecutive_empty_ticks_ > 0) {
+            // We skipped at least one predict — reset the dt reference so the
+            // first predict after the gap uses the nominal dt, not the wall-clock
+            // gap (which could be seconds and get clamped).
+            last_predict_time_.reset();
+        }
+        consecutive_empty_ticks_ = 0;
     }
 
     const rclcpp::Time & tick_time = now;
