@@ -21,7 +21,7 @@ ControlLayer<Planners...>::ControlLayer(
     rclcpp::Node::SharedPtr node,
     const std::string& layer_name,
     ExecutionPolicyVariant policy,
-    IRobotStateProvider* state_provider)
+    RobotStateProvider* state_provider)
     : node_(node), layer_name_(layer_name), policy_(std::move(policy)),
       state_provider_(state_provider)
 {
@@ -125,7 +125,7 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     }
     if (!state_provider_) {
         FINENAV_LOG_ERROR(pnode_->get_logger(),
-            "IRobotStateProvider not set — cannot plan without robot state.");
+            "RobotStateProvider not set — cannot plan without robot state.");
         return false;
     }
 

@@ -59,7 +59,7 @@ public:
     explicit MapServer( // TODO：2D情况能否正常fallback，需要测试 // TODO：评估是否需要参数热加载
         rclcpp::Node::SharedPtr node,
         const std::string& server_name,
-        IRobotStateProvider* state_provider);
+        RobotStateProvider* state_provider);
 
     MapServer(const MapServer&) = delete;
     MapServer& operator=(const MapServer&) = delete;
@@ -137,7 +137,7 @@ private:
     std::shared_mutex     rw_mutex_;
 
     // ---- Optional robot state provider for map shifting ----
-    IRobotStateProvider*         state_provider_{nullptr};
+    RobotStateProvider*         state_provider_{nullptr};
     rclcpp::TimerBase::SharedPtr shift_timer_;
 
     // ---- Hooks, sources & timers ----

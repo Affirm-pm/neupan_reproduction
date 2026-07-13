@@ -11,7 +11,7 @@
 namespace finenav::navigator {
 
 BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
-                     finenav::core::IRobotStateProvider* state_provider)
+                     finenav::core::RobotStateProvider* state_provider)
     : state_provider_(state_provider)
 {
     // ── 创建私有子节点（参数前缀由 yaml 的顶层 key "finenav_navigator" 决定）──

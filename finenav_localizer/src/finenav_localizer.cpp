@@ -13,6 +13,14 @@
 
 namespace finenav::localizer {
 
+namespace {
+/// Engine state (NavStateD, v in body frame) → canonical core RobotState.
+finenav::core::RobotState toRobotState(const NavStateD & s)
+{
+    return finenav::core::RobotState{s.p, s.R.unit_quaternion(), s.v, s.omega};
+}
+}  // namespace
+
 // ============================================================================
 //  Constructor
 // ============================================================================
@@ -32,6 +40,9 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     param_listener_ = std::make_unique<ParamListener>(pnode_);
     params_         = param_listener_->get_params();
     eskf_localizer_ = std::make_unique<EskfLocalizer>(configFromParams(params_));
+
+    // Size the inherited RobotStateProvider history window from the same param.
+    setHistoryDuration(params_.history_duration_sec);
 
     // TF broadcaster (only if publish_tf is enabled).
     if (params_.publish_tf) {
@@ -68,7 +79,6 @@ EskfLocalizer::Config FineNavLocalizer::configFromParams(const Params & p) const
     c.max_dt_sec               = p.max_dt_sec;
     c.max_obs_queue_size       = p.max_obs_queue_size;
     c.max_rel_pose_queue_size  = p.max_rel_pose_queue_size;
-    c.history_duration_sec     = p.history_duration_sec;
     c.force_2d_mode            = p.force_2d_mode;
     c.vel_noise_std            = p.model.vel_noise_std;
     c.omega_noise_std          = p.model.omega_noise_std;
@@ -87,6 +97,11 @@ void FineNavLocalizer::timerCallback()
 
     const rclcpp::Time tick_time = pnode_->now();
     eskf_localizer_->step(tick_time);
+
+    // Feed the latest state into the inherited RobotStateProvider history.
+    if (eskf_localizer_->isInitialized()) {
+        pushState(tick_time, toRobotState(eskf_localizer_->getState()));
+    }
 
     // ── Broadcast TF: map → base_link (raw world-frame state) ────────────────
     if (tf_br_ && eskf_localizer_->isInitialized()) {
@@ -137,35 +152,6 @@ FineNavLocalizer::PMat FineNavLocalizer::getCovariance() const
 rclcpp::Time FineNavLocalizer::getLastUpdateTime() const
 {
     return eskf_localizer_->getLastUpdateTime();
-}
-
-std::optional<finenav::core::RobotState> FineNavLocalizer::getRobotState() const
-{
-    if (!eskf_localizer_->isInitialized()) {
-        return std::nullopt;
-    }
-    const NavStateD s = eskf_localizer_->getState();
-    return finenav::core::RobotState{s.p, s.R.unit_quaternion(), s.v, s.omega};
-}
-
-std::optional<finenav::core::RobotState>
-FineNavLocalizer::getRobotState(const rclcpp::Time & t) const
-{
-    auto s = getStateAt(t);
-    if (!s) {
-        return std::nullopt;
-    }
-    return finenav::core::RobotState{s->p, s->R.unit_quaternion(), s->v, s->omega};
-}
-
-std::optional<NavStateD> FineNavLocalizer::getStateAt(const rclcpp::Time & query_time) const
-{
-    return eskf_localizer_->getStateAt(query_time);
-}
-
-NavStateBuffer::SharedPtr FineNavLocalizer::getStateBuffer() const
-{
-    return eskf_localizer_->getStateBuffer();
 }
 
 }  // namespace finenav::localizer

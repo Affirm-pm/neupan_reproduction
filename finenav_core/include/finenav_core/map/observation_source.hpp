@@ -36,7 +36,7 @@ public:
     virtual ~IObservationSource() = default;
 
     virtual void applyBuffered(MapT& map, const rclcpp::Time& now,
-                                IRobotStateProvider* state_provider) = 0;
+                                RobotStateProvider* state_provider) = 0;
 };
 
 /**
@@ -61,7 +61,7 @@ public:
     /// Drain buffered messages and fuse each one into the map.
     /// Skips messages whose timestamped robot state is unavailable.
     void applyBuffered(MapT& map, const rclcpp::Time& now,
-                        IRobotStateProvider* state_provider) override;
+                        RobotStateProvider* state_provider) override;
 
 private:
 
@@ -101,7 +101,7 @@ void ObservationSource<MapT, MsgT>::enqueueThreadSafe(MsgT&& msg, const rclcpp::
 
 template <SpatialContainer MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::applyBuffered(
-    MapT& map, const rclcpp::Time& now, IRobotStateProvider* state_provider) {
+    MapT& map, const rclcpp::Time& now, RobotStateProvider* state_provider) {
 
     std::deque<BufferedMessage> pending;
     {

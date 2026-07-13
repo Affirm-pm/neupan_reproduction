@@ -61,8 +61,6 @@ void EskfLocalizer::configure(const Config & config)
         static_cast<std::size_t>(std::max(int64_t{1}, config_.rel_pose_smoothing_steps)),
         static_cast<std::size_t>(config_.max_rel_pose_queue_size));
 
-    state_buffer_ = std::make_shared<NavStateBuffer>(config_.history_duration_sec);
-
     FINENAV_LOG_INFO(
         logger_,
         "[EskfLocalizer] Configured. rate={:.1f} Hz  max_delay={:.3f} s  max_delay_step={}  "
@@ -115,8 +113,6 @@ void EskfLocalizer::setInitialPose(const PoseMsg & msg)
         cached_time_       = rclcpp::Time(msg.header.stamp);
     }
 
-    state_buffer_->clear();
-    state_buffer_->push(rclcpp::Time(msg.header.stamp), init_state);
 
     is_initialized_.store(true, std::memory_order_release);
 
@@ -175,18 +171,6 @@ rclcpp::Time EskfLocalizer::getLastUpdateTime() const
     return cached_time_;
 }
 
-std::optional<NavStateD> EskfLocalizer::getStateAt(const rclcpp::Time & query_time) const
-{
-    auto s = state_buffer_->getStateAt(query_time);
-    if (s) {
-        s->v = s->R.inverse() * s->v;
-        if (config_.force_2d_mode) {
-            *s = force2DOutput(*s);
-        }
-    }
-    return s;
-}
-
 // ============================================================================
 //  step  — one estimator cycle (predict + drain queues + update + cache).
 //          The sole writer of eskf_.  No TF / no timer / time injected as `now`.
@@ -238,9 +222,6 @@ void EskfLocalizer::step(const rclcpp::Time & now)
             }
         }
 
-        if (is_initialized_.load(std::memory_order_acquire)) {
-            state_buffer_->push(now, next_state);
-        }
         return;
     }
 
@@ -384,7 +365,6 @@ void EskfLocalizer::step(const rclcpp::Time & now)
         cached_covariance_ = eskf_.getCovariance();
         cached_time_       = tick_time;
     }
-    state_buffer_->push(tick_time, eskf_.getState());
 }
 
 // ============================================================================

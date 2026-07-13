@@ -19,7 +19,6 @@
 
 #include "eskf.hpp"
 #include "finenav_localizer/filter_model.hpp"
-#include "finenav_localizer/nav_state_buffer.hpp"
 #include "finenav_localizer/observation_queue.hpp"
 
 namespace finenav::localizer {
@@ -67,7 +66,6 @@ public:
         double  max_dt_sec               = 0.5;
         int64_t max_obs_queue_size       = 64;
         int64_t max_rel_pose_queue_size  = 64;
-        double  history_duration_sec     = 2.0;
         bool    force_2d_mode            = false;
         double  vel_noise_std            = 0.10;
         double  omega_noise_std          = 0.10;
@@ -104,13 +102,10 @@ public:
     [[nodiscard]] NavStateD    getRawState()       const;
     [[nodiscard]] PMat         getCovariance()     const;
     [[nodiscard]] rclcpp::Time getLastUpdateTime() const;
-    /// Interpolated state at a past timestamp (body-frame v); nullopt if out of window.
-    [[nodiscard]] std::optional<NavStateD> getStateAt(const rclcpp::Time & query_time) const;
     [[nodiscard]] bool isInitialized() const { return is_initialized_.load(std::memory_order_acquire); }
-    [[nodiscard]] NavStateBuffer::SharedPtr getStateBuffer() const { return state_buffer_; }
 
 private:
-    // ── Build the estimator / queues / buffer from a Config ──────────────────
+    // ── Build the estimator / queues from a Config ──────────────────────────
     void configure(const Config & config);
 
     // ── Observation update (called inside step, single-threaded) ─────────────
@@ -148,9 +143,6 @@ private:
     NavStateD    cached_state_{};
     PMat         cached_covariance_ = PMat::Identity() * 1e-2;
     rclcpp::Time cached_time_{0, 0, RCL_ROS_TIME};
-
-    // ── Stamped-history buffer (thread-safe internally) ──────────────────────
-    NavStateBuffer::SharedPtr state_buffer_;
 
     // ── Diagnostics ──────────────────────────────────────────────────────────
     rclcpp::Logger logger_;

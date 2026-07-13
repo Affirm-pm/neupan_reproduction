@@ -34,7 +34,7 @@ public:
     using ActionServer = finenav::util::SimpleActionServer<ActionT>;
 
     explicit BtNavigator(rclcpp::Node::SharedPtr parent_node,
-                       finenav::core::IRobotStateProvider* state_provider = nullptr);
+                       finenav::core::RobotStateProvider* state_provider = nullptr);
 
     // 禁止复制
     BtNavigator(const BtNavigator&)            = delete;
@@ -54,7 +54,7 @@ private:
     // ── 业务组件 ──────────────────────────────────────────────────────────────
     std::unique_ptr<BehaviorTreeEngine> bt_engine_;
     std::unique_ptr<ActionServer>       action_server_;
-    finenav::core::IRobotStateProvider* state_provider_{nullptr};
+    finenav::core::RobotStateProvider* state_provider_{nullptr};
 
     finenav_navigator::Params                         params_;
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;

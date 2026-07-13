@@ -58,7 +58,7 @@ struct AlgoConfigurator<SmokeMap> {
 
 // ── Mock state provider ────────────────────────────────────────────────────
 
-struct MockStateProvider : finenav::core::IRobotStateProvider {
+struct MockStateProvider : finenav::core::RobotStateProvider {
     finenav::core::RobotState state{};
 
     std::optional<finenav::core::RobotState> getRobotState() const override {

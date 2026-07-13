@@ -26,14 +26,14 @@ namespace finenav::localizer {
 //    • maps the generated Params → EskfLocalizer::Config,
 //    • each timer tick: refresh params → eskf_localizer_->step(pnode_->now())
 //      → broadcast map→base_link TF → overrun check,
-//    • exposes the read-only output API (IRobotStateProvider) by delegating to
-//      the engine.
+//    • is a RobotStateProvider: each tick it pushes the engine's latest RobotState
+//      into the inherited history; getRobotState()/(t) are served by the base.
 //
 //  Input side (subscriptions) is intentionally NOT implemented here yet — see the
 //  TODO below.  For direct C++ use (benchmarks / tests / offline eval), construct
 //  and drive EskfLocalizer directly.
 // ============================================================================
-class FineNavLocalizer : public finenav::core::IRobotStateProvider {
+class FineNavLocalizer : public finenav::core::RobotStateProvider {
 public:
     using PMat          = EskfLocalizer::PMat;
     using Params        = finenav_localizer::Params;
@@ -57,12 +57,8 @@ public:
     [[nodiscard]] PMat         getCovariance()     const;
     [[nodiscard]] rclcpp::Time getLastUpdateTime() const;
 
-    /// IRobotStateProvider — latest state / interpolated state at a timestamp.
-    std::optional<finenav::core::RobotState> getRobotState() const override;
-    std::optional<finenav::core::RobotState> getRobotState(const rclcpp::Time & t) const override;
-
-    [[nodiscard]] std::optional<NavStateD> getStateAt(const rclcpp::Time & query_time) const;
-    [[nodiscard]] NavStateBuffer::SharedPtr getStateBuffer() const;
+    //  getRobotState() / getRobotState(t) are inherited from RobotStateProvider
+    //  (history-backed); this wrapper feeds the history via pushState() each tick.
 
     // ── TODO: ROS message-subscription input side (future work) ──────────────
     //  This wrapper will own the localizer's ROS inputs: subscriptions to the
