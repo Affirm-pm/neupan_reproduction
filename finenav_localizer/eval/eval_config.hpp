@@ -92,7 +92,7 @@ constexpr double kFig8TwistHz   = 20.0;
 #define _FN_XSTR_(x) _FN_STR_(x)
 constexpr const char* kBagPath = _FN_XSTR_(FINENAV_LOCALIZER_PACKAGE_DIR) "/eval/test_bag1";
 constexpr const char* kBagGtFrame        = "base_link";  ///< child_frame_id in /tf for GT
-constexpr bool        kBagOdomAsRelPose  = false;
+constexpr bool        kBagOdomAsRelPose  = true;
 constexpr bool        kBagUseMsgStamp    = true;   ///< true=use msg header.stamp; false=override with bag record stamp
 
 // Pose covariance synthesised from PoseStamped (bag has no covariance on this topic).

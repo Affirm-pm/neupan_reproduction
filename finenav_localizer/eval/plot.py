@@ -130,7 +130,7 @@ def _ts(ax, t, gt_vals, est_vals, ylabel: str, title: str,
     ax.plot(t, est_vals, "b--", lw=1.3, label="Est", zorder=4)
     if obs_t is not None and obs_vals is not None and len(obs_t) > 0:
         ax.scatter(obs_t, obs_vals,
-                   color="tomato", s=16, zorder=6, alpha=0.80, label=obs_label)
+                   color="tomato", s=6, zorder=6, alpha=0.45, label=obs_label)
     ax.set_ylabel(ylabel, fontsize=8)
     ax.set_title(title, fontsize=9)
     ax.legend(fontsize=6.5, loc="upper right")
@@ -159,35 +159,22 @@ def _draw_static(df, csv_path, scenarios, has_cov, has_pd):
         left=0.055, right=0.975,
         top=0.955,  bottom=0.05)
 
-    ax_traj = fig.add_subplot(gs[0, 0])
-    ax_x    = fig.add_subplot(gs[0, 1])
-    ax_y    = fig.add_subplot(gs[0, 2])
-    ax_yaw  = fig.add_subplot(gs[1, 0])
-    ax_vx   = fig.add_subplot(gs[1, 1])
-    ax_vy   = fig.add_subplot(gs[1, 2])
-    ax_wz   = fig.add_subplot(gs[2, 0])
-    ax_cov  = fig.add_subplot(gs[2, 1:])
-    ax_pd   = fig.add_subplot(gs[3, :]) if has_pd else None
+    # ── Row 1: x, y, yaw ───────────────────────────────────────────────────
+    ax_x   = fig.add_subplot(gs[0, 0])
+    ax_y   = fig.add_subplot(gs[0, 1])
+    ax_yaw = fig.add_subplot(gs[0, 2])
+    # ── Row 2: vx, vy, wz ───────────────────────────────────────────────────
+    ax_vx  = fig.add_subplot(gs[1, 0])
+    ax_vy  = fig.add_subplot(gs[1, 1])
+    ax_wz  = fig.add_subplot(gs[1, 2])
+    # ── Row 3: non-2D state (1 col) + non-2D cov diagonals (2 cols) ──────────
+    ax_non2d = fig.add_subplot(gs[2, 0])
+    ax_cov   = fig.add_subplot(gs[2, 1:])
+    # ── Row 4: RMSE over time (2 cols) + PD health (1 col) ───────────────────
+    ax_rmse  = fig.add_subplot(gs[3, 0:2])
+    ax_pd    = fig.add_subplot(gs[3, 2]) if has_pd else None
 
-    # ── Panel 1: RMSE over time (position + yaw) ──────────────────────────────
-    err_pos = np.sqrt((df["gt_x"] - df["est_x"])**2 + (df["gt_y"] - df["est_y"])**2)
-    err_yaw = np.abs(_wrap(df["est_yaw"] - df["gt_yaw"])) * 180.0 / np.pi
-    ax_rmse = ax_traj  # reuse the axes
-    ax_rmse.plot(t, err_pos, color="#d62728", lw=1.3, zorder=3, label="pos err [m]")
-    ax_rmse.set_ylabel("Pos err [m]", fontsize=8, color="#d62728")
-    ax2 = ax_rmse.twinx()
-    ax2.plot(t, err_yaw, color="#9467bd", lw=1.0, alpha=0.85, zorder=2, label="yaw err [°]")
-    ax2.set_ylabel("Yaw err [°]", fontsize=8, color="#9467bd")
-    ax_rmse.set_title(
-        f"RMSE over time  (pos={err_pos.mean():.3f} m  yaw={err_yaw.mean():.1f}°)",
-        fontsize=9)
-    ax_rmse.grid(True, alpha=0.3)
-    ax2.legend(fontsize=7, loc="upper right")
-    ax_rmse.legend(fontsize=7, loc="upper left")
-    for sc in scenarios:
-        _shade_phases(ax_rmse, df, scenarios)
-
-    # ── Panels 2-7: state time series ────────────────────────────────────────
+    # ── Row 1: state time series ──────────────────────────────────────────────
     _ts(ax_x, t, df["gt_x"].to_numpy(), df["est_x"].to_numpy(),
         "x [m]", "x  (world frame)",
         obs_t=pose_t, obs_vals=df.loc[pose_m, "obs_x"].to_numpy(),
@@ -201,6 +188,7 @@ def _draw_static(df, csv_path, scenarios, has_cov, has_pd):
         obs_t=pose_t if df["has_pose_obs"].any() and df["obs_yaw"].notna().any() else None,
         obs_vals=_wrap(df.loc[pose_m, "obs_yaw"]).to_numpy() if pose_m.any() else None,
         obs_label="Pose obs", scenarios=scenarios, df=df)
+    # ── Row 2: velocity ───────────────────────────────────────────────────────
     _ts(ax_vx, t, df["gt_vx"].to_numpy(), df["est_vx"].to_numpy(),
         "vx [m/s]", "vx  (world frame)", scenarios=scenarios, df=df)
     _ts(ax_vy, t, df["gt_vy"].to_numpy(), df["est_vy"].to_numpy(),
@@ -211,27 +199,77 @@ def _draw_static(df, csv_path, scenarios, has_cov, has_pd):
         obs_vals=df.loc[twist_m, "obs_wz_body"].to_numpy() if twist_m.any() else None,
         obs_label="Twist obs", scenarios=scenarios, df=df)
 
-    # ── Panel 8: Non-2D covariance diagonals ─────────────────────────────────
-    COV_SPEC = [
-        ("cov_pz", "p_z   (P[2,2])",   "#1f77b4"),
-        ("cov_rx", "θ_x   (P[3,3])",   "#ff7f0e"),
-        ("cov_ry", "θ_y   (P[4,4])",   "#2ca02c"),
-        ("cov_vz", "v_z   (P[8,8])",   "#d62728"),
-        ("cov_wx", "ω_x   (P[9,9])",   "#9467bd"),
-        ("cov_wy", "ω_y  (P[10,10])",  "#8c564b"),
+    # ── Row 3, col 0: Non-2D state (est_z, est_vz, est_wx, est_wy) ────────────
+    NON2D_SPEC = [
+        ("est_z",  "z  [m]",       "#1f77b4"),
+        ("est_vz", "vz [m/s]",     "#ff7f0e"),
+        ("est_wx", "ωx [rad/s]",   "#2ca02c"),
+        ("est_wy", "ωy [rad/s]",   "#d62728"),
     ]
-    for col, label, color in COV_SPEC:
-        vals = np.maximum(df[col].to_numpy(), 1e-15)
-        ax_cov.plot(t, vals, label=label, color=color, lw=1.25, alpha=0.90)
-    ax_cov.set_yscale("log")
-    ax_cov.set_ylabel("Covariance  [unit²]", fontsize=8)
-    ax_cov.set_title(
-        "Non-2D error-state covariance diagonals — runaway growth = divergence",
-        fontsize=9)
-    ax_cov.legend(fontsize=7.5, loc="upper right", ncol=2)
-    _shade_phases(ax_cov, df, scenarios)
+    for col, label, color in NON2D_SPEC:
+        ax_non2d.plot(t, df[col].to_numpy(), label=label, color=color, lw=1.1, alpha=0.85)
+    ax_non2d.axhline(0.0, color="k", lw=0.6)
+    ax_non2d.set_ylabel("Non-2D state", fontsize=8)
+    ax_non2d.set_title("Non-2D state (z, vz, ωx, ωy) — drift = divergence", fontsize=9)
+    ax_non2d.legend(fontsize=7, loc="upper right")
+    _shade_phases(ax_non2d, df, scenarios)
 
-    # ── Panel 9: PD health — smallest eigenvalue of P ────────────────────────
+    # ── Row 3, cols 1-2: Full covariance diagonals heatmap ────────────────────
+    # state layout: [δp(0-2) | δθ(3-5) | δv(6-8) | δω(9-11)]
+    COV_HEAT_COLS = [
+        ("δp_x",  "cov_xx"), ("δp_y",  "cov_yy"), ("δp_z",  "cov_pz"),
+        ("δθ_x",  "cov_rx"), ("δθ_y",  "cov_ry"), ("δθ_z",  "cov_yaw"),
+        ("δv_x",  "cov_vx"), ("δv_y",  "cov_vy"), ("δv_z",  "cov_vz"),
+        ("δω_x",  "cov_wx"), ("δω_y",  "cov_wy"), ("δω_z",  "cov_wz"),
+    ]
+    # Build matrix: rows=dims, cols=time
+    block_labels = ["δp", "δθ", "δv", "δω"]
+    block_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]  # blue, orange, green, red
+    n_dims = len(COV_HEAT_COLS)
+    mat = np.zeros((n_dims, len(t)))
+    for i, (_, col) in enumerate(COV_HEAT_COLS):
+        vals = df[col].to_numpy() if col in df.columns else np.full(len(t), np.nan)
+        mat[i, :] = np.maximum(vals, 1e-20)
+    # Downsample time axis for rendering (~500 columns max).
+    ds = max(1, len(t) // 500)
+    t_ds = t[::ds]; mat_ds = mat[:, ::ds]
+    im = ax_cov.pcolormesh(t_ds, np.arange(n_dims), np.log10(mat_ds),
+                           cmap="inferno", shading="auto", vmin=-8, vmax=0)
+    # Y-axis labels with block colours.
+    ax_cov.set_yticks(np.arange(n_dims))
+    tick_colors = []
+    for i in range(n_dims): tick_colors.append(block_colors[i // 3])
+    ax_cov.set_yticklabels([l for l, _ in COV_HEAT_COLS], fontsize=7)
+    for i, tck in enumerate(ax_cov.get_yticklabels()): tck.set_color(tick_colors[i])
+    # Block separators (between groups of 3).
+    for b in [2.5, 5.5, 8.5]: ax_cov.axhline(b, color="white", lw=2.0, alpha=0.8)
+    # Colour bar
+    cbar = fig.colorbar(im, ax=ax_cov, fraction=0.02, pad=0.02)
+    cbar.set_label("log₁₀ covariance [unit²]", fontsize=7)
+    cbar.ax.tick_params(labelsize=6)
+    ax_cov.set_title("Error-state covariance diagonals  (δp | δθ | δv | δω)", fontsize=9)
+    ax_cov.set_xlabel("Time [s]", fontsize=8)
+    # Phase shading on top of heatmap
+    for sc in scenarios:
+        m = df["scenario"] == sc
+        if not m.any(): continue
+        t0, t1 = df.loc[m, "t"].min(), df.loc[m, "t"].max()
+        ax_cov.axvline(t0, color="white", lw=1.0, ls=":", alpha=0.6)
+
+    # ── Row 4, cols 0-1: RMSE over time ────────────────────────────────────────
+    err_pos = np.sqrt((df["gt_x"] - df["est_x"])**2 + (df["gt_y"] - df["est_y"])**2)
+    err_yaw = np.abs(_wrap(df["est_yaw"] - df["gt_yaw"])) * 180.0 / np.pi
+    ax_rmse.plot(t, err_pos, color="#d62728", lw=1.3, zorder=3, label="pos err [m]")
+    ax_rmse.set_ylabel("Pos err [m]", fontsize=8, color="#d62728")
+    ax2_rmse = ax_rmse.twinx()
+    ax2_rmse.plot(t, err_yaw, color="#9467bd", lw=1.0, alpha=0.85, zorder=2, label="yaw err [°]")
+    ax2_rmse.set_ylabel("Yaw err [°]", fontsize=8, color="#9467bd")
+    ax_rmse.set_title(f"RMSE over time  (pos={err_pos.mean():.3f} m  yaw={err_yaw.mean():.1f}°)", fontsize=9)
+    ax_rmse.grid(True, alpha=0.3)
+    ax2_rmse.legend(fontsize=7, loc="upper right"); ax_rmse.legend(fontsize=7, loc="upper left")
+    for sc in scenarios: _shade_phases(ax_rmse, df, scenarios)
+
+    # ── Row 4, col 2: PD health ────────────────────────────────────────────────
     if has_pd:
         me = df["cov_min_eig"].to_numpy()
         ax_pd.plot(t, me, color="#2ca02c", lw=1.3, zorder=3, label="min eig(P)")
@@ -240,12 +278,9 @@ def _draw_static(df, csv_path, scenarios, has_cov, has_pd):
         if bad.any():
             ax_pd.fill_between(t, me, 0.0, where=bad, color="red", alpha=0.35,
                                zorder=1, label="non-PD (min eig ≤ 0)")
-        # symlog shows tiny-positive values and any dip below zero at once.
         ax_pd.set_yscale("symlog", linthresh=1e-6)
         ax_pd.set_ylabel("min eig(P)", fontsize=8)
-        ax_pd.set_title(
-            "Covariance PD health — smallest eigenvalue of P  "
-            "(reaching ≤ 0 ⇒ lost positive-definiteness)", fontsize=9)
+        ax_pd.set_title("Covariance PD health", fontsize=9)
         worst = float(np.min(me))
         ax_pd.text(0.008, 0.06, f"min over run: {worst:.2e}",
                    transform=ax_pd.transAxes, fontsize=8, va="bottom",

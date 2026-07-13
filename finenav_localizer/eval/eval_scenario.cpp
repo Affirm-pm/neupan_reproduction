@@ -84,6 +84,9 @@ struct Row {
     double cov_xy{};       ///< P[0,1] (= P[1,0])
     double cov_yy{};       ///< P[1,1]
     double cov_yaw{};      ///< P[5,5]  yaw (δθ_z) variance
+    double cov_vx{};        ///< P[6,6]  v_x variance
+    double cov_vy{};        ///< P[7,7]  v_y variance
+    double cov_wz{};        ///< P[11,11] ω_z variance
     double cov_min_eig{};  ///< smallest eigenvalue of full 12×12 P (PD monitor)
 
     // Observations  (NaN = absent this tick)
@@ -243,6 +246,9 @@ static void fillEstimate(Row& row, fn::EskfLocalizer& loc)
     row.cov_xy  = P(0, 1);
     row.cov_yy  = P(1, 1);
     row.cov_yaw = P(5, 5);
+    row.cov_vx  = P(6, 6);
+    row.cov_vy  = P(7, 7);
+    row.cov_wz  = P(11, 11);
 
     // PD health: smallest eigenvalue of the full 12×12 covariance.  A well-formed
     // KF keeps this strictly positive; ≤ 0 signals the covariance lost positive-
@@ -263,7 +269,7 @@ static void writeCSV(const std::vector<Row>& rows)
          "est_x,est_y,est_yaw,est_vx,est_vy,est_wz,"
          "est_z,est_vz,est_wx,est_wy,"
          "cov_pz,cov_rx,cov_ry,cov_vz,cov_wx,cov_wy,"
-         "cov_xx,cov_xy,cov_yy,cov_yaw,cov_min_eig,"
+         "cov_xx,cov_xy,cov_yy,cov_yaw,cov_vx,cov_vy,cov_wz,cov_min_eig,"
          "obs_x,obs_y,obs_yaw,obs_vx_body,obs_wz_body,"
          "has_pose_obs,has_twist_obs,"
          "scenario\n";
@@ -284,7 +290,8 @@ static void writeCSV(const std::vector<Row>& rows)
           << r.cov_pz  << "," << r.cov_rx  << "," << r.cov_ry  << ","
           << r.cov_vz  << "," << r.cov_wx  << "," << r.cov_wy  << ","
           << r.cov_xx  << "," << r.cov_xy  << "," << r.cov_yy  << ","
-          << r.cov_yaw << "," << r.cov_min_eig << ","
+          << r.cov_yaw << "," << r.cov_vx << "," << r.cov_vy << "," << r.cov_wz << ","
+          << r.cov_min_eig << ","
           << F(r.obs_x) << "," << F(r.obs_y) << "," << F(r.obs_yaw) << ","
           << F(r.obs_vx_body) << "," << F(r.obs_wz_body) << ","
           << (r.has_pose_obs  ? 1 : 0) << ","
