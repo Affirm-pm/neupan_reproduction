@@ -119,9 +119,25 @@ finenav_localizer:
     }
   }
   model:
+    pos_noise_std: {
+      type: double,
+      default_value: 0.03,
+      description: "Unmodeled position process noise std [m/√s] (prevents cov collapse)",
+      validation: {
+        bounds<>: [0.0, 100.0]
+      }
+    }
+    rot_noise_std: {
+      type: double,
+      default_value: 0.01,
+      description: "Unmodeled rotation process noise std [rad/√s] (prevents yaw cov collapse)",
+      validation: {
+        bounds<>: [0.0, 100.0]
+      }
+    }
     vel_noise_std: {
       type: double,
-      default_value: 0.10,
+      default_value: 0.05,
       description: "Linear velocity process noise std [m/s/√s]",
       validation: {
         bounds<>: [0.000001, 100.0]
@@ -129,7 +145,7 @@ finenav_localizer:
     }
     omega_noise_std: {
       type: double,
-      default_value: 0.10,
+      default_value: 0.03,
       description: "Angular velocity process noise std [rad/s/√s]",
       validation: {
         bounds<>: [0.000001, 100.0]

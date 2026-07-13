@@ -27,6 +27,8 @@ void EskfLocalizer::configure(const finenav_localizer::Params & params)
     max_empty_ticks_ = static_cast<int>(params_.max_consecutive_empty_ticks);
 
     NavigationModelD::Options model_opts;
+    model_opts.pos_noise_std   = params_.model.pos_noise_std;
+    model_opts.rot_noise_std   = params_.model.rot_noise_std;
     model_opts.vel_noise_std   = params_.model.vel_noise_std;
     model_opts.omega_noise_std = params_.model.omega_noise_std;
 

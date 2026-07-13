@@ -73,8 +73,10 @@ public:
      * @brief Process-noise parameters (constant-velocity model: noise enters through v and ω).
      */
     struct Options {
-        S vel_noise_std   = static_cast<S>(0.10);  ///< lin-velocity noise σ         [m/s/√s]
-        S omega_noise_std = static_cast<S>(0.10);  ///< ang-velocity noise σ         [rad/s/√s]
+        S pos_noise_std   = static_cast<S>(0.001); ///< unmodeled position noise σ        [m/√s]
+        S rot_noise_std   = static_cast<S>(0.001); ///< unmodeled rotation noise σ        [rad/√s]
+        S vel_noise_std   = static_cast<S>(0.10);  ///< lin-velocity process noise σ      [m/s/√s]
+        S omega_noise_std = static_cast<S>(0.10);  ///< ang-velocity process noise σ      [rad/s/√s]
     };
 
     /**
@@ -133,12 +135,16 @@ public:
         QMat Q = QMat::Zero();
         const S dt2 = dt * dt;
 
-        auto diag3 = [](S sigma_sq_dt2) -> Mat3T {
-            return Mat3T::Identity() * sigma_sq_dt2;
+        auto diag3 = [](S sigma_sq_dt) -> Mat3T {
+            return Mat3T::Identity() * sigma_sq_dt;
         };
 
-        Q.template block<3, 3>(0, 0) = Mat3T::Zero(); // no direct position noise in constant-velocity model
-        Q.template block<3, 3>(3, 3) = Mat3T::Zero(); // no direct rotation noise in constant-velocity model
+        // All four state blocks receive independent diagonal process noise.
+        // The position/rotation terms are tiny (unmodelled dynamics) but prevent
+        // the corresponding covariance blocks from collapsing when the velocity
+        // channels are observed with high precision (e.g. Twist ωz → P(5,5)→0).
+        Q.template block<3, 3>(0, 0) = diag3(opts.pos_noise_std   * opts.pos_noise_std   * dt);
+        Q.template block<3, 3>(3, 3) = diag3(opts.rot_noise_std   * opts.rot_noise_std   * dt);
         Q.template block<3, 3>(6, 6) = diag3(opts.vel_noise_std   * opts.vel_noise_std   * dt);
         Q.template block<3, 3>(9, 9) = diag3(opts.omega_noise_std * opts.omega_noise_std * dt);
 

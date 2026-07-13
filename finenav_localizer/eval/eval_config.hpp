@@ -39,6 +39,8 @@ constexpr int    kTwistSmoothingSteps = 1;     ///< twist obs reuse count
 constexpr double kPoseGateDist        = 22.5;  ///< Mahalanobis gate
 constexpr double kTwistGateDist       = 22.5;  ///< Mahalanobis gate
 constexpr double kMaxDtSec            = 0.5;   ///< dt clamp [s]
+constexpr double kPosNoiseStd         = 0.03;  ///< position noise σ_p  [m/√s]
+constexpr double kRotNoiseStd         = 0.01;  ///< rotation noise σ_θ  [rad/√s]
 constexpr double kVelNoiseStd         = 0.05;  ///< process noise σ_v    [m/s/√s]
 constexpr double kOmegaNoiseStd       = 0.03;  ///< process noise σ_ω  [rad/s/√s]
 
@@ -86,14 +88,14 @@ constexpr double kFig8PoseHz    = 10.0;
 constexpr double kFig8TwistHz   = 20.0;
 
 // ── 8. Scenario 4 — bag replay ─────────────────────────────────────────────────
-//  Path relative to the finenav_localizer package root.
+// Path relative to the finenav_localizer package root.
 // Resolved at compile time from the CMake package source directory.
 #define _FN_STR_(x) #x
 #define _FN_XSTR_(x) _FN_STR_(x)
 constexpr const char* kBagPath = _FN_XSTR_(FINENAV_LOCALIZER_PACKAGE_DIR) "/eval/test_bag1";
 constexpr const char* kBagGtFrame        = "base_link";  ///< child_frame_id in /tf for GT
-constexpr bool        kBagOdomAsRelPose  = true;
-constexpr bool        kBagUseMsgStamp    = true;   ///< true=use msg header.stamp; false=override with bag record stamp
+constexpr bool        kBagOdomAsRelPose  = false; ///< true=use RelPose channel; false=use Twist channel
+constexpr bool        kBagUseMsgStamp    = true; ///< true=use message header stamp; false=use bag record stamp
 
 // Pose covariance synthesised from PoseStamped (bag has no covariance on this topic).
 constexpr double kBagPoseVarM      = 0.005 * 0.005;   ///< position σ² [m²]

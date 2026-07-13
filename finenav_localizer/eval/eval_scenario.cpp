@@ -127,6 +127,8 @@ static finenav_localizer::Params makeConfig()
     p.pose_gate_dist        = cfg::kPoseGateDist;
     p.twist_gate_dist       = cfg::kTwistGateDist;
     p.max_dt_sec            = cfg::kMaxDtSec;
+    p.model.pos_noise_std   = cfg::kPosNoiseStd;
+    p.model.rot_noise_std   = cfg::kRotNoiseStd;
     p.model.vel_noise_std   = cfg::kVelNoiseStd;
     p.model.omega_noise_std = cfg::kOmegaNoiseStd;
     return p;
@@ -761,6 +763,8 @@ static void runBagScenario(const rclcpp::Node::SharedPtr & node)
         p.pose_gate_dist        = cfg::kPoseGateDist;
         p.twist_gate_dist       = cfg::kTwistGateDist;
         p.max_dt_sec            = cfg::kMaxDtSec;
+        p.model.pos_noise_std   = cfg::kPosNoiseStd;
+        p.model.rot_noise_std   = cfg::kRotNoiseStd;
         p.model.vel_noise_std   = cfg::kVelNoiseStd;
         p.model.omega_noise_std = cfg::kOmegaNoiseStd;
         return p;
