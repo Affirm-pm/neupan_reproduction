@@ -9,17 +9,6 @@ target_link_libraries(test_filter_model
         finenav_localizer
 )
 
-# ── kf_math free functions ─────────────────────────────────────────────────────
-ament_add_gtest(test_kf_math
-        test_kf_math.cpp
-)
-target_include_directories(test_kf_math PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
-)
-target_link_libraries(test_kf_math
-        finenav_localizer
-)
-
 # ── TimeDelayKalmanFilter standalone ────────────────────────────────────────────
 ament_add_gtest(test_time_delay_kf
         test_time_delay_kf.cpp

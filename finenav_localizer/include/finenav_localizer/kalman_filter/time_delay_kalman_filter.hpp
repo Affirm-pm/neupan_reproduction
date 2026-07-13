@@ -9,7 +9,8 @@
 
 #include <rclcpp/clock.hpp>
 
-#include "finenav_localizer/kalman_filter/kf_math.hpp"
+#include <Eigen/LU>
+
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::localizer {
@@ -214,11 +215,27 @@ public:
                 slot_a, slot_b, max_delay_step_);
             return false;
         }
-        const int dim_y = static_cast<int>(y.rows());
-        Eigen::MatrixXd C_ex = Eigen::MatrixXd::Zero(dim_y, dim_x_ex_);
-        C_ex.block(0, dim_x_ * slot_a, dim_y, dim_x_) += C_a;
-        C_ex.block(0, dim_x_ * slot_b, dim_y, dim_x_) += C_b;
-        return kf::update(x_, P_, y, C_ex * x_, C_ex, R);
+        const int col_a = dim_x_ * slot_a, col_b = dim_x_ * slot_b;
+
+        // PCT = P_col_a * C_a^T + P_col_b * C_b^T.
+        const Eigen::MatrixXd PCT = P_.middleCols(col_a, dim_x_) * C_a.transpose()
+                                  + P_.middleCols(col_b, dim_x_) * C_b.transpose();
+        // x_pred = C_a * x_a + C_b * x_b.
+        const Eigen::MatrixXd x_pred = C_a * x_.middleRows(col_a, dim_x_)
+                                     + C_b * x_.middleRows(col_b, dim_x_);
+        // S = R + C_ex * PCT.  C_ex is sparse: only the a/b column blocks matter.
+        // C_ex * PCT = C_a * PCT.rows(col_a..col_a+dim_x) + C_b * PCT.rows(col_b..col_b+dim_x)
+        const Eigen::MatrixXd S_mat = R
+            + C_a * PCT.middleRows(col_a, dim_x_)
+            + C_b * PCT.middleRows(col_b, dim_x_);
+        const Eigen::MatrixXd K = PCT * S_mat.inverse();
+
+        if (K.array().isNaN().any() || K.array().isInf().any()) { return false; }
+
+        x_ += K * (y - x_pred);
+        P_.noalias() -= K * PCT.transpose();
+        P_ = (0.5 * (P_ + P_.transpose())).eval();
+        return true;
     }
 
     /**
@@ -245,14 +262,20 @@ public:
             return false;
         }
 
-        const int dim_y = static_cast<int>(y.rows());
+        // PCT = P_[:, d·n : (d+1)·n] * C^T  — only the n-wide column block at slot d.
+        // C_ex is sparse; extracting the block directly saves O((n·d)·m·(n·d)) → O(n·m·(n·d)).
+        const int col0 = dim_x_ * delay_step;
+        const Eigen::MatrixXd PCT = P_.middleCols(col0, dim_x_) * C.transpose();
+        const Eigen::MatrixXd x_pred = C * x_.middleRows(col0, dim_x_);
+        const Eigen::MatrixXd S_mat = R + C * PCT;
+        const Eigen::MatrixXd K = PCT * S_mat.inverse();
 
-        // Build expanded C: C_ex[:, delay_step*dim_x : (delay_step+1)*dim_x] = C
-        Eigen::MatrixXd C_ex = Eigen::MatrixXd::Zero(dim_y, dim_x_ex_);
-        C_ex.block(0, dim_x_ * delay_step, dim_y, dim_x_) = C;
+        if (K.array().isNaN().any() || K.array().isInf().any()) { return false; }
 
-        // y_pred = C_ex * x_ (note: in ESKF x_ is always ≈ 0)
-        return kf::update(x_, P_, y, C_ex * x_, C_ex, R);
+        x_ += K * (y - x_pred);
+        P_.noalias() -= K * PCT.transpose();
+        P_ = (0.5 * (P_ + P_.transpose())).eval();
+        return true;
     }
 
     /// Introspection

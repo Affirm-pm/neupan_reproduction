@@ -26,7 +26,7 @@
 
 #include <Eigen/Core>
 
-#include "finenav_localizer/eskf.hpp"
+#include "finenav_localizer/kalman_filter/eskf.hpp"
 
 namespace {
 

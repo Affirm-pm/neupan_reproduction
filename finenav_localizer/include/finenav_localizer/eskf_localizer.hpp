@@ -17,8 +17,8 @@
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
 
-#include "eskf.hpp"
-#include "finenav_localizer/filter_model.hpp"
+#include "finenav_localizer/kalman_filter/eskf.hpp"
+#include "finenav_localizer/kalman_filter/filter_model.hpp"
 #include "finenav_localizer/observation_queue.hpp"
 #include "finenav_localizer/localizer_params.hpp"
 

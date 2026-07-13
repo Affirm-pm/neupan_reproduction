@@ -13,7 +13,7 @@
 #include <rclcpp/clock.hpp>
 #include <rclcpp/logging.hpp>
 
-#include "finenav_localizer/filter_model.hpp"
+#include "finenav_localizer/kalman_filter/filter_model.hpp"
 #include "finenav_localizer/kalman_filter/time_delay_kalman_filter.hpp"
 #include "finenav_util/common/log_macros.hpp"
 

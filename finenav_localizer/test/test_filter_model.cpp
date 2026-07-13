@@ -6,7 +6,7 @@
 #include <Eigen/Geometry>
 #include <sophus/so3.hpp>
 
-#include "finenav_localizer/filter_model.hpp"
+#include "finenav_localizer/kalman_filter/filter_model.hpp"
 
 namespace fn = finenav::localizer;
 using Model = fn::NavigationModelD;

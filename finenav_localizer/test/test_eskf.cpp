@@ -7,7 +7,7 @@
 #include <Eigen/Dense>
 #include <sophus/so3.hpp>
 
-#include "finenav_localizer/eskf.hpp"
+#include "finenav_localizer/kalman_filter/eskf.hpp"
 
 using namespace finenav::localizer;
 using ESKFd = ESKF<NavigationModel<double>>;
