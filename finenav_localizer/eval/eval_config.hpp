@@ -17,7 +17,8 @@ namespace cfg {
 //   1 = Uniform circular motion, all ideal
 //   2 = Uniform circular, Session-B stress events
 //   3 = High-dynamic Lissajous figure-8, ideal
-constexpr int kScenario = 3;
+//   4 = Bag replay (real sensor data, deterministic rosbag2_cpp read)
+constexpr int kScenario = 4;
 
 // ── 2. Observation mode ───────────────────────────────────────────────────────
 //   At least one of kUsePose / kUseTwist must be true.
@@ -33,13 +34,13 @@ constexpr const char* kCsvPath = "/tmp/finenav_localizer_test.csv";
 // ── 4. FineNavLocalizer filter parameters ────────────────────────────────────
 constexpr double kUpdateRateHz        = 50.0;  ///< timer frequency      [Hz]
 constexpr double kMaxDelaySec         = 0.3;   ///< max observation delay [s]
-constexpr int    kPoseSmoothingSteps  = 10;     ///< pose obs reuse count
+constexpr int    kPoseSmoothingSteps  = 1;     ///< pose obs reuse count (bag: single strong update)
 constexpr int    kTwistSmoothingSteps = 1;     ///< twist obs reuse count
-constexpr double kPoseGateDist        = 1e9;   ///< Mahalanobis χ²(6) gate
-constexpr double kTwistGateDist       = 1e9;
-constexpr double kMaxDtSec            = 0.5;   ///< dt clamp              [s]
-constexpr double kVelNoiseStd         = 0.5;   ///< process noise σ_v    [m/s/√s]
-constexpr double kOmegaNoiseStd       = 0.1;   ///< process noise σ_ω  [rad/s/√s]
+constexpr double kPoseGateDist        = 22.5;  ///< Mahalanobis gate
+constexpr double kTwistGateDist       = 22.5;  ///< Mahalanobis gate
+constexpr double kMaxDtSec            = 0.5;   ///< dt clamp [s]
+constexpr double kVelNoiseStd         = 0.05;  ///< process noise σ_v    [m/s/√s]
+constexpr double kOmegaNoiseStd       = 0.03;  ///< process noise σ_ω  [rad/s/√s]
 
 // ── 5. Observation noise ──────────────────────────────────────────────────────
 constexpr double kPoseSigmaM      = 0.05;   ///< position σ             [m]
@@ -83,6 +84,27 @@ constexpr double kFig8Omega     = 3.14159265358979323846/5.0;
 constexpr double kFig8Duration  = 20.0;
 constexpr double kFig8PoseHz    = 10.0;
 constexpr double kFig8TwistHz   = 20.0;
+
+// ── 8. Scenario 4 — bag replay ─────────────────────────────────────────────────
+//  Path relative to the finenav_localizer package root.
+// Resolved at compile time from the CMake package source directory.
+#define _FN_STR_(x) #x
+#define _FN_XSTR_(x) _FN_STR_(x)
+constexpr const char* kBagPath = _FN_XSTR_(FINENAV_LOCALIZER_PACKAGE_DIR) "/eval/test_bag1";
+constexpr const char* kBagGtFrame        = "base_link";  ///< child_frame_id in /tf for GT
+constexpr bool        kBagOdomAsRelPose  = false;
+constexpr bool        kBagUseMsgStamp    = true;   ///< true=use msg header.stamp; false=override with bag record stamp
+
+// Pose covariance synthesised from PoseStamped (bag has no covariance on this topic).
+constexpr double kBagPoseVarM      = 0.005 * 0.005;   ///< position σ² [m²]
+constexpr double kBagPoseYawVarRad = 0.002 * 0.002;   ///< yaw σ² [rad²]
+
+// Odometry covariance — used for both RelPose (displacement cov) and Twist (body-frame v,ω).
+constexpr double kBagOdomLinVelVar  = 0.005 * 0.005;   ///< linear v σ²  [(m/s)²] for Twist; Δp σ² [m²] for RelPose
+constexpr double kBagOdomAngVelVar  = 0.001 * 0.001;   ///< angular ω σ² [(rad/s)²] for Twist; Δθ σ² [rad²] for RelPose
+
+constexpr double kBagStartOffsetSec = 0.0;   ///< skip first N seconds (0 = play entire bag)
+constexpr double kBagMaxDurationSec = 0.0;   ///< 0 = play entire bag
 
 } // namespace cfg
 

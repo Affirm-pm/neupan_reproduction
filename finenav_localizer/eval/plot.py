@@ -54,6 +54,9 @@ DEFAULT_CSV = "/tmp/finenav_localizer_test.csv"
 # Confidence level for covariance ellipses (2σ ≈ 95 % for a 2-D Gaussian).
 N_STD = 2.0
 
+# Ellipse density — one ellipse roughly every N seconds along the trajectory.
+ELLIPSE_INTERVAL_SEC = 0.2
+
 # ── Scenario → colour (tab10).  Add new labels here when more scenarios land. ─
 _KNOWN_SCENARIOS = [
     "CircleIdeal",                                            # Scenario 1
@@ -166,56 +169,23 @@ def _draw_static(df, csv_path, scenarios, has_cov, has_pd):
     ax_cov  = fig.add_subplot(gs[2, 1:])
     ax_pd   = fig.add_subplot(gs[3, :]) if has_pd else None
 
-    # ── Panel 1: 2-D Trajectory (+ covariance ellipses) ──────────────────────
-    ax_traj.plot(df["gt_x"],  df["gt_y"],  "k-",  lw=2.0, zorder=3, label="GT")
-    ax_traj.plot(df["est_x"], df["est_y"], "b--", lw=1.5, zorder=4, label="Est")
-    ax_traj.plot(df["gt_x"].iloc[0], df["gt_y"].iloc[0],
-                 "k^", ms=9, zorder=7, clip_on=False)
-
+    # ── Panel 1: RMSE over time (position + yaw) ──────────────────────────────
+    err_pos = np.sqrt((df["gt_x"] - df["est_x"])**2 + (df["gt_y"] - df["est_y"])**2)
+    err_yaw = np.abs(_wrap(df["est_yaw"] - df["gt_yaw"])) * 180.0 / np.pi
+    ax_rmse = ax_traj  # reuse the axes
+    ax_rmse.plot(t, err_pos, color="#d62728", lw=1.3, zorder=3, label="pos err [m]")
+    ax_rmse.set_ylabel("Pos err [m]", fontsize=8, color="#d62728")
+    ax2 = ax_rmse.twinx()
+    ax2.plot(t, err_yaw, color="#9467bd", lw=1.0, alpha=0.85, zorder=2, label="yaw err [°]")
+    ax2.set_ylabel("Yaw err [°]", fontsize=8, color="#9467bd")
+    ax_rmse.set_title(
+        f"RMSE over time  (pos={err_pos.mean():.3f} m  yaw={err_yaw.mean():.1f}°)",
+        fontsize=9)
+    ax_rmse.grid(True, alpha=0.3)
+    ax2.legend(fontsize=7, loc="upper right")
+    ax_rmse.legend(fontsize=7, loc="upper left")
     for sc in scenarios:
-        m = df["scenario"] == sc
-        ax_traj.plot(df.loc[m, "est_x"], df.loc[m, "est_y"],
-                     color=_c(sc), lw=2.2, alpha=0.80, zorder=5)
-        pm = pose_m & m
-        if pm.any():
-            ax_traj.scatter(df.loc[pm, "obs_x"], df.loc[pm, "obs_y"],
-                            color=_c(sc), s=10, zorder=6, alpha=0.55)
-
-    n_bad = 0
-    if has_cov:
-        n = len(df)
-        k = max(1, n // 40)                       # ~40 ellipses along the path
-        ex = df["est_x"].to_numpy(); ey = df["est_y"].to_numpy()
-        cxx = df["cov_xx"].to_numpy(); cxy = df["cov_xy"].to_numpy()
-        cyy = df["cov_yy"].to_numpy()
-        for i in range(0, n, k):
-            e = _add_cov_ellipse(
-                ax_traj, ex[i], ey[i], cxx[i], cxy[i], cyy[i],
-                fill=False, edgecolor=_EST_COLOR, lw=0.9, alpha=0.35, zorder=4.5)
-            if e is None:                          # non-PD → red flag
-                n_bad += 1
-                ax_traj.plot(ex[i], ey[i], "x", color="red", ms=7,
-                             mew=1.6, zorder=8)
-
-    ax_traj.set_aspect("equal")
-    ax_traj.set_xlabel("X [m]", fontsize=8)
-    ax_traj.set_ylabel("Y [m]", fontsize=8)
-    ax_traj.set_title(f"2-D Trajectory  +  {N_STD:g}σ position covariance", fontsize=9)
-    ax_traj.grid(True, alpha=0.3)
-
-    traj_handles = [
-        Line2D([0], [0], color="k", lw=2.0,          label="GT"),
-        Line2D([0], [0], color="b", lw=1.5, ls="--", label="Est"),
-    ]
-    if has_cov:
-        traj_handles.append(mpatches.Patch(facecolor="none", edgecolor=_EST_COLOR,
-                                           label=f"{N_STD:g}σ cov ellipse"))
-        if n_bad:
-            traj_handles.append(Line2D([0], [0], color="red", marker="x", ls="none",
-                                       label=f"non-PD ({n_bad})"))
-    for sc in scenarios:
-        traj_handles.append(mpatches.Patch(color=_c(sc), alpha=0.75, label=sc))
-    ax_traj.legend(handles=traj_handles, fontsize=6.5, loc="best")
+        _shade_phases(ax_rmse, df, scenarios)
 
     # ── Panels 2-7: state time series ────────────────────────────────────────
     _ts(ax_x, t, df["gt_x"].to_numpy(), df["est_x"].to_numpy(),
@@ -290,12 +260,61 @@ def _draw_static(df, csv_path, scenarios, has_cov, has_pd):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+def _draw_traj_standalone(df, csv_path, scenarios):
+    """Standalone interactive trajectory + covariance ellipse figure (big, zoomable)."""
+    fig, ax = plt.subplots(figsize=(12, 10))
+    fig.suptitle(f"FineNavLocalizer — Trajectory  ▸  {os.path.basename(csv_path)}",
+                 fontsize=13, fontweight="bold")
+    ax.set_aspect("equal")
+    ax.grid(True, alpha=0.3)
+    ax.set_xlabel("X [m]"); ax.set_ylabel("Y [m]")
+
+    ax.plot(df["gt_x"],  df["gt_y"],  "k-",  lw=2.0, zorder=3, label="GT")
+    ax.plot(df["est_x"], df["est_y"], "b--", lw=1.5, zorder=4, label="Est")
+    ax.plot(df["gt_x"].iloc[0], df["gt_y"].iloc[0], "k^", ms=9, zorder=7, clip_on=False)
+
+    for sc in scenarios:
+        m = df["scenario"] == sc
+        ax.plot(df.loc[m, "est_x"], df.loc[m, "est_y"],
+                color=_c(sc), lw=2.2, alpha=0.80, zorder=5)
+
+    n_bad = 0
+    n = len(df)
+    t_vals = df["t"].to_numpy()
+    total_t = t_vals[-1] - t_vals[0] if n > 1 else 1.0
+    k = max(1, int(n * ELLIPSE_INTERVAL_SEC / total_t))  # time-based density
+    ex = df["est_x"].to_numpy(); ey = df["est_y"].to_numpy()
+    cxx = df["cov_xx"].to_numpy(); cxy = df["cov_xy"].to_numpy(); cyy = df["cov_yy"].to_numpy()
+    for i in range(0, n, k):
+        e = _add_cov_ellipse(ax, ex[i], ey[i], cxx[i], cxy[i], cyy[i],
+                             fill=False, edgecolor=_EST_COLOR, lw=0.9, alpha=0.35, zorder=4.5)
+        if e is None:
+            n_bad += 1
+            ax.plot(ex[i], ey[i], "x", color="red", ms=7, mew=1.6, zorder=8)
+
+    handles = [
+        Line2D([0], [0], color="k", lw=2.0,            label="GT"),
+        Line2D([0], [0], color="b", lw=1.5, ls="--",   label="Est"),
+        mpatches.Patch(facecolor="none", edgecolor=_EST_COLOR, label=f"{N_STD}σ cov ellipse"),
+    ]
+    if n_bad:
+        handles.append(Line2D([0], [0], color="red", marker="x", ls="none", label=f"non-PD ({n_bad})"))
+    for sc in scenarios:
+        handles.append(mpatches.Patch(color=_c(sc), alpha=0.75, label=sc))
+    ax.legend(handles=handles, fontsize=8, loc="best")
+
+    out = csv_path.replace(".csv", "_traj.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    print(f"[plot_localizer]  traj     {len(df)} rows  →  {out}")
+
+# ─────────────────────────────────────────────────────────────────────────────
 def _make_animation(df, csv_path, scenarios, has_pd):
     """Animate the trajectory, estimate, current covariance ellipse and heading."""
-    t   = df["t"].to_numpy()
-    gx  = df["gt_x"].to_numpy();  gy = df["gt_y"].to_numpy()
-    ex  = df["est_x"].to_numpy(); ey = df["est_y"].to_numpy()
-    yaw = df["est_yaw"].to_numpy()
+    t     = df["t"].to_numpy()
+    gx    = df["gt_x"].to_numpy();  gy    = df["gt_y"].to_numpy()
+    gyaw  = df["gt_yaw"].to_numpy()
+    ex    = df["est_x"].to_numpy(); ey    = df["est_y"].to_numpy()
+    eyaw  = df["est_yaw"].to_numpy()
     cxx = df["cov_xx"].to_numpy(); cxy = df["cov_xy"].to_numpy()
     cyy = df["cov_yy"].to_numpy()
     me  = df["cov_min_eig"].to_numpy() if has_pd else None
@@ -322,8 +341,9 @@ def _make_animation(df, csv_path, scenarios, has_pd):
     ax.plot(gx, gy, color="0.65", lw=1.2, zorder=1, label="GT (full path)")
     est_line, = ax.plot([], [], "b--", lw=1.4, zorder=3, label="Est (so far)")
     gt_pt,    = ax.plot([], [], "k^", ms=11, zorder=6, label="GT now")
+    gt_head,  = ax.plot([], [], "-", color="black", lw=2.2, zorder=6)
     est_pt,   = ax.plot([], [], "o", color=_EST_COLOR, ms=6, zorder=7, label="Est now")
-    head_ln,  = ax.plot([], [], "-", color=_EST_COLOR, lw=2.0, zorder=6)
+    est_head, = ax.plot([], [], "-", color=_EST_COLOR, lw=2.0, zorder=6)
     ell = mpatches.Ellipse((0, 0), 0, 0, angle=0.0, fill=False,
                            edgecolor=_EST_COLOR, lw=1.6, alpha=0.85, zorder=5)
     ax.add_patch(ell)
@@ -335,9 +355,14 @@ def _make_animation(df, csv_path, scenarios, has_pd):
     def update(i):
         est_line.set_data(ex[:i + 1], ey[:i + 1])
         gt_pt.set_data([gx[i]], [gy[i]])
+        if not np.isnan(gyaw[i]):
+            gt_head.set_data([gx[i], gx[i] + head_len * math.cos(gyaw[i])],
+                             [gy[i], gy[i] + head_len * math.sin(gyaw[i])])
+        else:
+            gt_head.set_data([], [])
         est_pt.set_data([ex[i]], [ey[i]])
-        head_ln.set_data([ex[i], ex[i] + head_len * math.cos(yaw[i])],
-                         [ey[i], ey[i] + head_len * math.sin(yaw[i])])
+        est_head.set_data([ex[i], ex[i] + head_len * math.cos(eyaw[i])],
+                         [ey[i], ey[i] + head_len * math.sin(eyaw[i])])
 
         axes = _ellipse_axes(cxx[i], cxy[i], cyy[i])
         pd_ok = True
@@ -361,7 +386,7 @@ def _make_animation(df, csv_path, scenarios, has_pd):
         hud.set_text(txt)
         hud.get_bbox_patch().set_edgecolor("red" if not pd_ok else "0.6")
         ax.set_title(f"FineNavLocalizer  ▸  {df['scenario'].iloc[i]}", fontsize=11)
-        return est_line, gt_pt, est_pt, head_ln, ell, hud
+        return est_line, gt_pt, gt_head, est_pt, est_head, ell, hud
 
     anim = manim.FuncAnimation(fig, update, frames=frames, interval=50, blit=False)
 
@@ -396,6 +421,10 @@ def plot_csv(csv_path: str, do_anim: bool = True) -> None:
               "ellipses and animation skipped (regenerate with the updated eval).")
 
     _draw_static(df, csv_path, scenarios, has_cov, has_pd)
+
+    # ── Standalone interactive trajectory figure (enlarge covariates + GT/Est) ─
+    if has_cov:
+        _draw_traj_standalone(df, csv_path, scenarios)
 
     if do_anim and has_cov:
         _make_animation(df, csv_path, scenarios, has_pd)

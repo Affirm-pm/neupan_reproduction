@@ -34,6 +34,7 @@
 #include <Eigen/Eigenvalues>
 
 #include "finenav_localizer/eskf_localizer.hpp"
+#include "bag_helpers.hpp"
 
 using namespace std::chrono_literals;
 namespace fn = finenav::localizer;
@@ -712,6 +713,153 @@ static void runHighDynIdeal(const rclcpp::Node::SharedPtr& node)
         "[Scenario 3] %zu rows written → %s", log.size(), cfg::kCsvPath);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  Scenario 4 — Bag replay (real sensor data, deterministic rosbag2_cpp read)
+// ═════════════════════════════════════════════════════════════════════════════
+static void runBagScenario(const rclcpp::Node::SharedPtr & node)
+{
+    const std::string bag_path = cfg::kBagPath;
+    RCLCPP_INFO(node->get_logger(),
+        "═══ Scenario 4: Bag replay  odom=%s  bag=%s ═══",
+        cfg::kBagOdomAsRelPose ? "RelPose" : "Twist", bag_path.c_str());
+
+    std::vector<GtSample> gt_index;
+    auto all = readBagMessages(bag_path, std::string(cfg::kBagGtFrame), gt_index);
+
+    // Filter to the configured time window.
+    const double t0 = all.empty() ? 0.0
+        : all.front().stamp.seconds() + cfg::kBagStartOffsetSec;
+    const double tend = (cfg::kBagMaxDurationSec > 0.0)
+        ? t0 + cfg::kBagMaxDurationSec
+        : std::numeric_limits<double>::max();
+
+    std::vector<BagMessage> msgs;
+    msgs.reserve(all.size());
+    for (const auto & m : all) {
+        const double ts = m.stamp.seconds();
+        if (ts >= t0 && ts < tend) msgs.push_back(m);
+    }
+    if (msgs.empty()) {
+        RCLCPP_ERROR(node->get_logger(), "[Scenario 4] No messages in the configured time window.");
+        return;
+    }
+
+    // ── Build the engine ─────────────────────────────────────────────────────
+    fn::EskfLocalizer localizer([]() {
+        finenav_localizer::Params p;
+        p.update_rate_hz        = cfg::kUpdateRateHz;
+        p.max_delay_sec         = cfg::kMaxDelaySec;
+        p.pose_smoothing_steps  = static_cast<int64_t>(cfg::kPoseSmoothingSteps);
+        p.twist_smoothing_steps = static_cast<int64_t>(cfg::kTwistSmoothingSteps);
+        p.pose_gate_dist        = cfg::kPoseGateDist;
+        p.twist_gate_dist       = cfg::kTwistGateDist;
+        p.max_dt_sec            = cfg::kMaxDtSec;
+        p.model.vel_noise_std   = cfg::kVelNoiseStd;
+        p.model.omega_noise_std = cfg::kOmegaNoiseStd;
+        return p;
+    }());
+
+    // ── Initialise at the first pose.  All messages before it are skipped so
+    //     no stale observations accumulate in the queues.
+    const auto first_pose = std::find_if(msgs.begin(), msgs.end(),
+        [](const BagMessage & m) { return m.role == BagMsgRole::Pose; });
+    if (first_pose != msgs.end()) {
+        localizer.setInitialPose(first_pose->pose_msg);
+    } else {
+        RCLCPP_ERROR(node->get_logger(), "[Scenario 4] No pose message in the bag — cannot initialise.");
+        return;
+    }
+
+    // ── Main loop — 50 Hz virtual clock ──────────────────────────────────────
+    const double     kNaN  = std::numeric_limits<double>::quiet_NaN();
+    const int64_t    dt_ns = static_cast<int64_t>(1e9 / cfg::kUpdateRateHz);
+    std::vector<Row> log;
+
+    bool                     has_prev_odom = false;
+    nav_msgs::msg::Odometry  prev_odom;
+
+    // Message index (advances as we feed observations).
+    std::size_t msg_idx = static_cast<std::size_t>(
+        std::distance(msgs.begin(), first_pose));  // start at the init pose
+    // Prime the filter at the init pose before entering the 50 Hz loop.
+    localizer.step(first_pose->stamp);
+
+    // Feed the first pose as an observation (setInitialPose consumed it; the
+    // filter has no observation queued for it yet — feed it so the first tick
+    // processes it).
+    localizer.feedObservation(first_pose->pose_msg);
+    ++msg_idx;  // consumed the init pose
+
+    // Run the virtual clock from the init pose timestamp to the last message.
+    int64_t now_ns = first_pose->stamp.nanoseconds();
+    const int64_t end_ns = msgs.back().stamp.nanoseconds();
+
+    while (now_ns < end_ns) {
+        now_ns += dt_ns;
+        const rclcpp::Time tick_time(now_ns, RCL_ROS_TIME);
+
+        // Track what is fed this tick for the CSV observation columns.
+        double feed_pose_x = kNaN, feed_pose_y = kNaN, feed_pose_yaw = kNaN;
+        double feed_twist_vx = kNaN, feed_twist_wz = kNaN;
+        bool   fed_pose  = false;
+        bool   fed_twist = false;
+
+        // Feed all messages whose stamps fall within [prev_tick, this_tick].
+        while (msg_idx < msgs.size() && msgs[msg_idx].stamp.nanoseconds() <= now_ns) {
+            const auto & m = msgs[msg_idx];
+            if (m.role == BagMsgRole::Pose) {
+                localizer.feedObservation(m.pose_msg);
+                feed_pose_x   = m.pose_msg.pose.pose.position.x;
+                feed_pose_y   = m.pose_msg.pose.pose.position.y;
+                feed_pose_yaw = std::atan2(
+                    2.0 * m.pose_msg.pose.pose.orientation.w * m.pose_msg.pose.pose.orientation.z,
+                    1.0 - 2.0 * m.pose_msg.pose.pose.orientation.z * m.pose_msg.pose.pose.orientation.z);
+                fed_pose = true;
+            }
+            else if (m.role == BagMsgRole::Odom) {
+                if constexpr (cfg::kBagOdomAsRelPose) {
+                    if (has_prev_odom) {
+                        const auto rel = odomPairToRelPose(prev_odom, m.odom_msg,
+                            cfg::kBagOdomLinVelVar, cfg::kBagOdomAngVelVar);
+                        if ((rel.stamp_to - rel.stamp_from).seconds() > 1e-6) {
+                            localizer.feedRelativePose(rel);
+                        }
+                    }
+                    prev_odom     = m.odom_msg;
+                    has_prev_odom = true;
+                } else {
+                    const auto tw = odomToTwist(m.odom_msg, cfg::kBagOdomLinVelVar, cfg::kBagOdomAngVelVar);
+                    localizer.feedObservation(tw);
+                    feed_twist_vx = tw.twist.twist.linear.x;
+                    feed_twist_wz = tw.twist.twist.angular.z;
+                    fed_twist = true;
+                }
+            }
+            ++msg_idx;
+        }
+
+        localizer.step(tick_time);
+
+        Row row;
+        row.t        = tick_time.seconds() - msgs.front().stamp.seconds();
+        const auto * gt = closestGt(gt_index, tick_time);
+        row.gt_x   = gt ? gt->x   : kNaN;  row.gt_y   = gt ? gt->y   : kNaN;
+        row.gt_yaw = gt ? gt->yaw : kNaN;
+        row.gt_vx  = kNaN; row.gt_vy = kNaN; row.gt_wz = kNaN;
+        row.obs_x = feed_pose_x; row.obs_y = feed_pose_y; row.obs_yaw = feed_pose_yaw;
+        row.obs_vx_body = feed_twist_vx; row.obs_wz_body = feed_twist_wz;
+        row.has_pose_obs  = fed_pose;
+        row.has_twist_obs = fed_twist;
+        row.scenario = "BagReplay";
+        fillEstimate(row, localizer);
+        log.push_back(row);
+    }
+
+    writeCSV(log);
+    RCLCPP_INFO(node->get_logger(),
+        "[Scenario 4] %zu rows written → %s", log.size(), cfg::kCsvPath);
+}
+
 // ─── main ─────────────────────────────────────────────────────────────────────
 int main(int argc, char** argv)
 {
@@ -729,9 +877,10 @@ int main(int argc, char** argv)
         case 1:  runCircleIdeal(node);   break;
         case 2:  runCircleStress(node);  break;
         case 3:  runHighDynIdeal(node);  break;
+        case 4:  runBagScenario(node);   break;
         default:
             RCLCPP_ERROR(node->get_logger(),
-                "Unknown cfg::kScenario=%d  (valid: 1, 2, 3).", cfg::kScenario);
+                "Unknown cfg::kScenario=%d  (valid: 1, 2, 3, 4).", cfg::kScenario);
             rclcpp::shutdown();
             return 1;
     }
