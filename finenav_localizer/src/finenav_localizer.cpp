@@ -25,7 +25,6 @@ finenav::core::RobotState toRobotState(const NavStateD & s)
 FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
                                    rclcpp::NodeOptions pnode_overrides)
     : parent_node_(std::move(parent_node))
-    , logger_(rclcpp::get_logger("finenav.FineNavLocalizer"))
 {
     // Private sub-node (parameter prefix from the yaml top-level key).
     pnode_overrides.append_parameter_override(
@@ -37,7 +36,8 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     // Parameters → inner engine Config.
     param_listener_ = std::make_unique<ParamListener>(pnode_);
     params_         = param_listener_->get_params();
-    eskf_localizer_ = std::make_unique<EskfLocalizer>(params_);
+    eskf_localizer_ = std::make_unique<EskfLocalizer>(
+        params_, pnode_->get_logger().get_child("EskfLocalizer"));
 
     // Size the inherited RobotStateProvider history window from the same param.
     setHistoryDuration(params_.history_duration_sec);
@@ -54,8 +54,8 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
         pnode_, pnode_->get_clock(), period, [this]() { timerCallback(); });
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
-    FINENAV_LOG_INFO(logger_,
-        "[FineNavLocalizer] ROS wrapper ready. rate={:.1f} Hz  publish_tf={}",
+    FINENAV_LOG_INFO(pnode_->get_logger(),
+        "ROS wrapper ready. rate={:.1f} Hz  publish_tf={}",
         params_.update_rate_hz, params_.publish_tf ? "true" : "false");
 }
 
@@ -96,12 +96,12 @@ void FineNavLocalizer::timerCallback()
     // ── Overrun detection (real-time concern; lives in the ROS layer) ────────
     const double elapsed_sec = (pnode_->now() - tick_time).seconds();
     const double period_sec  = 1.0 / params_.update_rate_hz;
-    FINENAV_LOG_INFO_THROTTLE(logger_, 2000,
-        "[FineNavLocalizer] tick complete  elapsed={:.1f} ms  period={:.1f} ms",
+    FINENAV_LOG_INFO_THROTTLE(pnode_->get_logger(), 2000,
+        "tick complete  elapsed={:.1f} ms  period={:.1f} ms",
         elapsed_sec * 1e3, period_sec * 1e3);
     if (elapsed_sec > period_sec) {
-        FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-            "[FineNavLocalizer] Timer overrun: callback took {:.1f} ms but period is {:.1f} ms "
+        FINENAV_LOG_WARN_THROTTLE(pnode_->get_logger(), 2000,
+            "Timer overrun: callback took {:.1f} ms but period is {:.1f} ms "
             "({:.0f}% over). Consider reducing update_rate_hz or max_delay_step.",
             elapsed_sec * 1e3, period_sec * 1e3, (elapsed_sec / period_sec - 1.0) * 100.0);
     }

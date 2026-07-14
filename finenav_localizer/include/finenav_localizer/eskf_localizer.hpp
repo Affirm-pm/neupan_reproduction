@@ -36,7 +36,8 @@ public:
     using TwistMsg = geometry_msgs::msg::TwistWithCovarianceStamped;
 
     EskfLocalizer() : EskfLocalizer(finenav_localizer::Params{}) {}
-    explicit EskfLocalizer(const finenav_localizer::Params & params);
+    explicit EskfLocalizer(const finenav_localizer::Params & params,
+                           rclcpp::Logger logger = rclcpp::get_logger("finenav.EskfLocalizer"));
 
     EskfLocalizer(const EskfLocalizer &)             = delete;
     EskfLocalizer & operator=(const EskfLocalizer &) = delete;

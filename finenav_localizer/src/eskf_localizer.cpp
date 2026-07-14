@@ -15,8 +15,9 @@
 namespace finenav::localizer {
 
 
-EskfLocalizer::EskfLocalizer(const finenav_localizer::Params & params)
-    : logger_(rclcpp::get_logger("finenav.EskfLocalizer"))
+EskfLocalizer::EskfLocalizer(const finenav_localizer::Params & params,
+                             rclcpp::Logger logger)
+    : logger_(std::move(logger))
 {
     configure(params);
 }
@@ -39,18 +40,19 @@ void EskfLocalizer::configure(const finenav_localizer::Params & params)
     if (params_.max_delay_sec < min_recommended_delay_sec) {
         FINENAV_LOG_WARN(
             logger_,
-            "[EskfLocalizer] max_delay_sec={:.4f} s is less than the recommended minimum "
-            "{:.4f} s (= 2 / update_rate_hz).  The effective rejection threshold equals one "
-            "EKF period ({:.4f} s), so observations that arrive just after a tick may be "
-            "rejected under scheduling jitter.  Consider max_delay_sec >= {:.4f} s.",
+            "max_delay_sec={:.4f} s is below the recommended minimum {:.4f} s "
+            "(= 2 / update_rate_hz). Observations arriving just after a tick may be "
+            "rejected under scheduling jitter. Consider max_delay_sec >= {:.4f} s.",
             params_.max_delay_sec, min_recommended_delay_sec,
-            1.0 / params_.update_rate_hz, min_recommended_delay_sec);
+            min_recommended_delay_sec);
     }
 
     const int max_delay_step = static_cast<int>(std::max(
         int64_t{2},
         static_cast<int64_t>(std::ceil(params_.max_delay_sec * params_.update_rate_hz)) + 1));
-    eskf_ = ESKFd(model_opts, max_delay_step);
+    eskf_ = ESKFd(model_opts, max_delay_step,
+                  ESKFd::PMat::Identity() * static_cast<double>(1e-2),
+                  logger_.get_child("ESKF"));
 
     pose_queue_ = std::make_unique<PoseObsQueue>(
         static_cast<std::size_t>(std::max(int64_t{1}, params_.pose_smoothing_steps)),
@@ -64,7 +66,7 @@ void EskfLocalizer::configure(const finenav_localizer::Params & params)
 
     FINENAV_LOG_INFO(
         logger_,
-        "[EskfLocalizer] Configured. rate={:.1f} Hz  max_delay={:.3f} s  max_delay_step={}  "
+        "Configured. rate={:.1f} Hz  max_delay={:.3f} s  max_delay_step={}  "
         "pose_smooth={}  twist_smooth={}",
         params_.update_rate_hz, params_.max_delay_sec, eskf_.maxDelayStep(),
         params_.pose_smoothing_steps, params_.twist_smoothing_steps);
@@ -111,7 +113,7 @@ void EskfLocalizer::setInitialPose(const PoseMsg & msg)
 
     is_initialized_.store(true, std::memory_order_release);
 
-    FINENAV_LOG_INFO(logger_, "[EskfLocalizer] Initial pose set: p=[{:.3f}, {:.3f}, {:.3f}]",
+    FINENAV_LOG_INFO(logger_, "Initial pose set at [{:.3f}, {:.3f}, {:.3f}]",
         pos.x(), pos.y(), pos.z());
 }
 
@@ -216,7 +218,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     // ==========================================
     if (!is_initialized_.load(std::memory_order_acquire)) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-            "[EskfLocalizer] Not initialised — call setInitialPose() first.");
+            "Not initialised — call setInitialPose() first.");
         return;
     }
 
@@ -230,7 +232,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
         consecutive_empty_ticks_++;
         if (consecutive_empty_ticks_ == max_empty_ticks_) {
             FINENAV_LOG_WARN_THROTTLE(logger_, 500,
-                "[EskfLocalizer] All observation queues empty for {} consecutive ticks "
+                "All observation queues empty for {} consecutive ticks "
                 "(≥ max {}) — freezing filter until an observation arrives.",
                 consecutive_empty_ticks_, max_empty_ticks_);
         }
@@ -243,7 +245,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     } else {
         if (consecutive_empty_ticks_ >= max_empty_ticks_) {
             FINENAV_LOG_INFO_THROTTLE(logger_, 500,
-                "[EskfLocalizer] Observation arrived — unfreezing filter "
+                "Observation arrived — unfreezing filter "
                 "(was frozen for {} ticks).",
                 consecutive_empty_ticks_);
         }
@@ -267,13 +269,13 @@ void EskfLocalizer::step(const rclcpp::Time & now)
         const double meas_dt = (tick_time - *last_predict_time_).seconds();
         if (meas_dt < 0.0) {
             FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                "[EskfLocalizer] Time jumped backwards (dt={:.6f} s) — skipping cycle.", meas_dt);
+                "Time jumped backwards (dt={:.6f} s) — skipping cycle.", meas_dt);
             last_predict_time_ = tick_time;
             return;
         }
         if (meas_dt > params_.max_dt_sec) {
             FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                "[EskfLocalizer] Large dt ({:.4f} s > max {:.4f} s) — clamped.",
+                "Large dt ({:.4f} s > max {:.4f} s) — clamped.",
                 meas_dt, params_.max_dt_sec);
             dt = params_.max_dt_sec;
         } else {
@@ -288,13 +290,18 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     // ── 3. Process pose observations ───────────────────────────────────────
     {
         const std::size_t n = pose_queue_->size();
+        if (n >= static_cast<std::size_t>(params_.max_obs_queue_size) * 8 / 10) {
+            FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+                "Pose observation queue near capacity ({}/{}) — consumer may be falling behind",
+                n, params_.max_obs_queue_size);
+        }
         for (std::size_t i = 0u; i < n; ++i) {
             const PoseMsg pose = pose_queue_->pop_increment_age();
 
             double delay_time = (tick_time - rclcpp::Time(pose.header.stamp)).seconds();
             if (delay_time < future_reject_threshold) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                    "[EskfLocalizer] Pose obs from future (delay={:.4f} s, threshold={:.4f} s) — skipping.",
+                    "Pose observation from future (delay={:.4f} s, threshold={:.4f} s) — skipping.",
                     delay_time, future_reject_threshold);
                 continue;
             }
@@ -303,7 +310,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
             const std::size_t delay_step = eskf_.findDelayStep(delay_time);
             if (delay_step >= static_cast<std::size_t>(eskf_.maxDelayStep())) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                    "[EskfLocalizer] Pose obs too old (delay={:.4f} s, max={:.4f} s) — rejecting.",
+                    "Pose observation too old (delay={:.4f} s > max {:.4f} s) — rejected.",
                     delay_time, eskf_.maxTrackedDelaySec());
                 continue;
             }
@@ -315,13 +322,18 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     // ── 4. Process twist observations ──────────────────────────────────────
     {
         const std::size_t n = twist_queue_->size();
+        if (n >= static_cast<std::size_t>(params_.max_obs_queue_size) * 8 / 10) {
+            FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+                "Twist observation queue near capacity ({}/{}) — consumer may be falling behind",
+                n, params_.max_obs_queue_size);
+        }
         for (std::size_t i = 0u; i < n; ++i) {
             const TwistMsg twist = twist_queue_->pop_increment_age();
 
             double delay_time = (tick_time - rclcpp::Time(twist.header.stamp)).seconds();
             if (delay_time < future_reject_threshold) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                    "[EskfLocalizer] Twist obs from future (delay={:.4f} s, threshold={:.4f} s) — skipping.",
+                    "Twist observation from future (delay={:.4f} s, threshold={:.4f} s) — skipping.",
                     delay_time, future_reject_threshold);
                 continue;
             }
@@ -330,7 +342,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
             const std::size_t delay_step = eskf_.findDelayStep(delay_time);
             if (delay_step >= static_cast<std::size_t>(eskf_.maxDelayStep())) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                    "[EskfLocalizer] Twist obs too old (delay={:.4f} s, max={:.4f} s) — rejecting.",
+                    "Twist observation too old (delay={:.4f} s > max {:.4f} s) — rejected.",
                     delay_time, eskf_.maxTrackedDelaySec());
                 continue;
             }
@@ -342,13 +354,18 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     // ── 4.5 Process relative-pose (odometry) observations ──────────────────
     {
         const std::size_t n = rel_pose_queue_->size();
+        if (n >= static_cast<std::size_t>(params_.max_rel_pose_queue_size) * 8 / 10) {
+            FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+                "RelPose observation queue near capacity ({}/{}) — consumer may be falling behind",
+                n, params_.max_rel_pose_queue_size);
+        }
         for (std::size_t i = 0u; i < n; ++i) {
             const RelativePoseObs obs = rel_pose_queue_->pop_increment_age();
 
             double delay_to = (tick_time - obs.stamp_to).seconds();
             if (delay_to < future_reject_threshold) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                    "[EskfLocalizer] RelPose 'to' stamp from future (delay={:.4f} s) — skipping.", delay_to);
+                    "RelPose 'to' stamp from future (delay={:.4f} s) — skipping.", delay_to);
                 continue;
             }
             delay_to = std::max(delay_to, 0.0);
@@ -356,7 +373,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
             double delay_from = (tick_time - obs.stamp_from).seconds();
             if (delay_from < future_reject_threshold) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                    "[EskfLocalizer] RelPose 'from' stamp from future (delay={:.4f} s) — skipping.", delay_from);
+                    "RelPose 'from' stamp from future (delay={:.4f} s) — skipping.", delay_from);
                 continue;
             }
             delay_from = std::max(delay_from, 0.0);
@@ -366,12 +383,13 @@ void EskfLocalizer::step(const rclcpp::Time & now)
 
             if (ds_to >= static_cast<std::size_t>(eskf_.maxDelayStep())) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                    "[EskfLocalizer] RelPose 'to' frame too old (delay={:.4f} s) — rejecting.", delay_to);
+                    "RelPose 'to' frame too old (delay={:.4f} s > max {:.4f} s) — rejected.",
+                    delay_to, eskf_.maxTrackedDelaySec());
                 continue;
             }
             if (ds_from >= static_cast<std::size_t>(eskf_.maxDelayStep())) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                    "[EskfLocalizer] RelPose 'from' frame too old (delay={:.4f} s, max={:.4f} s) — rejecting.",
+                    "RelPose 'from' frame too old (delay={:.4f} s > max {:.4f} s) — rejected.",
                     delay_from, eskf_.maxTrackedDelaySec());
                 continue;
             }
@@ -404,12 +422,13 @@ void EskfLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
 
-    FINENAV_LOG_INFO_THROTTLE(logger_, 2000, "Mahalanobis distance: {:.1f}", d2);
+    FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
+        "Pose Mahalanobis d²={:.1f} (gate={:.1f})", d2, params_.pose_gate_dist);
 
     if (d2 > params_.pose_gate_dist) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-            "[EskfLocalizer] applyUpdate<Pose> rejected by Mahalanobis gate "
-            "(d²={:.4f} > threshold={:.4f}).", d2, params_.pose_gate_dist);
+            "Pose rejected by Mahalanobis gate (d²={:.1f} > {:.1f})",
+            d2, params_.pose_gate_dist);
         return;
     }
 
@@ -431,10 +450,13 @@ void EskfLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
     const double d2 = static_cast<double>(
         obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
 
+    FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
+        "Twist Mahalanobis d²={:.1f} (gate={:.1f})", d2, params_.twist_gate_dist);
+
     if (d2 > params_.twist_gate_dist) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-            "[EskfLocalizer] applyUpdate<Twist> rejected by Mahalanobis gate "
-            "(d²={:.4f} > threshold={:.4f}).", d2, params_.twist_gate_dist);
+            "Twist rejected by Mahalanobis gate (d²={:.1f} > {:.1f})",
+            d2, params_.twist_gate_dist);
         return;
     }
 
@@ -461,10 +483,13 @@ void EskfLocalizer::applyUpdate(const RelativePoseObs & obs,
     const double d2 = static_cast<double>(
         dual_obs.innovation.transpose() * S_approx.inverse() * dual_obs.innovation);
 
+    FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
+        "RelPose Mahalanobis d²={:.1f} (gate={:.1f})", d2, params_.rel_pose_gate_dist);
+
     if (d2 > params_.rel_pose_gate_dist) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-            "[EskfLocalizer] applyUpdate<RelPose> rejected by Mahalanobis gate "
-            "(d²={:.4f} > threshold={:.4f}).", d2, params_.rel_pose_gate_dist);
+            "RelPose rejected by Mahalanobis gate (d²={:.1f} > {:.1f})",
+            d2, params_.rel_pose_gate_dist);
         return;
     }
 

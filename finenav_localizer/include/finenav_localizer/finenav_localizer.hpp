@@ -74,8 +74,6 @@ private:
 
     std::unique_ptr<EskfLocalizer> eskf_localizer_;        ///< inner ROS-free compute engine
 
-    rclcpp::Logger logger_;
-
     /// Driver (declared last → destroyed first: the spin thread is stopped and
     /// joined before eskf_localizer_ is torn down, so no tick touches a dead engine).
     rclcpp::TimerBase::SharedPtr               update_timer_;

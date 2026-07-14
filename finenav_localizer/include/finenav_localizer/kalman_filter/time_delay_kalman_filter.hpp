@@ -7,11 +7,7 @@
 #include <algorithm>
 #include <utility>
 
-#include <rclcpp/clock.hpp>
-
 #include <Eigen/LU>
-
-#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::localizer {
 
@@ -200,7 +196,6 @@ public:
      * @param slot_b delay slot for C_b (e.g. the "from" epoch)
      * @param R measurement-noise covariance       (dim_y × dim_y)
      * @return false when either slot ≥ max_delay_step.
-     * @todo 可能需要扔掉
      */
     bool updateWithTwoSlots(const Eigen::MatrixXd & y,
                             const Eigen::MatrixXd & C_a,
@@ -210,9 +205,6 @@ public:
                             const Eigen::MatrixXd & R)
     {
         if (slot_a >= max_delay_step_ || slot_b >= max_delay_step_) {
-            FINENAV_LOG_WARN_THROTTLE(rclcpp::get_logger("finenav.TimeDelayKF"), 2000,
-                "[TimeDelayKF] updateWithTwoSlots: slot {} or {} >= max_delay_step={} — ignoring.",
-                slot_a, slot_b, max_delay_step_);
             return false;
         }
         const int col_a = dim_x_ * slot_a, col_b = dim_x_ * slot_b;
@@ -256,9 +248,6 @@ public:
                          int                    delay_step)
     {
         if (delay_step >= max_delay_step_) {
-            FINENAV_LOG_WARN_THROTTLE(rclcpp::get_logger("finenav.TimeDelayKF"), 2000,
-                "[TimeDelayKF] delay_step={} >= max_delay_step={} — ignoring update.",
-                delay_step, max_delay_step_);
             return false;
         }
 

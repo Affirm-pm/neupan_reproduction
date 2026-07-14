@@ -12,11 +12,8 @@
 #include <Eigen/Core>
 #include <sophus/so3.hpp>
 #include <rclcpp/time.hpp>
-#include <rclcpp/logging.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/twist_with_covariance_stamped.hpp>
-
-#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::localizer {
 
@@ -58,9 +55,6 @@ public:
     {
         std::lock_guard<std::mutex> lk(mutex_);
         if (objects_.size() >= max_queue_size_) {
-            FINENAV_LOG_WARN_ONCE(rclcpp::get_logger("finenav.AgedObservationQueue"),
-                "[AgedObservationQueue] capacity ({}) exceeded — dropping oldest entry.",
-                max_queue_size_);
             objects_.pop();
             ages_.pop();
         }

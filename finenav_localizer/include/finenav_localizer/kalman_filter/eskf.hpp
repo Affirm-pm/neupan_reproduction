@@ -44,14 +44,15 @@ public:
      * @param model_opts process-noise parameters forwarded to Model::buildQ.
      * @param max_delay_step number of delay slots (≥ 1), observations older than this are rejected.
      * @param init_cov initial state covariance P₀.
-     * @todo 看看这里的logger怎么处理
+     * @param logger ROS logger (injected from owner).
      */
     explicit ESKF(typename Model::Options model_opts   = {},
                   int                    max_delay_step = 50,
-                  PMat                   init_cov       = PMat::Identity() * static_cast<S>(1e-2))
+                  PMat                   init_cov       = PMat::Identity() * static_cast<S>(1e-2),
+                  rclcpp::Logger         logger         = rclcpp::get_logger("finenav.ESKF"))
         : model_opts_(std::move(model_opts))
         , accumulated_delay_times_(static_cast<std::size_t>(max_delay_step), 1.0e15)
-        , logger_(rclcpp::get_logger("finenav.ESKF"))
+        , logger_(std::move(logger))
     {
         const Eigen::MatrixXd x0 = Eigen::MatrixXd::Zero(kDim, 1);
         tdkf_.init(x0, init_cov.template cast<double>(), max_delay_step);
@@ -59,14 +60,11 @@ public:
 
     /**
      * @brief Propagate the nominal state and the error-state covariance by dt.
-     * @param dt time step [s]; non-positive dt is ignored with a warning.
+     * @param dt time step [s]; non-positive dt returns immediately (caller should validate).
      */
     void predict(S dt)
     {
         if (dt <= static_cast<S>(0.0)) {
-            FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-                "[ESKF] predict() called with non-positive dt={:.6f} — skipping.",
-                static_cast<double>(dt));
             return;
         }
 
@@ -96,7 +94,7 @@ public:
         accumulateDelayTime(static_cast<double>(dt));
 
         FINENAV_LOG_DEBUG(logger_,
-            "[ESKF] predict  dt={:.4f}  |p|={:.3f}  |v|={:.3f}  |ω|={:.3f}",
+            "predict  dt={:.4f}  |p|={:.3f}  |v|={:.3f}  |ω|={:.3f}",
             static_cast<double>(dt),
             static_cast<double>(nominal_.p.norm()),
             static_cast<double>(nominal_.v.norm()),
@@ -161,7 +159,7 @@ public:
         tdkf_.resetState();
 
         FINENAV_LOG_DEBUG(logger_,
-            "[ESKF] update  ObsDim={}  delay_step={}  |innov|={:.4f}  |dx|={:.4f}",
+            "update  ObsDim={}  delay_step={}  |innov|={:.4f}  |dx|={:.4f}",
             ObsDim, delay_step,
             static_cast<double>(innovation.norm()),
             static_cast<double>(dx_norm));
@@ -220,7 +218,7 @@ public:
         tdkf_.resetState();
 
         FINENAV_LOG_DEBUG(logger_,
-            "[ESKF] dual update  ObsDim={}  slot_to={}  slot_from={}  "
+            "dual update  ObsDim={}  to={}  from={}  "
             "|innov|={:.4f}  |dx|={:.4f}",
             ObsDim, delay_step_to, delay_step_from,
             static_cast<double>(innovation.norm()),
