@@ -39,11 +39,8 @@ namespace finenav::localizer {
 template <typename MsgT>
 class AgedObservationQueue {
 public:
-    /// @param smoothing_steps  Number of times each observation is processed (≥ 1).
-    ///                         Corresponds to AgedObjectQueue::max_age.
-    /// @param max_queue_size   Hard capacity cap (prevents unbounded growth).
     /**
-     * @brief
+     * @brief Constructor
      * @param smoothing_steps  Number of times each observation is processed (≥ 1). Corresponds to AgedObjectQueue::max_age.
      * @param max_queue_size   Hard capacity cap.
      */
@@ -118,19 +115,17 @@ private:
     std::queue<std::size_t> ages_;
 };
 
-// ── Concrete type aliases ─────────────────────────────────────────────────────
+/**
+ * @brief Concrete type alias
+ * @details
+ * (1) PoseObsQueue - stores PoseWithCovarianceStamped (ros message);
+ * (2) TwistObsQueue - stores TwistWithCovarianceStamped (ros message);
+ * (3) RelativePoseObsQueue - stores RelativePoseObs (custom struct).
+ */
+
 using PoseObsQueue  = AgedObservationQueue<geometry_msgs::msg::PoseWithCovarianceStamped>;
 using TwistObsQueue = AgedObservationQueue<geometry_msgs::msg::TwistWithCovarianceStamped>;
 
-/**
- * @brief RelativePoseObs  —  odometry measurement spanning two epochs.
- * @details
- *      Stores the raw body-frame displacement from two consecutive odometry frames,
- *      plus both timestamps so the ESKF maps each epoch to its own delay slot
- *      independently.  No state snapshot is stored — the two nominal states are
- *      retrieved from the ESKF inside applyUpdate() using the delay steps computed
- *      from stamp_from and stamp_to.
- */
 struct RelativePoseObs {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
