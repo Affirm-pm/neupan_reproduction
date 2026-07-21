@@ -64,7 +64,7 @@ public:
      * @brief Master → Worker, start a task
      * @param cmd TaskCmd message
      */
-    void start(const CmdMsg& cmd);
+    void start(CmdMsg&& cmd);
 
     /**
      * @brief Master -> Worker, stop the current task (if any)
@@ -75,13 +75,13 @@ public:
      * @brief Get the latest feedback from the worker.
      * @note Thread-safe
      */
-    FeedbackMsg latestFeedback() const;
+    std::shared_ptr<const FeedbackMsg> latestFeedback() const;
 
     /**
      * @brief Register a callback to receive feedback messages from the worker.
      * @param cb Callback function
      */
-    void onFeedback(std::function<void(const FeedbackMsg&)> cb);
+    void onFeedback(std::function<void(std::shared_ptr<const FeedbackMsg>)> cb);
 
     /**
      * @brief Get the channel name used for this TaskCommander.
@@ -96,9 +96,8 @@ private:
     std::shared_ptr<rclcpp::Publisher<StopMsg>>     stop_pub_;
     std::shared_ptr<rclcpp::Subscription<FeedbackMsg>> feedback_sub_;
 
-    mutable std::mutex fb_mutex_;
-    FeedbackMsg latest_feedback_;
-    std::function<void(const FeedbackMsg&)> on_feedback_;
+    std::shared_ptr<const FeedbackMsg> latest_fb_;
+    std::function<void(std::shared_ptr<const FeedbackMsg>)> on_feedback_;
 };
 
 /**
@@ -123,7 +122,7 @@ public:
      * ackGoal() - Acknowledge that the latest goal has been processed.
      */
     bool hasNewGoal() const;
-    CmdMsg latestGoal() const;
+    std::shared_ptr<const CmdMsg> latestGoal() const;
     bool shouldStop() const;
     void ackGoal();
 
@@ -134,8 +133,8 @@ public:
      * publishCompleted() - Publish a feedback message indicating that the task has been completed successfully.
      * publishFailed() - Publish a feedback message indicating that the task has failed. No trajectories are sent.
      */
-    void publishRunning(const finenav_interfaces::msg::Trajectory& traj);
-    void publishCompleted(const finenav_interfaces::msg::Trajectory& traj);
+    void publishRunning(finenav_interfaces::msg::Trajectory&& traj);
+    void publishCompleted(finenav_interfaces::msg::Trajectory&& traj);
     void publishFailed();
 
 private:
@@ -145,8 +144,7 @@ private:
     std::shared_ptr<rclcpp::Subscription<StopMsg>>   stop_sub_;
     std::shared_ptr<rclcpp::Publisher<FeedbackMsg>>  feedback_pub_;
 
-    mutable std::mutex goal_mutex_;
-    CmdMsg latest_goal_;
+    std::shared_ptr<const CmdMsg> latest_goal_;
     std::atomic<bool> new_goal_{false};
     std::atomic<bool> should_stop_{false};
 };

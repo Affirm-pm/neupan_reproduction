@@ -18,28 +18,24 @@ TaskCommander::TaskCommander(std::shared_ptr<rclcpp::Node> node,
     feedback_sub_ = node_->create_subscription<FeedbackMsg>(
         channel_ + detail::kFeedbackSuffix, 10,
         [this](std::shared_ptr<const FeedbackMsg> msg) {
-            std::lock_guard<std::mutex> lock(fb_mutex_);
-            latest_feedback_ = *msg;
-            if (on_feedback_) on_feedback_(latest_feedback_);
+            latest_fb_ = std::move(msg);
+            if (on_feedback_) on_feedback_(latest_fb_);
         });
 }
 
-void TaskCommander::start(const CmdMsg& cmd) {
-    auto msg = std::make_unique<CmdMsg>(cmd);
-    cmd_pub_->publish(std::move(msg));
+void TaskCommander::start(CmdMsg&& cmd) {
+    cmd_pub_->publish(std::make_unique<CmdMsg>(std::move(cmd)));
 }
 
 void TaskCommander::stop() {
     stop_pub_->publish(std::make_unique<StopMsg>());
 }
 
-FeedbackMsg TaskCommander::latestFeedback() const {
-    std::lock_guard<std::mutex> lock(fb_mutex_);
-    return latest_feedback_;
+std::shared_ptr<const FeedbackMsg> TaskCommander::latestFeedback() const {
+    return latest_fb_;
 }
 
-void TaskCommander::onFeedback(std::function<void(const FeedbackMsg&)> cb) {
-    std::lock_guard<std::mutex> lock(fb_mutex_);
+void TaskCommander::onFeedback(std::function<void(std::shared_ptr<const FeedbackMsg>)> cb) {
     on_feedback_ = std::move(cb);
 }
 
@@ -56,8 +52,7 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
     cmd_sub_ = node_->create_subscription<CmdMsg>(
         channel_name + detail::kCmdSuffix, 10,
         [this](std::shared_ptr<const CmdMsg> msg) {
-            std::lock_guard<std::mutex> lock(goal_mutex_);
-            latest_goal_ = *msg;
+            latest_goal_ = std::move(msg);
             new_goal_.store(true, std::memory_order_release);
         });
 
@@ -72,8 +67,7 @@ bool TaskWorker::hasNewGoal() const {
     return new_goal_.load(std::memory_order_acquire);
 }
 
-CmdMsg TaskWorker::latestGoal() const {
-    std::lock_guard<std::mutex> lock(goal_mutex_);
+std::shared_ptr<const CmdMsg> TaskWorker::latestGoal() const {
     return latest_goal_;
 }
 
@@ -85,17 +79,17 @@ void TaskWorker::ackGoal() {
     new_goal_.store(false, std::memory_order_release);
 }
 
-void TaskWorker::publishRunning(const finenav_interfaces::msg::Trajectory& traj) {
+void TaskWorker::publishRunning(finenav_interfaces::msg::Trajectory&& traj) {
     auto msg        = std::make_unique<FeedbackMsg>();
     msg->status     = FeedbackMsg::RUNNING;
-    msg->trajectory = traj;
+    msg->trajectory = std::move(traj);
     feedback_pub_->publish(std::move(msg));
 }
 
-void TaskWorker::publishCompleted(const finenav_interfaces::msg::Trajectory& traj) {
+void TaskWorker::publishCompleted(finenav_interfaces::msg::Trajectory&& traj) {
     auto msg        = std::make_unique<FeedbackMsg>();
     msg->status     = FeedbackMsg::COMPLETED;
-    msg->trajectory = traj;
+    msg->trajectory = std::move(traj);
     feedback_pub_->publish(std::move(msg));
 }
 
