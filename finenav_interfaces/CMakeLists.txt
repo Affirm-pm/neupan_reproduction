@@ -13,10 +13,12 @@ rosidl_generate_interfaces(${PROJECT_NAME}
         msg/Trajectory.msg
         msg/RobotState.msg
         msg/NavStatus.msg
+        msg/TaskCmd.msg
+        msg/TaskStop.msg
+        msg/TaskFeedback.msg
         action/ComputePlan.action
         action/NavigateToPose.action
         DEPENDENCIES geometry_msgs std_msgs
 )
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
-

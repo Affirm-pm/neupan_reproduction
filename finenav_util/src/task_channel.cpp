@@ -1,0 +1,108 @@
+// Copyright (c) 2026.
+// IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+// All rights reserved.
+
+#include "finenav_util/ros/task_channel.hpp"
+
+namespace finenav::util {
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TaskCommander
+// ══════════════════════════════════════════════════════════════════════════════
+
+TaskCommander::TaskCommander(std::shared_ptr<rclcpp::Node> node,
+                             const std::string& channel_name)
+    : node_(std::move(node)), channel_(channel_name) {
+    cmd_pub_  = node_->create_publisher<CmdMsg>(channel_ + detail::kCmdSuffix, 10);
+    stop_pub_ = node_->create_publisher<StopMsg>(channel_ + detail::kStopSuffix, 10);
+    feedback_sub_ = node_->create_subscription<FeedbackMsg>(
+        channel_ + detail::kFeedbackSuffix, 10,
+        [this](std::shared_ptr<const FeedbackMsg> msg) {
+            std::lock_guard<std::mutex> lock(fb_mutex_);
+            latest_feedback_ = *msg;
+            if (on_feedback_) on_feedback_(latest_feedback_);
+        });
+}
+
+void TaskCommander::start(const CmdMsg& cmd) {
+    auto msg = std::make_unique<CmdMsg>(cmd);
+    cmd_pub_->publish(std::move(msg));
+}
+
+void TaskCommander::stop() {
+    stop_pub_->publish(std::make_unique<StopMsg>());
+}
+
+FeedbackMsg TaskCommander::latestFeedback() const {
+    std::lock_guard<std::mutex> lock(fb_mutex_);
+    return latest_feedback_;
+}
+
+void TaskCommander::onFeedback(std::function<void(const FeedbackMsg&)> cb) {
+    std::lock_guard<std::mutex> lock(fb_mutex_);
+    on_feedback_ = std::move(cb);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TaskWorker
+// ══════════════════════════════════════════════════════════════════════════════
+
+TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
+                       const std::string& channel_name)
+    : node_(std::move(node)) {
+    feedback_pub_ = node_->create_publisher<FeedbackMsg>(
+        channel_name + detail::kFeedbackSuffix, 10);
+
+    cmd_sub_ = node_->create_subscription<CmdMsg>(
+        channel_name + detail::kCmdSuffix, 10,
+        [this](std::shared_ptr<const CmdMsg> msg) {
+            std::lock_guard<std::mutex> lock(goal_mutex_);
+            latest_goal_ = *msg;
+            new_goal_.store(true, std::memory_order_release);
+        });
+
+    stop_sub_ = node_->create_subscription<StopMsg>(
+        channel_name + detail::kStopSuffix, 10,
+        [this](std::shared_ptr<const StopMsg> /*msg*/) {
+            should_stop_.store(true, std::memory_order_release);
+        });
+}
+
+bool TaskWorker::hasNewGoal() const {
+    return new_goal_.load(std::memory_order_acquire);
+}
+
+CmdMsg TaskWorker::latestGoal() const {
+    std::lock_guard<std::mutex> lock(goal_mutex_);
+    return latest_goal_;
+}
+
+bool TaskWorker::shouldStop() const {
+    return should_stop_.load(std::memory_order_acquire);
+}
+
+void TaskWorker::ackGoal() {
+    new_goal_.store(false, std::memory_order_release);
+}
+
+void TaskWorker::publishRunning(const finenav_interfaces::msg::Trajectory& traj) {
+    auto msg        = std::make_unique<FeedbackMsg>();
+    msg->status     = FeedbackMsg::RUNNING;
+    msg->trajectory = traj;
+    feedback_pub_->publish(std::move(msg));
+}
+
+void TaskWorker::publishCompleted(const finenav_interfaces::msg::Trajectory& traj) {
+    auto msg        = std::make_unique<FeedbackMsg>();
+    msg->status     = FeedbackMsg::COMPLETED;
+    msg->trajectory = traj;
+    feedback_pub_->publish(std::move(msg));
+}
+
+void TaskWorker::publishFailed() {
+    auto msg     = std::make_unique<FeedbackMsg>();
+    msg->status  = FeedbackMsg::FAILED;
+    feedback_pub_->publish(std::move(msg));
+}
+
+}  // namespace finenav::util
