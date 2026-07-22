@@ -50,7 +50,7 @@ void TaskMaster::stopAll() {
 }
 
 std::shared_ptr<const FeedbackMsg> TaskMaster::feedback(const std::string& name) const {
-    return getOrThrow(name).latest_fb;
+    return std::atomic_load(&getOrThrow(name).latest_fb);
 }
 
 std::vector<std::string> TaskMaster::layers() const {
