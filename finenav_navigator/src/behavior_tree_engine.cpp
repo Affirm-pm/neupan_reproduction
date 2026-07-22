@@ -13,11 +13,6 @@ namespace finenav::navigator {
 BehaviorTreeEngine::BehaviorTreeEngine(rclcpp::Node::SharedPtr node)
   : logger_(node->get_logger())
 {
-    // 初始化 RosNodeParams，这是 BT.ROS2 依赖注入的核心
-    ros_params_.nh = node;
-    ros_params_.default_port_value = ""; // 默认不指定 topic，强制 XML 指定
-    ros_params_.server_timeout = std::chrono::milliseconds(1000);
-    ros_params_.wait_for_server_timeout = std::chrono::milliseconds(500);
 }
 
 void BehaviorTreeEngine::registerPlugins(const std::vector<std::string>& plugins)

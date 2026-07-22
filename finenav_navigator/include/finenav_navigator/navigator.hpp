@@ -7,8 +7,10 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_core/robot_state/robot_state.hpp"
+#include "finenav_core/plan/control_pipeline_tree.hpp"
 #include "finenav_navigator/behavior_tree_engine.hpp"
 
+#include "finenav_util/ros/task_channel.hpp"
 #include "finenav_util/ros/simple_action_server.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 #include "finenav_interfaces/action/navigate_to_pose.hpp"
@@ -44,6 +46,10 @@ public:
 
     std::string getActionName() const { return params_.action_name; }
 
+    // ── IPC + topology (public for FineNavEngine wiring) ────────────────────
+    finenav::util::TaskMaster&       master()       { return master_; }
+    finenav::core::ControlPipelineTree& pipe()       { return pipe_; }
+
 private:
     void execute();
 
@@ -58,6 +64,9 @@ private:
 
     finenav_navigator::Params                         params_;
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;
+
+    finenav::util::TaskMaster         master_;
+    finenav::core::ControlPipelineTree pipe_;
 
     BT::Tree tree_;
 };

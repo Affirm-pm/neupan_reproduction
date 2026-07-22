@@ -12,7 +12,7 @@ namespace finenav::navigator {
 
 BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
                      finenav::core::IRobotStateProvider* state_provider)
-    : state_provider_(state_provider)
+    : state_provider_(state_provider), master_(parent_node)
 {
     // ── 创建私有子节点（参数前缀由 yaml 的顶层 key "finenav_navigator" 决定）──
     rclcpp::NodeOptions pnode_opts;
@@ -63,6 +63,7 @@ void BtNavigator::execute()
 
     auto blackboard = tree_.rootBlackboard();
     blackboard->set("goal", goal->pose.pose);
+    blackboard->set("_master", &master_);
 
     rclcpp::WallRate loop_rate(params_.tick_frequency);
     FINENAV_LOG_INFO(pnode_->get_logger(),
@@ -72,6 +73,7 @@ void BtNavigator::execute()
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Cancellation requested.");
+            master_.stopAll();
             tree_.haltTree();
             action_server_->terminate_all();
             return;
@@ -79,6 +81,7 @@ void BtNavigator::execute()
 
         if (action_server_->is_preempt_requested()) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Preemption requested.");
+            master_.stopAll();
             tree_.haltTree();
             return;
         }

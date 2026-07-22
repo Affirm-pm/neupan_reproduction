@@ -64,7 +64,6 @@ add_library(finenav_compute_plan_behavior SHARED
 ament_target_dependencies(finenav_compute_plan_behavior
         ${dependencies}
 )
-target_compile_definitions(finenav_compute_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Condition Plugins (pure BT nodes, no ROS params needed)
 add_library(finenav_navigator_conditions SHARED
