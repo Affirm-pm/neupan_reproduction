@@ -38,11 +38,11 @@ inline std::shared_ptr<rclcpp::Node> make_intra_node(
     return std::make_shared<rclcpp::Node>(name, opts);
 }
 
-namespace detail {
-constexpr const char* kCmdSuffix      = "/__cmd";
-constexpr const char* kStopSuffix     = "/__stop";
-constexpr const char* kFeedbackSuffix = "/__feedback";
-}  // namespace detail
+struct TaskChannel {
+    static std::string cmdTopic(const std::string& name)      { return name + "/__cmd"; }
+    static std::string stopTopic(const std::string& name)     { return name + "/__stop"; }
+    static std::string feedbackTopic(const std::string& name) { return name + "/__feedback"; }
+};
 
 using CmdMsg      = finenav_interfaces::msg::TaskCmd;
 using StopMsg     = finenav_interfaces::msg::TaskStop;

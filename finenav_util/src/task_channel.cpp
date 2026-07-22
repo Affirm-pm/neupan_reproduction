@@ -17,13 +17,14 @@ void TaskMaster::manageLayer(const std::string& name) {
     if (channels_.count(name)) return;  // already registered
 
     Channel ch;
-    ch.cmd_pub  = node_->create_publisher<CmdMsg>(name + detail::kCmdSuffix, 10);
-    ch.stop_pub = node_->create_publisher<StopMsg>(name + detail::kStopSuffix, 10);
+    ch.cmd_pub  = node_->create_publisher<CmdMsg>(TaskChannel::cmdTopic(name), 10);
+    ch.stop_pub = node_->create_publisher<StopMsg>(TaskChannel::stopTopic(name), 10);
     ch.feedback_sub = node_->create_subscription<FeedbackMsg>(
-        name + detail::kFeedbackSuffix, 10,
+        TaskChannel::feedbackTopic(name), 10,
         [this, name](std::shared_ptr<const FeedbackMsg> msg) {
             auto it = channels_.find(name);
-            if (it != channels_.end()) it->second.latest_fb = std::move(msg);
+            if (it != channels_.end())
+                std::atomic_store(&it->second.latest_fb, std::move(msg));
         });
     channels_.emplace(name, std::move(ch));
 }
@@ -80,17 +81,17 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
                        const std::string& channel_name)
     : node_(std::move(node)) {
     feedback_pub_ = node_->create_publisher<FeedbackMsg>(
-        channel_name + detail::kFeedbackSuffix, 10);
+        TaskChannel::feedbackTopic(channel_name), 10);
 
     cmd_sub_ = node_->create_subscription<CmdMsg>(
-        channel_name + detail::kCmdSuffix, 10,
+        TaskChannel::cmdTopic(channel_name), 10,
         [this](std::shared_ptr<const CmdMsg> msg) {
             latest_goal_ = std::move(msg);
             new_goal_.store(true, std::memory_order_release);
         });
 
     stop_sub_ = node_->create_subscription<StopMsg>(
-        channel_name + detail::kStopSuffix, 10,
+        TaskChannel::stopTopic(channel_name), 10,
         [this](std::shared_ptr<const StopMsg> /*msg*/) {
             should_stop_.store(true, std::memory_order_release);
         });

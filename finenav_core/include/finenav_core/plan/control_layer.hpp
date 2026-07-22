@@ -92,7 +92,7 @@ private:
 
     // ── Methods ────────────────────────────────────────────────────────────
 
-    void PlanRefCallback(const finenav_interfaces::msg::Trajectory& msg);
+    void PlanRefCallback(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
 
     /// Episode entry-point invoked by the ROS action server.
 
@@ -125,8 +125,8 @@ private:
     std::thread worker_thread_;
     std::atomic<bool> stop_execution_{false};
 
-    rclcpp::Subscription<finenav_interfaces::msg::Trajectory>::SharedPtr plan_ref_sub_;
-    rclcpp::Publisher<finenav_interfaces::msg::Trajectory>::SharedPtr    plan_result_pub_;
+    rclcpp::Subscription<finenav_interfaces::msg::TaskFeedback>::SharedPtr plan_ref_sub_;
+    rclcpp::Publisher<finenav_interfaces::msg::Trajectory>::SharedPtr      plan_result_pub_;
 
     // ── Planner state ──────────────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ private:
     std::string output_topic_;
 
     std::mutex                       plan_ref_mutex_;
-    finenav_interfaces::msg::Trajectory plan_ref_msg_;
+    std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;
 
     ParamHandleKeeper param_keeper_;
 };

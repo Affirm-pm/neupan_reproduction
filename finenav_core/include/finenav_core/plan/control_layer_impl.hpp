@@ -86,9 +86,11 @@ std::string ControlLayer<Planners...>::getName() const {
 template <typename... Planners>
 void ControlLayer<Planners...>::setupDataPorts() {
     if (!input_topic_.empty()) {
-        plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::Trajectory>(
+        plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::TaskFeedback>(
             input_topic_, 10,
-            std::bind(&ControlLayer::PlanRefCallback, this, std::placeholders::_1));
+            [this](std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg) {
+                PlanRefCallback(std::move(msg));
+            });
     }
     if (!output_topic_.empty()) {
         plan_result_pub_ = pnode_->create_publisher<finenav_interfaces::msg::Trajectory>(output_topic_, 10);
@@ -101,10 +103,10 @@ void ControlLayer<Planners...>::setupDataPorts() {
 
 template <typename... Planners>
 void ControlLayer<Planners...>::PlanRefCallback(
-    const finenav_interfaces::msg::Trajectory& msg)
+    std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg)
 {
     std::lock_guard<std::mutex> lock(plan_ref_mutex_);
-    plan_ref_msg_ = msg;
+    plan_ref_msg_ = std::move(msg);  // zero-copy: shared_ptr pass-through
 }
 
 // ==============================================================================
@@ -150,7 +152,9 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     finenav_interfaces::msg::Trajectory current_ref_msg;
     {
         std::lock_guard<std::mutex> lock(plan_ref_mutex_);
-        current_ref_msg = plan_ref_msg_;
+        if (plan_ref_msg_) {
+            current_ref_msg = plan_ref_msg_->trajectory;  // copy only the trajectory
+        }
     }
 
     bool plan_success  = false;
