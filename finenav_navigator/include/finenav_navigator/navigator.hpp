@@ -54,6 +54,7 @@ private:
     void execute();
 
     // ── ROS 基础设施 ──────────────────────────────────────────────────────────
+    rclcpp::Node::SharedPtr                     parent_node_;
     rclcpp::Node::SharedPtr                     pnode_;
     std::unique_ptr<finenav::util::NodeThread>  pnode_thread_;
 

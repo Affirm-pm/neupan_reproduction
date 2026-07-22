@@ -12,7 +12,6 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "behaviortree_cpp/decorator_node.h"
-#include "finenav_navigator/thirdparty/ros_node_params.hpp"
 
 namespace finenav::navigator
 {
@@ -53,8 +52,7 @@ class DynamicGoalFollower : public BT::DecoratorNode
 public:
   DynamicGoalFollower(
     const std::string & name,
-    const BT::NodeConfig & conf,
-    const BT::RosNodeParams & params);
+    const BT::NodeConfig & conf);
 
   ~DynamicGoalFollower() override = default;
 
@@ -101,7 +99,6 @@ private:
   void onTargetPose(const geometry_msgs::msg::PoseStamped::ConstSharedPtr & msg);
 
   // ROS
-  std::weak_ptr<rclcpp::Node> node_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr sub_;
   rclcpp::CallbackGroup::SharedPtr callback_group_;
   rclcpp::executors::SingleThreadedExecutor callback_executor_;

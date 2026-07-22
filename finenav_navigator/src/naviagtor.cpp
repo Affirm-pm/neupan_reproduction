@@ -12,7 +12,7 @@ namespace finenav::navigator {
 
 BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
                      finenav::core::IRobotStateProvider* state_provider)
-    : state_provider_(state_provider), master_(parent_node)
+    : state_provider_(state_provider), master_(parent_node), parent_node_(parent_node)
 {
     // ── 创建私有子节点（参数前缀由 yaml 的顶层 key "finenav_navigator" 决定）──
     rclcpp::NodeOptions pnode_opts;
@@ -35,7 +35,7 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
         std::bind(&BtNavigator::execute, this));
 
     // ── 初始化行为树引擎 ──────────────────────────────────────────────────────
-    bt_engine_ = std::make_unique<BehaviorTreeEngine>(pnode_);
+    bt_engine_ = std::make_unique<BehaviorTreeEngine>();
     if (!params_.plugins.empty())       { bt_engine_->registerPlugins(params_.plugins); }
     if (!params_.behavior_trees.empty()){ bt_engine_->registerBehaviorTrees(params_.behavior_trees); }
 
@@ -63,7 +63,8 @@ void BtNavigator::execute()
 
     auto blackboard = tree_.rootBlackboard();
     blackboard->set("goal", goal->pose.pose);
-    blackboard->set("_master", &master_);
+    blackboard->set("_node", parent_node_);
+    blackboard->set("_nav_task_master", &master_);
 
     rclcpp::WallRate loop_rate(params_.tick_frequency);
     FINENAV_LOG_INFO(pnode_->get_logger(),

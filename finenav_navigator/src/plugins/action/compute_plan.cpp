@@ -13,7 +13,7 @@ BT::NodeStatus ComputePlan::tick() {
     using CmdMsg = finenav_interfaces::msg::TaskCmd;
     using Status = finenav_interfaces::msg::TaskFeedback;
 
-    auto* master = config().blackboard->get<finenav::util::TaskMaster*>("_master");
+    auto* master = config().blackboard->get<finenav::util::TaskMaster*>("_nav_task_master");
     if (!master) return BT::NodeStatus::FAILURE;
 
     std::string layer;

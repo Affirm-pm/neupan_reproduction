@@ -81,7 +81,6 @@ add_library(finenav_publish_zero_cmd_vel_behavior SHARED
 ament_target_dependencies(finenav_publish_zero_cmd_vel_behavior
         ${dependencies}
 )
-target_compile_definitions(finenav_publish_zero_cmd_vel_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Control & Decorator Plugins (pure BT nodes, no ROS params needed)
 add_library(finenav_recovery_node SHARED
@@ -115,7 +114,6 @@ add_library(finenav_dynamic_goal_follower SHARED
 ament_target_dependencies(finenav_dynamic_goal_follower
         ${dependencies}
 )
-target_compile_definitions(finenav_dynamic_goal_follower PRIVATE BT_PLUGIN_EXPORT)
 
 # Install
 install(TARGETS finenav_navigator navigator_params
