@@ -14,8 +14,8 @@
 #include <atomic>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
+#include <unordered_map>
 
 #include "rclcpp/rclcpp.hpp"
 #include "finenav_interfaces/msg/task_cmd.hpp"
@@ -49,55 +49,57 @@ using StopMsg     = finenav_interfaces::msg::TaskStop;
 using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
 
 /**
- * @brief TaskCommander — Master side
+ * @brief TaskMaster — 1:N Master, manages multiple Workers.
+ *
+ * Owned by BtNavigator.  Each ControlLayer gets one channel.
  */
-class TaskCommander {
+class TaskMaster {
 public:
-    /**
-     * @brief Constructor
-     * @param node Shared pointer to a ROS node
-     * @param channel_name A specifier for the task channel
-     */
-    TaskCommander(std::shared_ptr<rclcpp::Node> node,
-                  const std::string& channel_name);
-    /**
-     * @brief Master → Worker, start a task
-     * @param cmd TaskCmd message
-     */
-    void start(CmdMsg&& cmd);
+    explicit TaskMaster(std::shared_ptr<rclcpp::Node> node);
 
     /**
-     * @brief Master -> Worker, stop the current task (if any)
+     * @brief Register a Worker channel (3 topics). Called once per layer.
      */
-    void stop();
+    void manageLayer(const std::string& name);
+    void unmanageLayer(const std::string& name);
 
     /**
-     * @brief Get the latest feedback from the worker.
-     * @note Thread-safe
+     * @brief Master → Worker, start a task on a specific layer.
      */
-    std::shared_ptr<const FeedbackMsg> latestFeedback() const;
+    void start(const std::string& name, CmdMsg&& cmd);
 
     /**
-     * @brief Register a callback to receive feedback messages from the worker.
-     * @param cb Callback function
+     * @brief Master → Worker, stop a single layer.
      */
-    void onFeedback(std::function<void(std::shared_ptr<const FeedbackMsg>)> cb);
+    void stop(const std::string& name);
 
     /**
-     * @brief Get the channel name used for this TaskCommander.
+     * @brief Master → all Workers, stop every layer.
      */
-    const std::string& channel() const { return channel_; }
+    void stopAll();
+
+    /**
+     * @brief Get latest feedback from a layer (zero-copy shared_ptr pass-through).
+     */
+    std::shared_ptr<const FeedbackMsg> feedback(const std::string& name) const;
+
+    /**
+     * @brief Get all managed layer names.
+     */
+    std::vector<std::string> layers() const;
 
 private:
+    struct Channel {
+        std::shared_ptr<rclcpp::Publisher<CmdMsg>>      cmd_pub;
+        std::shared_ptr<rclcpp::Publisher<StopMsg>>     stop_pub;
+        std::shared_ptr<rclcpp::Subscription<FeedbackMsg>> feedback_sub;
+        std::shared_ptr<const FeedbackMsg>             latest_fb;
+    };
+    Channel& getOrThrow(const std::string& name);
+    const Channel& getOrThrow(const std::string& name) const;
+
     std::shared_ptr<rclcpp::Node> node_;
-    std::string channel_;
-
-    std::shared_ptr<rclcpp::Publisher<CmdMsg>>      cmd_pub_;
-    std::shared_ptr<rclcpp::Publisher<StopMsg>>     stop_pub_;
-    std::shared_ptr<rclcpp::Subscription<FeedbackMsg>> feedback_sub_;
-
-    std::shared_ptr<const FeedbackMsg> latest_fb_;
-    std::function<void(std::shared_ptr<const FeedbackMsg>)> on_feedback_;
+    std::unordered_map<std::string, Channel> channels_;
 };
 
 /**

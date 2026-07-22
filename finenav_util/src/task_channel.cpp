@@ -7,36 +7,69 @@
 namespace finenav::util {
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  TaskCommander
+//  TaskMaster
 // ══════════════════════════════════════════════════════════════════════════════
 
-TaskCommander::TaskCommander(std::shared_ptr<rclcpp::Node> node,
-                             const std::string& channel_name)
-    : node_(std::move(node)), channel_(channel_name) {
-    cmd_pub_  = node_->create_publisher<CmdMsg>(channel_ + detail::kCmdSuffix, 10);
-    stop_pub_ = node_->create_publisher<StopMsg>(channel_ + detail::kStopSuffix, 10);
-    feedback_sub_ = node_->create_subscription<FeedbackMsg>(
-        channel_ + detail::kFeedbackSuffix, 10,
-        [this](std::shared_ptr<const FeedbackMsg> msg) {
-            latest_fb_ = std::move(msg);
-            if (on_feedback_) on_feedback_(latest_fb_);
+TaskMaster::TaskMaster(std::shared_ptr<rclcpp::Node> node)
+    : node_(std::move(node)) {}
+
+void TaskMaster::manageLayer(const std::string& name) {
+    if (channels_.count(name)) return;  // already registered
+
+    Channel ch;
+    ch.cmd_pub  = node_->create_publisher<CmdMsg>(name + detail::kCmdSuffix, 10);
+    ch.stop_pub = node_->create_publisher<StopMsg>(name + detail::kStopSuffix, 10);
+    ch.feedback_sub = node_->create_subscription<FeedbackMsg>(
+        name + detail::kFeedbackSuffix, 10,
+        [this, name](std::shared_ptr<const FeedbackMsg> msg) {
+            auto it = channels_.find(name);
+            if (it != channels_.end()) it->second.latest_fb = std::move(msg);
         });
+    channels_.emplace(name, std::move(ch));
 }
 
-void TaskCommander::start(CmdMsg&& cmd) {
-    cmd_pub_->publish(std::make_unique<CmdMsg>(std::move(cmd)));
+void TaskMaster::unmanageLayer(const std::string& name) {
+    channels_.erase(name);
 }
 
-void TaskCommander::stop() {
-    stop_pub_->publish(std::make_unique<StopMsg>());
+void TaskMaster::start(const std::string& name, CmdMsg&& cmd) {
+    auto& ch = getOrThrow(name);
+    ch.cmd_pub->publish(std::make_unique<CmdMsg>(std::move(cmd)));
 }
 
-std::shared_ptr<const FeedbackMsg> TaskCommander::latestFeedback() const {
-    return latest_fb_;
+void TaskMaster::stop(const std::string& name) {
+    auto& ch = getOrThrow(name);
+    ch.stop_pub->publish(std::make_unique<StopMsg>());
 }
 
-void TaskCommander::onFeedback(std::function<void(std::shared_ptr<const FeedbackMsg>)> cb) {
-    on_feedback_ = std::move(cb);
+void TaskMaster::stopAll() {
+    for (auto& [name, ch] : channels_) {
+        ch.stop_pub->publish(std::make_unique<StopMsg>());
+    }
+}
+
+std::shared_ptr<const FeedbackMsg> TaskMaster::feedback(const std::string& name) const {
+    return getOrThrow(name).latest_fb;
+}
+
+std::vector<std::string> TaskMaster::layers() const {
+    std::vector<std::string> names;
+    for (const auto& [name, _] : channels_) names.push_back(name);
+    return names;
+}
+
+TaskMaster::Channel& TaskMaster::getOrThrow(const std::string& name) {
+    auto it = channels_.find(name);
+    if (it == channels_.end())
+        throw std::runtime_error("TaskMaster: unmanaged layer '" + name + "'");
+    return it->second;
+}
+
+const TaskMaster::Channel& TaskMaster::getOrThrow(const std::string& name) const {
+    auto it = channels_.find(name);
+    if (it == channels_.end())
+        throw std::runtime_error("TaskMaster: unmanaged layer '" + name + "'");
+    return it->second;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
