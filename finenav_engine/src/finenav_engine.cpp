@@ -84,4 +84,34 @@ void FineNavEngine::cancelNavigation() {
     FINENAV_LOG_INFO(node_->get_logger(), "Navigation cancelled.");
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  connectEdge — IControlLayer interface, usable from JSON parser
+// ══════════════════════════════════════════════════════════════════════════════
+
+void FineNavEngine::connectEdge(const std::string& from,
+                                std::shared_ptr<finenav::core::IControlLayer> to) {
+    using namespace finenav::util;
+    to->connectFrom(TaskChannel::feedbackTopic(from));
+    navigator_->pipe().addEdge(from, to->layerName());
+}
+
+void FineNavEngine::connectEdge(const std::string& from, const std::string& to) {
+    auto it = layers_.find(to);
+    if (it == layers_.end()) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "connectEdge: layer '{}' not found.", to);
+        return;
+    }
+    connectEdge(from, it->second);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  configure — JSON-driven pipeline wiring
+// ══════════════════════════════════════════════════════════════════════════════
+
+void FineNavEngine::configure(const std::string& json_path) {
+    // TODO: parse JSON, walk tree, call connectEdge for each edge
+    (void)json_path;
+}
+
 }  // namespace finenav

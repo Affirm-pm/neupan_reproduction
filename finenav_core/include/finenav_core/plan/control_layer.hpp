@@ -20,6 +20,7 @@
 #include "finenav_core/plan/ros_conversions.hpp"
 #include "finenav_core/algo_configurator.hpp"
 #include "finenav_core/param_handle_keeper.hpp"
+#include "finenav_core/plan/i_control_layer.hpp"
 #include "finenav_util/ros/task_channel.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 
@@ -35,7 +36,7 @@ namespace finenav::core {
  * @tparam Planners  The planner types supported by this layer (one or more).
  */
 template <typename... Planners>
-class ControlLayer {
+class ControlLayer : public IControlLayer {
 public:
     // ── Types ──────────────────────────────────────────────────────────────
 
@@ -54,11 +55,14 @@ public:
 
     ~ControlLayer();
 
+    // ── IControlLayer ─────────────────────────────────────────────────────
+
+    void connectFrom(const std::string& parent_topic) override;
+
     // ── Configuration ──────────────────────────────────────────────────────
 
     void setInputTopic(const std::string& topic);
     void setOutputTopic(const std::string& topic);
-    std::string getName() const;
     void setupDataPorts();
 
     /**

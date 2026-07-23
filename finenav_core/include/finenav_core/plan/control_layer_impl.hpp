@@ -22,7 +22,8 @@ ControlLayer<Planners...>::ControlLayer(
     const std::string& layer_name,
     ExecutionPolicyVariant policy,
     IRobotStateProvider* state_provider)
-    : node_(node), layer_name_(layer_name), policy_(std::move(policy)),
+    : IControlLayer(layer_name),
+      node_(node), layer_name_(layer_name), policy_(std::move(policy)),
       state_provider_(state_provider)
 {
     rclcpp::NodeOptions pnode_opts;
@@ -65,6 +66,16 @@ ControlLayer<Planners...>::~ControlLayer() {
 }
 
 // ==============================================================================
+// IControlLayer
+// ==============================================================================
+
+template <typename... Planners>
+void ControlLayer<Planners...>::connectFrom(const std::string& parent_topic) {
+    setInputTopic(parent_topic);
+    setupDataPorts();
+}
+
+// ==============================================================================
 // Topic / Port Setup
 // ==============================================================================
 
@@ -76,11 +87,6 @@ void ControlLayer<Planners...>::setInputTopic(const std::string& topic) {
 template <typename... Planners>
 void ControlLayer<Planners...>::setOutputTopic(const std::string& topic) {
     output_topic_ = topic;
-}
-
-template <typename... Planners>
-std::string ControlLayer<Planners...>::getName() const {
-    return pnode_->get_name();
 }
 
 template <typename... Planners>

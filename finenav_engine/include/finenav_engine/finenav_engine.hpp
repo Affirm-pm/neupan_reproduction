@@ -17,6 +17,7 @@
 
 #include "finenav_core/map/map_server.hpp"
 #include "finenav_core/plan/control_layer.hpp"
+#include "finenav_core/plan/i_control_layer.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/navigator.hpp"
 #include "finenav_util/common/log_macros.hpp"
@@ -117,6 +118,18 @@ public:
     template <typename... LayersT>
     void connectPipeline(const Pipeline& p, std::shared_ptr<LayersT>... layers);
 
+    // ── Connector: tree ───────────────────────────────────────────────────
+
+    /// Add a pipeline edge.  @p to subscribes to @p from's feedback topic.
+    void connectEdge(const std::string& from, const std::string& to);
+    void connectEdge(const std::string& from,
+                     std::shared_ptr<finenav::core::IControlLayer> to);
+
+    // ── Configuration ──────────────────────────────────────────────────────
+
+    /// Load control_pipeline tree from JSON.  Layers must already exist.
+    void configure(const std::string& json_path);
+
     // ── Navigation control ──────────────────────────────────────────────────
 
     /**
@@ -143,7 +156,7 @@ private:
 
     // ── Handle storage (engine owns all user-facing handles) ───────────────
     std::unordered_map<std::string, std::any> maps_;
-    std::unordered_map<std::string, std::any> layers_;
+    std::unordered_map<std::string, std::shared_ptr<finenav::core::IControlLayer>> layers_;
 
     // ── Engine-level singletons ────────────────────────────────────────────
     std::unique_ptr<finenav::localizer::FineNavLocalizer> localizer_;
@@ -185,7 +198,7 @@ void FineNavEngine::createControlLayer(const std::string& name, PolicyT policy) 
     navigator_->master().manageLayer(name);
     auto layer = std::make_shared<finenav::core::ControlLayer<Planners...>>(
         node_, name, std::move(policy), localizer_.get());
-    layers_[name] = std::any(std::move(layer));
+    layers_[name] = layer;
 }
 
 template <typename... Planners>
@@ -229,10 +242,10 @@ template <typename FirstT, typename SecondT, typename... RestT>
 void FineNavEngine::wire_layers(std::shared_ptr<FirstT> first,
                                 std::shared_ptr<SecondT> second,
                                 std::shared_ptr<RestT>... rest) {
-    std::string internal_topic = first->getName() + "_to_" + second->getName();
+    std::string internal_topic = first->layerName() + "_to_" + second->layerName();
     FINENAV_LOG_INFO(node_->get_logger(),
         "Connecting {} -> {} via topic: {}",
-        first->getName(), second->getName(), internal_topic);
+        first->layerName(), second->layerName(), internal_topic);
     first->setOutputTopic(internal_topic);
     second->setInputTopic(internal_topic);
     wire_layers(second, rest...);
