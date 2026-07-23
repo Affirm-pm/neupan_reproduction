@@ -27,8 +27,9 @@ public:
     BT::NodeStatus tick() override;
 
 private:
-    bool goalChanged(const geometry_msgs::msg::Pose& a, double eps = 1e-4) const;
-    geometry_msgs::msg::Pose last_sent_goal_{};
+    bool taskChanged(const geometry_msgs::msg::Pose& goal, const std::string& planner_id) const;
+    geometry_msgs::msg::Pose last_goal_{};
+    std::string              last_planner_id_;
 };
 
 }  // namespace finenav::navigator

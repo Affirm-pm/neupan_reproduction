@@ -5,7 +5,6 @@
 #include "finenav_navigator/plugins/action/compute_plan.hpp"
 
 #include <geometry_msgs/msg/pose.hpp>
-#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::navigator {
 
@@ -21,19 +20,20 @@ BT::NodeStatus ComputePlan::tick() {
 
     auto fb = master->feedback(layer);
 
-    // 1. Already running — check completion / goal change
-    if (fb && fb->status == Status::RUNNING) {
-        geometry_msgs::msg::Pose current;
-        if (!getInput("goal", current)) return BT::NodeStatus::FAILURE;
+    geometry_msgs::msg::Pose goal;
+    std::string planner_id;
+    if (!getInput("goal", goal) || !getInput("planner_id", planner_id))
+        return BT::NodeStatus::FAILURE;
 
-        if (goalChanged(current)) {
-            std::string planner_id;
-            getInput("planner_id", planner_id);
+    // 1. Already running — check completion / task change
+    if (fb && fb->status == Status::RUNNING) {
+        if (taskChanged(goal, planner_id)) {
             CmdMsg cmd;
-            cmd.goal = current;
+            cmd.goal = goal;
             cmd.planner_id = planner_id;
             master->start(layer, std::move(cmd));
-            last_sent_goal_ = current;
+            last_goal_ = goal;
+            last_planner_id_ = planner_id;
         }
         return BT::NodeStatus::RUNNING;
     }
@@ -43,23 +43,25 @@ BT::NodeStatus ComputePlan::tick() {
     if (fb && fb->status == Status::FAILED)    return BT::NodeStatus::FAILURE;
 
     // 3. First tick — send goal
-    geometry_msgs::msg::Pose goal;
-    std::string planner_id;
-    if (!getInput("goal", goal) || !getInput("planner_id", planner_id))
-        return BT::NodeStatus::FAILURE;
-
     CmdMsg cmd;
     cmd.goal = goal;
     cmd.planner_id = planner_id;
     master->start(layer, std::move(cmd));
-    last_sent_goal_ = goal;
+    last_goal_ = goal;
+    last_planner_id_ = planner_id;
     return BT::NodeStatus::RUNNING;
 }
 
-bool ComputePlan::goalChanged(const geometry_msgs::msg::Pose& a, double eps) const { // TODO: 不合理的goalChanged检测
-    return std::abs(a.position.x - last_sent_goal_.position.x) > eps ||
-           std::abs(a.position.y - last_sent_goal_.position.y) > eps ||
-           std::abs(a.position.z - last_sent_goal_.position.z) > eps;
+bool ComputePlan::taskChanged(const geometry_msgs::msg::Pose& goal,
+                               const std::string& planner_id) const {
+    if (planner_id != last_planner_id_) return true;
+    return goal.position.x != last_goal_.position.x ||
+           goal.position.y != last_goal_.position.y ||
+           goal.position.z != last_goal_.position.z ||
+           goal.orientation.x != last_goal_.orientation.x ||
+           goal.orientation.y != last_goal_.orientation.y ||
+           goal.orientation.z != last_goal_.orientation.z ||
+           goal.orientation.w != last_goal_.orientation.w;
 }
 
 }  // namespace finenav::navigator
