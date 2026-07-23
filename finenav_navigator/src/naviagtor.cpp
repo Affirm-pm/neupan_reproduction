@@ -123,7 +123,13 @@ void BtNavigator::execute()
             for (auto& leaf : pipe_.leaves()) {
                 auto fb = master_.feedback(leaf);
                 if (fb && fb != last_consumed_fb_) {
-                    chassis_cmd_->publish(fb->trajectory);
+                    if (chassis_cmd_->validate(fb->trajectory)) {
+                        chassis_cmd_->publish(fb->trajectory);
+                    } else {
+                        FINENAV_LOG_WARN(pnode_->get_logger(),
+                            "ChassisCommand rejected trajectory from '{}' (valid_fields=0x{:x}, twists={}).",
+                            leaf, fb->trajectory.valid_fields, fb->trajectory.twists.size());
+                    }
                     last_consumed_fb_ = fb;
                     break;
                 }

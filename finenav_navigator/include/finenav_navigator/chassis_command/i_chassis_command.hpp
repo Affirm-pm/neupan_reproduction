@@ -11,6 +11,7 @@ namespace finenav::navigator {
 class IChassisCommand {
 public:
     virtual ~IChassisCommand() = default;
+    virtual bool validate(const finenav_interfaces::msg::Trajectory& traj) const = 0;
     virtual void publish(const finenav_interfaces::msg::Trajectory& traj) = 0;
 };
 

@@ -8,7 +8,7 @@
 #include <string>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
-#include "finenav_navigator/i_chassis_command.hpp"
+#include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 
 namespace finenav::navigator {
 
@@ -16,6 +16,7 @@ class ChassisCmdVelStamped : public IChassisCommand {
 public:
     ChassisCmdVelStamped(rclcpp::Node::SharedPtr node,
                          const std::string& topic = "/cmd_vel");
+    bool validate(const finenav_interfaces::msg::Trajectory& traj) const override;
     void publish(const finenav_interfaces::msg::Trajectory& traj) override;
 
 private:

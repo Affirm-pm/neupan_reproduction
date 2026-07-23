@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_navigator/chassis_cmd_vel_stamped.hpp"
+#include "finenav_navigator/chassis_command/chassis_cmd_vel_stamped.hpp"
 
 #include <geometry_msgs/msg/twist_stamped.hpp>
 
@@ -14,11 +14,15 @@ ChassisCmdVelStamped::ChassisCmdVelStamped(rclcpp::Node::SharedPtr node,
     pub_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(topic, 10);
 }
 
+bool ChassisCmdVelStamped::validate(const finenav_interfaces::msg::Trajectory& traj) const {
+    return !traj.twists.empty() &&
+           (traj.valid_fields & finenav_interfaces::msg::Trajectory::TRAJ_VEL);
+}
+
 void ChassisCmdVelStamped::publish(const finenav_interfaces::msg::Trajectory& traj) {
-    if (traj.twists.empty()) return;
     geometry_msgs::msg::TwistStamped msg;
     msg.twist = traj.twists[0];
-    msg.header.stamp = node_->now();
+    msg.header.stamp = node_->now(); // TODO：change to the timestamp of planning start?
     msg.header.frame_id = "base_link";
     pub_->publish(msg);
 }

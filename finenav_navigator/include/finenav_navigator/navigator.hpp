@@ -9,7 +9,7 @@
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/plan/control_pipeline_tree.hpp"
 #include "finenav_navigator/behavior_tree_engine.hpp"
-#include "finenav_navigator/i_chassis_command.hpp"
+#include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 
 #include "finenav_util/ros/task_channel.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
@@ -49,7 +49,7 @@ public:
     std::string getActionName() const { return params_.action_name; }
 
     // ── IPC + topology (public for FineNavEngine wiring) ────────────────────
-    finenav::util::TaskMaster&       master()       { return master_; }
+    finenav::util::TaskMaster&       master()       { return master_; } // TODO: 如果没人用，就去掉
     finenav::core::ControlPipelineTree& pipe()       { return pipe_; }
 
     void setChassisCommand(std::shared_ptr<IChassisCommand> cmd) {

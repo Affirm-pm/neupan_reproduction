@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 #include <rclcpp/rclcpp.hpp>
-#include "finenav_navigator/i_chassis_command.hpp"
+#include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 
 namespace finenav::navigator {
 
@@ -15,6 +15,7 @@ class ChassisCmdVel : public IChassisCommand {
 public:
     ChassisCmdVel(rclcpp::Node::SharedPtr node,
                   const std::string& topic = "/cmd_vel");
+    bool validate(const finenav_interfaces::msg::Trajectory& traj) const override;
     void publish(const finenav_interfaces::msg::Trajectory& traj) override;
 
 private:

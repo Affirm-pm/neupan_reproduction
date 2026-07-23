@@ -44,8 +44,8 @@ generate_parameter_library(
 add_library(finenav_navigator SHARED
         src/naviagtor.cpp
         src/behavior_tree_engine.cpp
-        src/plugins/chassis_cmd_vel.cpp
-        src/plugins/chassis_cmd_vel_stamped.cpp
+        src/chassis_command/chassis_cmd_vel.cpp
+        src/chassis_command/chassis_cmd_vel_stamped.cpp
 )
 target_include_directories(finenav_navigator PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
