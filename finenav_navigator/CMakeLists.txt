@@ -60,6 +60,14 @@ target_link_libraries(finenav_navigator
 )
 
 # Action Plugins
+# StopPlan Plugin
+add_library(finenav_stop_plan_behavior SHARED
+        src/plugins/action/stop_plan.cpp
+)
+ament_target_dependencies(finenav_stop_plan_behavior
+        ${dependencies}
+)
+
 add_library(finenav_compute_plan_behavior SHARED
         src/plugins/action/compute_plan.cpp
 )
@@ -119,7 +127,7 @@ ament_target_dependencies(finenav_dynamic_goal_follower
 )
 
 # Install
-install(TARGETS finenav_navigator navigator_params
+install(TARGETS finenav_stop_plan_behavior finenav_navigator navigator_params
         EXPORT ${PROJECT_NAME}Targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
