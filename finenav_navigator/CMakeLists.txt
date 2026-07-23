@@ -44,6 +44,8 @@ generate_parameter_library(
 add_library(finenav_navigator SHARED
         src/naviagtor.cpp
         src/behavior_tree_engine.cpp
+        src/plugins/chassis_cmd_vel.cpp
+        src/plugins/chassis_cmd_vel_stamped.cpp
 )
 target_include_directories(finenav_navigator PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -73,6 +75,7 @@ ament_target_dependencies(finenav_navigator_conditions
         ${dependencies}
 )
 target_compile_definitions(finenav_navigator_conditions PRIVATE BT_PLUGIN_EXPORT)
+
 
 # PublishZeroCmdVel Plugin
 add_library(finenav_publish_zero_cmd_vel_behavior SHARED
@@ -121,12 +124,6 @@ install(TARGETS finenav_navigator navigator_params
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions finenav_publish_zero_cmd_vel_behavior finenav_recovery_node finenav_round_robin_node finenav_rate_controller finenav_dynamic_goal_follower
-        ARCHIVE DESTINATION lib/plugins
-        LIBRARY DESTINATION lib/plugins
-        RUNTIME DESTINATION bin
 )
 
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})

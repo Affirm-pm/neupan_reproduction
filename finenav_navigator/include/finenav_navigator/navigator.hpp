@@ -9,6 +9,7 @@
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/plan/control_pipeline_tree.hpp"
 #include "finenav_navigator/behavior_tree_engine.hpp"
+#include "finenav_navigator/i_chassis_command.hpp"
 
 #include "finenav_util/ros/task_channel.hpp"
 #include "finenav_util/ros/simple_action_server.hpp"
@@ -50,6 +51,10 @@ public:
     finenav::util::TaskMaster&       master()       { return master_; }
     finenav::core::ControlPipelineTree& pipe()       { return pipe_; }
 
+    void setChassisCommand(std::shared_ptr<IChassisCommand> cmd) {
+        chassis_cmd_ = std::move(cmd);
+    }
+
 private:
     void execute();
 
@@ -68,6 +73,7 @@ private:
 
     finenav::util::TaskMaster         master_;
     finenav::core::ControlPipelineTree pipe_;
+    std::shared_ptr<IChassisCommand>   chassis_cmd_;
 
     BT::Tree tree_;
 };

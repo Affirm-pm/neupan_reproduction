@@ -56,7 +56,7 @@ BT::NodeStatus ComputePlan::tick() {
     return BT::NodeStatus::RUNNING;
 }
 
-bool ComputePlan::goalChanged(const geometry_msgs::msg::Pose& a, double eps) const {
+bool ComputePlan::goalChanged(const geometry_msgs::msg::Pose& a, double eps) const { // TODO: 不合理的goalChanged检测
     return std::abs(a.position.x - last_sent_goal_.position.x) > eps ||
            std::abs(a.position.y - last_sent_goal_.position.y) > eps ||
            std::abs(a.position.z - last_sent_goal_.position.z) > eps;

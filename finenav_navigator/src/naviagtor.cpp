@@ -66,6 +66,11 @@ void BtNavigator::execute()
     blackboard->set("_node", parent_node_);
     blackboard->set("_nav_task_master", &master_);
 
+    // ── _root ref_traj publisher (first layer subscribes via connectEdge) ──
+    using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
+    auto root_pub = pnode_->create_publisher<FeedbackMsg>(
+        finenav::util::TaskChannel::feedbackTopic("_root"), 10);
+
     rclcpp::WallRate loop_rate(params_.tick_frequency);
     FINENAV_LOG_INFO(pnode_->get_logger(),
         "[Navigator] Starting navigation to ({:.2f}, {:.2f})",
@@ -112,6 +117,17 @@ void BtNavigator::execute()
         }
 
         auto status = tree_.tickExactlyOnce();
+
+        // Forward first RUNNING leaf trajectory to chassis command
+        if (chassis_cmd_) {
+            for (auto& leaf : pipe_.leaves()) {
+                auto fb = master_.feedback(leaf);
+                if (fb && fb->status == FeedbackMsg::RUNNING) { // TODO：
+                    chassis_cmd_->publish(fb->trajectory);
+                    break;
+                }
+            }
+        }
 
         if (status == BT::NodeStatus::SUCCESS) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Navigation succeeded.");
