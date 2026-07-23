@@ -55,7 +55,7 @@ BT::NodeStatus ComputePlan::tick() {
 bool ComputePlan::taskChanged(const geometry_msgs::msg::Pose& goal,
                                const std::string& planner_id) const {
     if (planner_id != last_planner_id_) return true;
-    return goal.position.x != last_goal_.position.x ||
+    return goal.position.x != last_goal_.position.x || // TODO： 会不会有浮点数不安全？
            goal.position.y != last_goal_.position.y ||
            goal.position.z != last_goal_.position.z ||
            goal.orientation.x != last_goal_.orientation.x ||

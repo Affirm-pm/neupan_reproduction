@@ -16,7 +16,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
         msg/TaskCmd.msg
         msg/TaskStop.msg
         msg/TaskFeedback.msg
-        action/ComputePlan.action
         action/NavigateToPose.action
         DEPENDENCIES geometry_msgs std_msgs
 )

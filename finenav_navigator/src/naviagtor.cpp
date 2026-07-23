@@ -4,6 +4,7 @@
 
 #include "finenav_navigator/navigator.hpp"
 
+#include <Eigen/Geometry>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include "finenav_util/common/log_macros.hpp"
@@ -72,6 +73,7 @@ void BtNavigator::execute()
     auto root_pub = pnode_->create_publisher<FeedbackMsg>(
         finenav::util::TaskChannel::feedbackTopic("_root"), 10);
 
+    auto episode_start = pnode_->now();
     rclcpp::WallRate loop_rate(params_.tick_frequency);
     FINENAV_LOG_INFO(pnode_->get_logger(),
         "[Navigator] Starting navigation to ({:.2f}, {:.2f})",
@@ -149,7 +151,27 @@ void BtNavigator::execute()
 
         if (status == BT::NodeStatus::SUCCESS) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Navigation succeeded.");
-            action_server_->succeeded_current();
+            auto result = std::make_shared<typename ActionT::Result>();
+            if (state_provider_) {
+                if (auto rs = state_provider_->getRobotState()) {
+                    auto& g = goal->pose.pose;
+                    result->position_error.x = rs->position.x() - g.position.x;
+                    result->position_error.y = rs->position.y() - g.position.y;
+                    result->position_error.z = rs->position.z() - g.position.z;
+
+                    Eigen::Quaterniond q_cur(rs->orientation.w(), rs->orientation.x(),
+                                             rs->orientation.y(), rs->orientation.z());
+                    Eigen::Quaterniond q_goal(g.orientation.w, g.orientation.x,
+                                              g.orientation.y, g.orientation.z);
+                    auto euler = (q_goal.inverse() * q_cur).toRotationMatrix()
+                                     .eulerAngles(2, 1, 0);  // ZYX order
+                    result->angle_error.x = static_cast<float>(euler[2]);  // roll
+                    result->angle_error.y = static_cast<float>(euler[1]);  // pitch
+                    result->angle_error.z = static_cast<float>(euler[0]);  // yaw
+                }
+            }
+            result->total_time = rclcpp::Duration(pnode_->now() - episode_start);
+            action_server_->succeeded_current(result);
             return;
         } else if (status == BT::NodeStatus::FAILURE) {
             FINENAV_LOG_ERROR(pnode_->get_logger(), "[Navigator] Navigation failed.");
@@ -157,7 +179,30 @@ void BtNavigator::execute()
             return;
         }
 
-        // TODO: 发布 Feedback
+        // Publish feedback (throttled to ~10 Hz)
+        if (state_provider_ && (pnode_->now() - last_feedback_time_).seconds() >= 0.1) {
+            if (auto rs = state_provider_->getRobotState()) {
+                auto fb = std::make_shared<typename ActionT::Feedback>();
+                fb->current_pose.header.stamp = pnode_->now();
+                fb->current_pose.header.frame_id = "map"; // TODO： 弄个宏定义define
+                fb->current_pose.pose.position.x    = rs->position.x();
+                fb->current_pose.pose.position.y    = rs->position.y();
+                fb->current_pose.pose.position.z    = rs->position.z();
+                fb->current_pose.pose.orientation.w = rs->orientation.w();
+                fb->current_pose.pose.orientation.x = rs->orientation.x();
+                fb->current_pose.pose.orientation.y = rs->orientation.y();
+                fb->current_pose.pose.orientation.z = rs->orientation.z();
+                fb->navigation_time = rclcpp::Duration(pnode_->now() - episode_start);
+                fb->current_speed.linear.x  = rs->linear_velocity.x();
+                fb->current_speed.linear.y  = rs->linear_velocity.y();
+                fb->current_speed.linear.z  = rs->linear_velocity.z();
+                fb->current_speed.angular.x = rs->angular_velocity.x();
+                fb->current_speed.angular.y = rs->angular_velocity.y();
+                fb->current_speed.angular.z = rs->angular_velocity.z();
+                action_server_->publish_feedback(fb);
+            }
+            last_feedback_time_ = pnode_->now();
+        }
 
         loop_rate.sleep();
     }

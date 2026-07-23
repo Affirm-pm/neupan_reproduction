@@ -79,6 +79,7 @@ private:
 
     std::shared_ptr<IChassisCommand>   chassis_cmd_;
     std::unordered_map<std::string, std::shared_ptr<const FeedbackMsg>> last_consumed_fb_;
+    rclcpp::Time last_feedback_time_{0, 0, RCL_ROS_TIME};
 
     BT::Tree tree_;
 };
