@@ -120,19 +120,29 @@ void BtNavigator::execute()
 
         // Forward fresh leaf trajectory to chassis command
         if (chassis_cmd_) {
+            std::vector<std::pair<std::string, std::shared_ptr<const FeedbackMsg>>> fresh;
             for (auto& leaf : pipe_.leaves()) {
                 auto fb = master_.feedback(leaf);
-                if (fb && fb != last_consumed_fb_) {
-                    if (chassis_cmd_->validate(fb->trajectory)) {
-                        chassis_cmd_->publish(fb->trajectory);
-                    } else {
-                        FINENAV_LOG_WARN(pnode_->get_logger(),
-                            "ChassisCommand rejected trajectory from '{}' (valid_fields=0x{:x}, twists={}).",
-                            leaf, fb->trajectory.valid_fields, fb->trajectory.twists.size());
-                    }
-                    last_consumed_fb_ = fb;
-                    break;
+                if (fb && fb != last_consumed_fb_[leaf]) {
+                    fresh.emplace_back(leaf, fb);
                 }
+            }
+            if (fresh.size() == 1) {
+                auto& [leaf, fb] = fresh[0];
+                if (chassis_cmd_->validate(fb->trajectory)) {
+                    chassis_cmd_->publish(fb->trajectory);
+                } else {
+                    FINENAV_LOG_WARN(pnode_->get_logger(),
+                        "ChassisCommand rejected trajectory from '{}' (valid_fields=0x{:x}, twists={}).",
+                        leaf, fb->trajectory.valid_fields, fb->trajectory.twists.size());
+                }
+                last_consumed_fb_[leaf] = fb;
+            } else if (fresh.size() > 1) {
+                std::string names;
+                for (auto& [n, _] : fresh) names += n + " ";
+                FINENAV_LOG_WARN(pnode_->get_logger(),
+                    "Multiple leaves have fresh trajectories ({}). "
+                    "Check BT. Not publishing.", names);
             }
         }
 

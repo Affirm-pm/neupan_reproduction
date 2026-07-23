@@ -5,6 +5,7 @@
 #pragma once
 
 #include <rclcpp/rclcpp.hpp>
+#include <unordered_map>
 
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/plan/control_pipeline_tree.hpp"
@@ -77,7 +78,7 @@ private:
     using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
 
     std::shared_ptr<IChassisCommand>   chassis_cmd_;
-    std::shared_ptr<const FeedbackMsg>  last_consumed_fb_;
+    std::unordered_map<std::string, std::shared_ptr<const FeedbackMsg>> last_consumed_fb_;
 
     BT::Tree tree_;
 };
