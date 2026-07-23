@@ -3,6 +3,7 @@
 // All rights reserved.
 
 #include "finenav_navigator/navigator.hpp"
+#include "finenav_navigator/chassis_command/chassis_cmd_vel.hpp"
 
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/pose.hpp>
@@ -42,6 +43,9 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
 
     // ── 启动 spin 线程（最后执行，确保所有订阅/服务已注册）────────────────────
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
+
+    // ── Default chassis command ─────────────────────────────────────────────
+    chassis_cmd_ = std::make_shared<ChassisCmdVel>(parent_node_);
 
     FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Initialized and spinning.");
 }

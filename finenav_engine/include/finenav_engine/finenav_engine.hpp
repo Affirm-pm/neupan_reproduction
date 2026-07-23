@@ -19,6 +19,7 @@
 #include "finenav_core/plan/control_layer.hpp"
 #include "finenav_core/plan/i_control_layer.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
+#include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/navigator.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
@@ -53,8 +54,10 @@ public:
     // ── Accessors ──────────────────────────────────────────────────────────
 
     const std::shared_ptr<rclcpp::Node>& getNode() const { return node_; }
-    finenav::localizer::FineNavLocalizer* getLocalizer() { return localizer_.get(); }
-    finenav::navigator::BtNavigator* getNavigator() { return navigator_.get(); }
+
+    void setChassisCommand(std::shared_ptr<finenav::navigator::IChassisCommand> cmd) {
+        navigator_->setChassisCommand(std::move(cmd));
+    }
 
     // ── Factory: map ──────────────────────────────────────────────────────
 
