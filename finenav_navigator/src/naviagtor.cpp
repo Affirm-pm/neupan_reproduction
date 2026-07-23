@@ -65,6 +65,7 @@ void BtNavigator::execute()
     blackboard->set("goal", goal->pose.pose);
     blackboard->set("_node", parent_node_);
     blackboard->set("_nav_task_master", &master_);
+    blackboard->set("_chassis_cmd", chassis_cmd_.get());
 
     // ── _root ref_traj publisher (first layer subscribes via connectEdge) ──
     using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;

@@ -22,4 +22,9 @@ void ChassisCmdVel::publish(const finenav_interfaces::msg::Trajectory& traj) {
     pub_->publish(traj.twists[0]);
 }
 
+void ChassisCmdVel::stop() {
+    geometry_msgs::msg::Twist zero;
+    pub_->publish(zero);
+}
+
 }  // namespace finenav::navigator

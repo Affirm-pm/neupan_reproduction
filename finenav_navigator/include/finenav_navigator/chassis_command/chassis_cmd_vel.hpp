@@ -17,6 +17,7 @@ public:
                   const std::string& topic = "/cmd_vel");
     bool validate(const finenav_interfaces::msg::Trajectory& traj) const override;
     void publish(const finenav_interfaces::msg::Trajectory& traj) override;
+    void stop() override;
 
 private:
     std::shared_ptr<rclcpp::Publisher<geometry_msgs::msg::Twist>> pub_;

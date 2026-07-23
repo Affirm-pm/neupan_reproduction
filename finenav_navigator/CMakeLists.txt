@@ -77,11 +77,11 @@ ament_target_dependencies(finenav_navigator_conditions
 target_compile_definitions(finenav_navigator_conditions PRIVATE BT_PLUGIN_EXPORT)
 
 
-# PublishZeroCmdVel Plugin
-add_library(finenav_publish_zero_cmd_vel_behavior SHARED
-        src/plugins/action/publish_zero_cmd_vel.cpp
+# StopChassisMotion Plugin
+add_library(finenav_stop_chassis_motion_behavior SHARED
+        src/plugins/action/stop_chassis_motion.cpp
 )
-ament_target_dependencies(finenav_publish_zero_cmd_vel_behavior
+ament_target_dependencies(finenav_stop_chassis_motion_behavior
         ${dependencies}
 )
 

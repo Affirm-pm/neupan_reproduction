@@ -8,14 +8,12 @@
 
 namespace finenav::navigator {
 
-class PublishZeroCmdVel : public BT::SyncActionNode {
+class StopChassisMotion : public BT::SyncActionNode {
 public:
-    PublishZeroCmdVel(const std::string& name, const BT::NodeConfig& config)
+    StopChassisMotion(const std::string& name, const BT::NodeConfig& config)
         : BT::SyncActionNode(name, config) {}
 
-    static BT::PortsList providedPorts() {
-        return {BT::InputPort<std::string>("topic_name", "/cmd_vel")};
-    }
+    static BT::PortsList providedPorts() { return {}; }
 
     BT::NodeStatus tick() override;
 };

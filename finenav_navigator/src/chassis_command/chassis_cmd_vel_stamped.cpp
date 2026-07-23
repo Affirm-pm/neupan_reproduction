@@ -27,4 +27,11 @@ void ChassisCmdVelStamped::publish(const finenav_interfaces::msg::Trajectory& tr
     pub_->publish(msg);
 }
 
+void ChassisCmdVelStamped::stop() {
+    geometry_msgs::msg::TwistStamped zero;
+    zero.header.stamp = node_->now();
+    zero.header.frame_id = "base_link";
+    pub_->publish(zero);
+}
+
 }  // namespace finenav::navigator
