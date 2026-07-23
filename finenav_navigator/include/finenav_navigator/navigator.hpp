@@ -12,6 +12,7 @@
 #include "finenav_navigator/i_chassis_command.hpp"
 
 #include "finenav_util/ros/task_channel.hpp"
+#include "finenav_interfaces/msg/task_feedback.hpp"
 #include "finenav_util/ros/simple_action_server.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 #include "finenav_interfaces/action/navigate_to_pose.hpp"
@@ -73,7 +74,10 @@ private:
 
     finenav::util::TaskMaster         master_;
     finenav::core::ControlPipelineTree pipe_;
+    using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
+
     std::shared_ptr<IChassisCommand>   chassis_cmd_;
+    std::shared_ptr<const FeedbackMsg>  last_consumed_fb_;
 
     BT::Tree tree_;
 };

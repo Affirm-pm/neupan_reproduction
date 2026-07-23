@@ -118,12 +118,13 @@ void BtNavigator::execute()
 
         auto status = tree_.tickExactlyOnce();
 
-        // Forward first RUNNING leaf trajectory to chassis command
+        // Forward fresh leaf trajectory to chassis command
         if (chassis_cmd_) {
             for (auto& leaf : pipe_.leaves()) {
                 auto fb = master_.feedback(leaf);
-                if (fb && fb->status == FeedbackMsg::RUNNING) { // TODO：
+                if (fb && fb != last_consumed_fb_) {
                     chassis_cmd_->publish(fb->trajectory);
+                    last_consumed_fb_ = fb;
                     break;
                 }
             }
