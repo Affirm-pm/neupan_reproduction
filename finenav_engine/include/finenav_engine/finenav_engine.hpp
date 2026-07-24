@@ -128,7 +128,7 @@ public:
     // ── Configuration ──────────────────────────────────────────────────────
 
     /// Load control_pipeline tree from JSON.  Layers must already exist.
-    void configure(const std::string& json_path);
+    void loadControlPipeline(const std::string& json_path);
 
     // ── Navigation control ──────────────────────────────────────────────────
 

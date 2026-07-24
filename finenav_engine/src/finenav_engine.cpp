@@ -5,6 +5,8 @@
 #include "finenav_engine/finenav_engine.hpp"
 
 #include <chrono>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 namespace finenav {
 namespace {
@@ -109,9 +111,21 @@ void FineNavEngine::connectEdge(const std::string& from, const std::string& to) 
 //  configure — JSON-driven pipeline wiring
 // ══════════════════════════════════════════════════════════════════════════════
 
-void FineNavEngine::configure(const std::string& json_path) {
-    // TODO: parse JSON, walk tree, call connectEdge for each edge
-    (void)json_path;
+// free function, keeps nlohmann/json out of the public header
+static void buildTree(FineNavEngine& engine, const nlohmann::json& node,
+                      const std::string& parent) {
+    for (auto& [name, children] : node.items()) {
+        engine.connectEdge(parent, name);
+        if (children.is_object()) {
+            buildTree(engine, children, name);
+        }
+    }
+}
+
+void FineNavEngine::loadControlPipeline(const std::string& json_path) {
+    auto j = nlohmann::json::parse(std::ifstream(json_path));
+    buildTree(*this, j.at("control_pipeline"), "_root");
+    FINENAV_LOG_INFO(node_->get_logger(), "Pipeline configured from '{}'.", json_path);
 }
 
 }  // namespace finenav
