@@ -39,8 +39,9 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     eskf_localizer_ = std::make_unique<EskfLocalizer>(
         params_, pnode_->get_logger().get_child("EskfLocalizer"));
 
-    // Size the inherited RobotStateProvider history window from the same param.
-    setHistoryDuration(params_.history_duration_sec);
+    // Sensor subscriptions (numbered pose/twist/odom topics from yaml params).
+    sensor_sub_ = std::make_unique<SensorSubscriber>(*pnode_, *eskf_localizer_);
+    sensor_sub_->discoverAndSubscribe();
 
     // TF broadcaster (only if publish_tf is enabled).
     if (params_.publish_tf) {
@@ -68,6 +69,11 @@ void FineNavLocalizer::timerCallback()
 
     const rclcpp::Time tick_time = pnode_->now();
     eskf_localizer_->step(tick_time);
+
+    // ── force_2d_mode: inject planar constraints (z=0, roll=0, pitch=0) ────────
+    if (params_.force_2d_mode && eskf_localizer_->isInitialized()) {
+        eskf_localizer_->applyPlanarConstraints();
+    }
 
     // Feed the latest state into the inherited RobotStateProvider history.
     if (eskf_localizer_->isInitialized()) {

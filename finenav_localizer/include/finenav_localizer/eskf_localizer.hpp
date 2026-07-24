@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -23,6 +24,28 @@
 #include "finenav_localizer/localizer_params.hpp"
 
 namespace finenav::localizer {
+
+/// Per-sensor overrides carried alongside a pose observation in the internal queue.
+struct TaggedPoseObs {
+    geometry_msgs::msg::PoseWithCovarianceStamped msg;
+    int                  smooth{1};
+    double               gate_dist{1e9};
+    std::array<bool, 6>  mask{{true, true, true, true, true, true}};
+    std::array<double, 6> cov_override{};  // < 0 → use from msg; ≥ 0 → override
+};
+
+/// Per-sensor overrides carried alongside a twist observation.
+struct TaggedTwistObs {
+    geometry_msgs::msg::TwistWithCovarianceStamped msg;
+    int                  smooth{1};
+    double               gate_dist{1e9};
+    std::array<bool, 6>  mask{{true, true, true, true, true, true}};
+    std::array<double, 6> cov_override{};  // < 0 → use from msg; ≥ 0 → override
+};
+
+// Internal queues now carry tagged wrappers — per-sensor config lives with the message.
+using PoseObsQueue  = AgedObservationQueue<TaggedPoseObs>;
+using TwistObsQueue = AgedObservationQueue<TaggedTwistObs>;
 
 /**
  * @brief EskfLocalizer  —  ROS-free ESKF localization engine (the C++ API layer)
@@ -55,10 +78,21 @@ public:
 
     /**
      * @brief Enqueue a pose / twist / relative-pose observation.
+     * @details
+     *      Global-params overloads (C++ API): smooth / gate / mask use defaults.
+     *      Tagged overloads (ROS sensor callbacks): per-sensor overrides.
      */
     void feedObservation(const PoseMsg  & msg);
+    void feedObservation(const PoseMsg  & msg, int smooth, double gate,
+                         const std::array<bool,6>& mask,
+                         const std::array<double,6>& cov_override = {});
     void feedObservation(const TwistMsg & msg);
+    void feedObservation(const TwistMsg & msg, int smooth, double gate,
+                         const std::array<bool,6>& mask,
+                         const std::array<double,6>& cov_override = {});
     void feedRelativePose(const RelativePoseObs & obs);
+    /// Planar constraint injection (called each tick when force_2d_mode is on).
+    void applyPlanarConstraints();
 
     /**
      * @brief Advance the estimator by one cycle using @p now as the reference epoch.
@@ -76,9 +110,16 @@ public:
 private:
     void configure(const finenav_localizer::Params & params);
 
-    void applyUpdate(const PoseMsg         & msg, int delay_step);
-    void applyUpdate(const TwistMsg        & msg, int delay_step);
+    void applyUpdate(const TaggedPoseObs   & tagged, int delay_step);
+    void applyUpdate(const TaggedTwistObs  & tagged, int delay_step);
     void applyUpdate(const RelativePoseObs & obs, int delay_step_to, int delay_step_from);
+
+    /// Mask a full 6-DOF observation (H, innov, R) down to k selected rows.
+    static std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd>
+    maskObservation(const Eigen::Matrix<double, 6, 12>& H_full,
+                    const Eigen::Matrix<double, 6,  1>& innov_full,
+                    const Eigen::Matrix<double, 6,  6>& R_full,
+                    const std::array<bool, 6>&           config);
 
     static std::tuple<Vec3d, SO3d, Eigen::Matrix<double, 6, 6>>
     extractObservation(const PoseMsg & msg);

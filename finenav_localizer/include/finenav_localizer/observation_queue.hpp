@@ -117,17 +117,19 @@ private:
  * (3) RelativePoseObsQueue - stores RelativePoseObs (custom struct).
  */
 
-using PoseObsQueue  = AgedObservationQueue<geometry_msgs::msg::PoseWithCovarianceStamped>;
-using TwistObsQueue = AgedObservationQueue<geometry_msgs::msg::TwistWithCovarianceStamped>;
+// PoseObsQueue / TwistObsQueue are now tagged wrappers — defined in eskf_localizer.hpp.
 
 struct RelativePoseObs {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    Eigen::Vector3d             delta_p_body_obs;  ///< body-frame translation from odometry (m)
-    Sophus::SO3d                delta_R_obs;       ///< relative rotation from odometry
-    Eigen::Matrix<double, 6, 6> R_noise;           ///< displacement covariance (m², rad²)
-    rclcpp::Time                stamp_to;          ///< timestamp of the "to"   (newer) frame
-    rclcpp::Time                stamp_from;        ///< timestamp of the "from" (older) frame
+    Eigen::Vector3d             delta_p_body_obs;
+    Sophus::SO3d                delta_R_obs;
+    Eigen::Matrix<double, 6, 6> R_noise;
+    rclcpp::Time                stamp_to;
+    rclcpp::Time                stamp_from;
+
+    int smooth{1};
+    double gate_dist{1e9};
 };
 
 using RelativePoseObsQueue = AgedObservationQueue<RelativePoseObs>;

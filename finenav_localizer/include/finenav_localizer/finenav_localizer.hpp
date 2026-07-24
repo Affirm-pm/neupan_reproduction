@@ -12,6 +12,7 @@
 
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_localizer/eskf_localizer.hpp"
+#include "finenav_localizer/sensor_subscriber.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 #include "finenav_localizer/localizer_params.hpp"
 
@@ -55,13 +56,9 @@ public:
     //  getRobotState() / getRobotState(t) are inherited from RobotStateProvider
     //  (history-backed); this wrapper feeds the history via pushState() each tick.
 
-    /// TODO: ROS message-subscription input side (future work).
-    ///   This wrapper will own the localizer's ROS inputs: subscriptions to the
-    ///   initial-pose, pose, twist and odometry topics.  Each callback converts
-    ///   the incoming message and forwards it to the inner engine, e.g.
-    ///     eskf_localizer_->setInitialPose(pose_msg);
-    ///     eskf_localizer_->feedObservation(pose_msg / twist_msg);
-    ///     eskf_localizer_->feedRelativePose(rel_obs);
+    /// Sensor subscription manager — discovers numbered pose/twist/odom params
+    /// and creates ROS subscriptions that feed the inner engine.
+    std::unique_ptr<SensorSubscriber> sensor_sub_;
 
 private:
     void timerCallback();

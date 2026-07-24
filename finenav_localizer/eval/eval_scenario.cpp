@@ -120,13 +120,9 @@ static double yawFromState(const fn::NavStateD& s)
 static finenav_localizer::Params makeConfig()
 {
     finenav_localizer::Params p;
-    p.update_rate_hz        = cfg::kUpdateRateHz;
-    p.max_delay_sec         = cfg::kMaxDelaySec;
-    p.pose_smoothing_steps  = cfg::kPoseSmoothingSteps;
-    p.twist_smoothing_steps = cfg::kTwistSmoothingSteps;
-    p.pose_gate_dist        = cfg::kPoseGateDist;
-    p.twist_gate_dist       = cfg::kTwistGateDist;
-    p.max_dt_sec            = cfg::kMaxDtSec;
+    p.update_rate_hz = cfg::kUpdateRateHz;
+    p.max_delay_sec  = cfg::kMaxDelaySec;
+    p.max_dt_sec     = cfg::kMaxDtSec;
     p.model.pos_noise_std   = cfg::kPosNoiseStd;
     p.model.rot_noise_std   = cfg::kRotNoiseStd;
     p.model.vel_noise_std   = cfg::kVelNoiseStd;
@@ -758,11 +754,7 @@ static void runBagScenario(const rclcpp::Node::SharedPtr & node)
         finenav_localizer::Params p;
         p.update_rate_hz        = cfg::kUpdateRateHz;
         p.max_delay_sec         = cfg::kMaxDelaySec;
-        p.pose_smoothing_steps  = static_cast<int64_t>(cfg::kPoseSmoothingSteps);
-        p.twist_smoothing_steps = static_cast<int64_t>(cfg::kTwistSmoothingSteps);
-        p.pose_gate_dist        = cfg::kPoseGateDist;
-        p.twist_gate_dist       = cfg::kTwistGateDist;
-        p.max_dt_sec            = cfg::kMaxDtSec;
+        p.max_dt_sec = cfg::kMaxDtSec;
         p.model.pos_noise_std   = cfg::kPosNoiseStd;
         p.model.rot_noise_std   = cfg::kRotNoiseStd;
         p.model.vel_noise_std   = cfg::kVelNoiseStd;

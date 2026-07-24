@@ -55,21 +55,16 @@ void EskfLocalizer::configure(const finenav_localizer::Params & params)
                   logger_.get_child("ESKF"));
 
     pose_queue_ = std::make_unique<PoseObsQueue>(
-        static_cast<std::size_t>(std::max(int64_t{1}, params_.pose_smoothing_steps)),
-        static_cast<std::size_t>(params_.max_obs_queue_size));
+        1u, static_cast<std::size_t>(params_.max_pose_queue_size));
     twist_queue_ = std::make_unique<TwistObsQueue>(
-        static_cast<std::size_t>(std::max(int64_t{1}, params_.twist_smoothing_steps)),
-        static_cast<std::size_t>(params_.max_obs_queue_size));
+        1u, static_cast<std::size_t>(params_.max_twist_queue_size));
     rel_pose_queue_ = std::make_unique<RelativePoseObsQueue>(
-        static_cast<std::size_t>(std::max(int64_t{1}, params_.rel_pose_smoothing_steps)),
-        static_cast<std::size_t>(params_.max_rel_pose_queue_size));
+        1u, static_cast<std::size_t>(params_.max_rel_pose_queue_size));
 
     FINENAV_LOG_INFO(
         logger_,
-        "Configured. rate={:.1f} Hz  max_delay={:.3f} s  max_delay_step={}  "
-        "pose_smooth={}  twist_smooth={}",
-        params_.update_rate_hz, params_.max_delay_sec, eskf_.maxDelayStep(),
-        params_.pose_smoothing_steps, params_.twist_smoothing_steps);
+        "Configured. rate={:.1f} Hz  max_delay={:.3f} s  max_delay_step={}",
+        params_.update_rate_hz, params_.max_delay_sec, eskf_.maxDelayStep());
 }
 
 void EskfLocalizer::setConfig(const finenav_localizer::Params & params)
@@ -119,12 +114,30 @@ void EskfLocalizer::setInitialPose(const PoseMsg & msg)
 
 void EskfLocalizer::feedObservation(const PoseMsg & msg)
 {
-    pose_queue_->push(msg);
+    pose_queue_->push(TaggedPoseObs{msg});
+}
+
+void EskfLocalizer::feedObservation(const PoseMsg & msg, int smooth,
+                                    double gate, const std::array<bool,6>& mask,
+                                    const std::array<double,6>& cov_override)
+{
+    TaggedPoseObs t{msg, smooth, gate, mask};
+    t.cov_override = cov_override;
+    pose_queue_->push(std::move(t));
 }
 
 void EskfLocalizer::feedObservation(const TwistMsg & msg)
 {
-    twist_queue_->push(msg);
+    twist_queue_->push(TaggedTwistObs{msg});
+}
+
+void EskfLocalizer::feedObservation(const TwistMsg & msg, int smooth,
+                                    double gate, const std::array<bool,6>& mask,
+                                    const std::array<double,6>& cov_override)
+{
+    TaggedTwistObs t{msg, smooth, gate, mask};
+    t.cov_override = cov_override;
+    twist_queue_->push(std::move(t));
 }
 
 void EskfLocalizer::feedRelativePose(const RelativePoseObs & obs)
@@ -180,7 +193,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
             if (!pose_queue_->empty()) {
                 PoseMsg latest_pose;
                 while (!pose_queue_->empty()) {
-                    latest_pose = pose_queue_->pop_increment_age();
+                    latest_pose = pose_queue_->pop_increment_age().msg;
                 }
                 auto [pos, rot, R_pose] = extractObservation(latest_pose);
                 next_state.p = pos;
@@ -192,7 +205,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
             if (!twist_queue_->empty()) {
                 TwistMsg latest_twist;
                 while (!twist_queue_->empty()) {
-                    latest_twist = twist_queue_->pop_increment_age();
+                    latest_twist = twist_queue_->pop_increment_age().msg;
                 }
                 auto [lin_v_body, ang_v_body, R_twist] = extractObservation(latest_twist);
                 // Twist is body-frame; the cache stores v in world frame.
@@ -290,15 +303,15 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     // ── 3. Process pose observations ───────────────────────────────────────
     {
         const std::size_t n = pose_queue_->size();
-        if (n >= static_cast<std::size_t>(params_.max_obs_queue_size) * 8 / 10) {
+        if (n >= static_cast<std::size_t>(params_.max_pose_queue_size) * 8 / 10) {
             FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
                 "Pose observation queue near capacity ({}/{}) — consumer may be falling behind",
-                n, params_.max_obs_queue_size);
+                n, params_.max_pose_queue_size);
         }
         for (std::size_t i = 0u; i < n; ++i) {
-            const PoseMsg pose = pose_queue_->pop_increment_age();
+            const TaggedPoseObs tagged = pose_queue_->pop_increment_age();
 
-            double delay_time = (tick_time - rclcpp::Time(pose.header.stamp)).seconds();
+            double delay_time = (tick_time - rclcpp::Time(tagged.msg.header.stamp)).seconds();
             if (delay_time < future_reject_threshold) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
                     "Pose observation from future (delay={:.4f} s, threshold={:.4f} s) — skipping.",
@@ -315,22 +328,22 @@ void EskfLocalizer::step(const rclcpp::Time & now)
                 continue;
             }
 
-            applyUpdate(pose, static_cast<int>(delay_step));
+            applyUpdate(tagged, static_cast<int>(delay_step));
         }
     }
 
     // ── 4. Process twist observations ──────────────────────────────────────
     {
         const std::size_t n = twist_queue_->size();
-        if (n >= static_cast<std::size_t>(params_.max_obs_queue_size) * 8 / 10) {
+        if (n >= static_cast<std::size_t>(params_.max_twist_queue_size) * 8 / 10) {
             FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
                 "Twist observation queue near capacity ({}/{}) — consumer may be falling behind",
-                n, params_.max_obs_queue_size);
+                n, params_.max_twist_queue_size);
         }
         for (std::size_t i = 0u; i < n; ++i) {
-            const TwistMsg twist = twist_queue_->pop_increment_age();
+            const TaggedTwistObs tagged = twist_queue_->pop_increment_age();
 
-            double delay_time = (tick_time - rclcpp::Time(twist.header.stamp)).seconds();
+            double delay_time = (tick_time - rclcpp::Time(tagged.msg.header.stamp)).seconds();
             if (delay_time < future_reject_threshold) {
                 FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
                     "Twist observation from future (delay={:.4f} s, threshold={:.4f} s) — skipping.",
@@ -347,7 +360,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
                 continue;
             }
 
-            applyUpdate(twist, static_cast<int>(delay_step));
+            applyUpdate(tagged, static_cast<int>(delay_step));
         }
     }
 
@@ -407,59 +420,107 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     }
 }
 
-void EskfLocalizer::applyUpdate(const PoseMsg & msg, int delay_step)
+namespace {
+/// Apply per-sensor covariance overrides: R(i,i) ← override[i] when override[i] ≥ 0.
+void applyCovOverride(Eigen::Matrix<double, 6, 6> & R,
+                      const std::array<double, 6> & cov_override)
 {
-    auto [pos_obs, rot_obs, R_raw] = extractObservation(msg);
+    for (int i = 0; i < 6; ++i) {
+        if (cov_override[static_cast<std::size_t>(i)] >= 0.0) {
+            R(i, i) = cov_override[static_cast<std::size_t>(i)];
+        }
+    }
+}
+}  // namespace
 
-    const Eigen::Matrix<double, 6, 6> R_eff =
-        R_raw * static_cast<double>(params_.pose_smoothing_steps);
+void EskfLocalizer::applyUpdate(const TaggedPoseObs & tagged, int delay_step)
+{
+    auto [pos_obs, rot_obs, R_raw] = extractObservation(tagged.msg);
+    applyCovOverride(R_raw, tagged.cov_override);
+
+    const int  k = static_cast<int>(std::count(tagged.mask.begin(), tagged.mask.end(), true));
+    if (k == 0) return;
+
+    const Eigen::Matrix<double, 6, 6> R_eff = R_raw * static_cast<double>(tagged.smooth);
 
     const auto obs = NavigationModelD::observePose(
         eskf_.getStateAtDelay(delay_step), pos_obs, rot_obs);
 
-    const Eigen::Matrix<double, 6, 6> S_mat =
-        obs.H * eskf_.getCovarianceAtDelay(delay_step) * obs.H.transpose() + R_eff;
-    const double d2 = static_cast<double>(
-        obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
+    if (k < 6) {
+        auto [H_m, innov_m, R_m] = maskObservation(
+            obs.H.template cast<double>(), obs.innovation.template cast<double>(),
+            R_eff, tagged.mask);
 
-    FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
-        "Pose Mahalanobis d²={:.1f} (gate={:.1f})", d2, params_.pose_gate_dist);
-
-    if (d2 > params_.pose_gate_dist) {
-        FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-            "Pose rejected by Mahalanobis gate (d²={:.1f} > {:.1f})",
-            d2, params_.pose_gate_dist);
+        const Eigen::MatrixXd S_mat = H_m * eskf_.getCovarianceAtDelay(delay_step).template cast<double>() * H_m.transpose() + R_m;
+        const double d2 = (innov_m.transpose() * S_mat.inverse() * innov_m)(0,0);
+        FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
+            "Pose Mahalanobis d²={:.1f} (gate={:.1f})", d2, tagged.gate_dist);
+        if (d2 > tagged.gate_dist) {
+            FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+                "Pose rejected by Mahalanobis gate (d²={:.1f} > {:.1f})", d2, tagged.gate_dist);
+            return;
+        }
+        eskf_.updateDynamic(innov_m, H_m, R_m, delay_step);
         return;
     }
 
+    // Fast path: all 6 DOFs active
+    const Eigen::Matrix<double, 6, 6> S_mat =
+        obs.H.template cast<double>() * eskf_.getCovarianceAtDelay(delay_step).template cast<double>() * obs.H.transpose().template cast<double>() + R_eff;
+    const double d2 = static_cast<double>(
+        obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
+    FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
+        "Pose Mahalanobis d²={:.1f} (gate={:.1f})", d2, tagged.gate_dist);
+    if (d2 > tagged.gate_dist) {
+        FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+            "Pose rejected by Mahalanobis gate (d²={:.1f} > {:.1f})", d2, tagged.gate_dist);
+        return;
+    }
     eskf_.update<6>(obs.innovation, obs.H, R_eff, delay_step);
 }
 
-void EskfLocalizer::applyUpdate(const TwistMsg & msg, int delay_step)
+void EskfLocalizer::applyUpdate(const TaggedTwistObs & tagged, int delay_step)
 {
-    auto [lin_vel, ang_vel, R_raw] = extractObservation(msg);
+    auto [lin_vel, ang_vel, R_raw] = extractObservation(tagged.msg);
+    applyCovOverride(R_raw, tagged.cov_override);
 
-    const Eigen::Matrix<double, 6, 6> R_eff =
-        R_raw * static_cast<double>(params_.twist_smoothing_steps);
+    const int k = static_cast<int>(std::count(tagged.mask.begin(), tagged.mask.end(), true));
+    if (k == 0) return;
+
+    const Eigen::Matrix<double, 6, 6> R_eff = R_raw * static_cast<double>(tagged.smooth);
 
     const auto obs = NavigationModelD::observeVelocity(
         eskf_.getStateAtDelay(delay_step), lin_vel, ang_vel);
 
-    const Eigen::Matrix<double, 6, 6> S_mat =
-        obs.H * eskf_.getCovarianceAtDelay(delay_step) * obs.H.transpose() + R_eff;
-    const double d2 = static_cast<double>(
-        obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
+    if (k < 6) {
+        auto [H_m, innov_m, R_m] = maskObservation(
+            obs.H.template cast<double>(), obs.innovation.template cast<double>(),
+            R_eff, tagged.mask);
 
-    FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
-        "Twist Mahalanobis d²={:.1f} (gate={:.1f})", d2, params_.twist_gate_dist);
-
-    if (d2 > params_.twist_gate_dist) {
-        FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-            "Twist rejected by Mahalanobis gate (d²={:.1f} > {:.1f})",
-            d2, params_.twist_gate_dist);
+        const Eigen::MatrixXd S_mat = H_m * eskf_.getCovarianceAtDelay(delay_step).template cast<double>() * H_m.transpose() + R_m;
+        const double d2 = (innov_m.transpose() * S_mat.inverse() * innov_m)(0,0);
+        FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
+            "Twist Mahalanobis d²={:.1f} (gate={:.1f})", d2, tagged.gate_dist);
+        if (d2 > tagged.gate_dist) {
+            FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+                "Twist rejected by Mahalanobis gate (d²={:.1f} > {:.1f})", d2, tagged.gate_dist);
+            return;
+        }
+        eskf_.updateDynamic(innov_m, H_m, R_m, delay_step);
         return;
     }
 
+    const Eigen::Matrix<double, 6, 6> S_mat =
+        obs.H.template cast<double>() * eskf_.getCovarianceAtDelay(delay_step).template cast<double>() * obs.H.transpose().template cast<double>() + R_eff;
+    const double d2 = static_cast<double>(
+        obs.innovation.transpose() * S_mat.inverse() * obs.innovation);
+    FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
+        "Twist Mahalanobis d²={:.1f} (gate={:.1f})", d2, tagged.gate_dist);
+    if (d2 > tagged.gate_dist) {
+        FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+            "Twist rejected by Mahalanobis gate (d²={:.1f} > {:.1f})", d2, tagged.gate_dist);
+        return;
+    }
     eskf_.update<6>(obs.innovation, obs.H, R_eff, delay_step);
 }
 
@@ -467,7 +528,7 @@ void EskfLocalizer::applyUpdate(const RelativePoseObs & obs,
                                 int delay_step_to, int delay_step_from)
 {
     const Eigen::Matrix<double, 6, 6> R_eff =
-        obs.R_noise * static_cast<double>(params_.rel_pose_smoothing_steps);
+        obs.R_noise * static_cast<double>(obs.smooth);
 
     const NavStateD from_state = eskf_.getStateAtDelay(delay_step_from);
     const NavStateD to_state   = eskf_.getStateAtDelay(delay_step_to);
@@ -484,12 +545,12 @@ void EskfLocalizer::applyUpdate(const RelativePoseObs & obs,
         dual_obs.innovation.transpose() * S_approx.inverse() * dual_obs.innovation);
 
     FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
-        "RelPose Mahalanobis d²={:.1f} (gate={:.1f})", d2, params_.rel_pose_gate_dist);
+        "RelPose Mahalanobis d²={:.1f} (gate={:.1f})", d2, obs.gate_dist);
 
-    if (d2 > params_.rel_pose_gate_dist) {
+    if (d2 > obs.gate_dist) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
             "RelPose rejected by Mahalanobis gate (d²={:.1f} > {:.1f})",
-            d2, params_.rel_pose_gate_dist);
+            d2, obs.gate_dist);
         return;
     }
 
@@ -535,6 +596,49 @@ EskfLocalizer::extractObservation(const TwistMsg & msg)
         R(i, i) = std::max(R(i, i), 1e-6);
 
     return {lin, ang, R};
+}
+
+std::tuple<Eigen::MatrixXd, Eigen::MatrixXd, Eigen::MatrixXd>
+EskfLocalizer::maskObservation(const Eigen::Matrix<double, 6, 12>& H_full,
+                               const Eigen::Matrix<double, 6,  1>& innov_full,
+                               const Eigen::Matrix<double, 6,  6>& R_full,
+                               const std::array<bool, 6>&           config)
+{
+    const int k = static_cast<int>(std::count(config.begin(), config.end(), true));
+    Eigen::MatrixXd H_m(k, 12);
+    Eigen::MatrixXd innov_m(k, 1);
+    Eigen::MatrixXd R_m(k, k);
+    int row = 0;
+    for (int i = 0; i < 6; ++i) {
+        if (!config[static_cast<std::size_t>(i)]) continue;
+        H_m.row(row)     = H_full.row(i);
+        innov_m(row)     = innov_full(i);
+        R_m(row, row)    = R_full(i, i);
+        for (int j = 0, col = 0; j < 6; ++j) {
+            if (!config[static_cast<std::size_t>(j)]) continue;
+            R_m(row, col) = R_full(i, j);
+            ++col;
+        }
+        ++row;
+    }
+    return {H_m, innov_m, R_m};
+}
+
+void EskfLocalizer::applyPlanarConstraints()
+{
+    constexpr double kSigmaZ     = 1e-4;  // [m]   — tight z=0 constraint
+    constexpr double kSigmaRP    = 1e-3;  // [rad] — soft roll/pitch=0 constraint
+
+    const auto cons = NavigationModelD::observePlanarConstraints(eskf_.getState());
+
+    Eigen::Matrix<double, 3, 3> R_cons = Eigen::Matrix<double, 3, 3>::Zero();
+    R_cons(0, 0) = kSigmaZ  * kSigmaZ;
+    R_cons(1, 1) = kSigmaRP * kSigmaRP;
+    R_cons(2, 2) = kSigmaRP * kSigmaRP;
+
+    eskf_.updateDynamic(cons.innovation.template cast<double>(),
+                        cons.H.template cast<double>(),
+                        R_cons, 0);
 }
 
 NavStateD EskfLocalizer::force2DOutput(const NavStateD & s) const

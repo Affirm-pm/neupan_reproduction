@@ -82,12 +82,8 @@ fn::EskfLocalizer::TwistMsg makeTwist(double vx, double wz, const rclcpp::Time &
 finenav_localizer::Params makeConfig(int d)
 {
     finenav_localizer::Params p;
-    p.update_rate_hz        = kRateHz;
-    p.max_delay_sec         = static_cast<double>(d - 1) / kRateHz;  // → max_delay_step = d
-    p.pose_smoothing_steps  = 1;
-    p.twist_smoothing_steps = 1;
-    p.pose_gate_dist        = 1e9;
-    p.twist_gate_dist       = 1e9;
+    p.update_rate_hz = kRateHz;
+    p.max_delay_sec  = static_cast<double>(d - 1) / kRateHz;  // → max_delay_step = d
     return p;
 }
 

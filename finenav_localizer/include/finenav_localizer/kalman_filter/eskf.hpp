@@ -116,53 +116,32 @@ public:
                 const Eigen::Matrix<S, ObsDim, ObsDim> & R_noise,
                 int                                      delay_step = 0)
     {
-        // ── 1. Delayed KF update ────────────────────────────────────────────
         if (!tdkf_.updateWithDelay(innovation.template cast<double>(),
                                    H.template cast<double>(),
                                    R_noise.template cast<double>(),
                                    delay_step)) {
             return false;
         }
-
-        // ── 2. Extract error-state correction from the leading block ────────
-        const ErrorVec dx = tdkf_.getLatestX().template cast<S>();
-        const S dx_norm   = dx.norm();  // capture for debug log
-
-        // ── 3. Apply error corrections to ALL nominal states ────────────────
-        nominal_ = Model::applyErrorState(nominal_, dx);
-
-        const int n_hist = std::min(
-            tdkf_.maxDelayStep() - 1,
-            static_cast<int>(nominal_history_.size()));
-        for (int i = 0; i < n_hist; ++i) {
-            // TDKF slot index (i+1) ↔ nominal_history_[i]
-            const ErrorVec dx_i =
-                tdkf_.getXAtSlot(i + 1).template cast<S>();
-            // Only bother if the correction is non-trivial (avoids unnecessary
-            // SO3 exponentials when the cross-covariance contribution is zero).
-            if (dx_i.squaredNorm() > static_cast<S>(1e-20)) {
-                nominal_history_[static_cast<std::size_t>(i)] =
-                    Model::applyErrorState(nominal_history_[static_cast<std::size_t>(i)],
-                                          dx_i);
-            }
-        }
-
-        // ── 4. ESKF covariance projection on the leading block ──────────────
-        //  P(0,0) ← G · P(0,0) · Gᵀ   where G = I − 0.5·[δθ]×  (SO3 block)
-        //  Cross-correlation blocks P(i,0) / P(0,j) for i,j ≥ 1 are not
-        //  explicitly projected because G ≈ I for small δθ (second-order).
-        const PMat P_lead      = tdkf_.getLatestP().template cast<S>();
-        const PMat P_projected = Model::projectCovariance(P_lead, dx);
-        tdkf_.setLeadingCovariance(P_projected.template cast<double>());
-
-        // ── 5. Reset all error-state slots to zero (ESKF reset step) ────────
-        tdkf_.resetState();
+        const S dx_norm = finishCorrection();
 
         FINENAV_LOG_DEBUG(logger_,
             "update  ObsDim={}  delay_step={}  |innov|={:.4f}  |dx|={:.4f}",
             ObsDim, delay_step,
             static_cast<double>(innovation.norm()),
             static_cast<double>(dx_norm));
+        return true;
+    }
+
+    /// Runtime-dimension version (k rows selected from full 6-DOF observation).
+    bool updateDynamic(const Eigen::MatrixXd & innovation,
+                       const Eigen::MatrixXd & H,
+                       const Eigen::MatrixXd & R_noise,
+                       int                    delay_step = 0)
+    {
+        if (!tdkf_.updateWithDelay(innovation, H, R_noise, delay_step)) {
+            return false;
+        }
+        finishCorrection();
         return true;
     }
 
@@ -185,7 +164,6 @@ public:
                 int                                      delay_step_to,
                 int                                      delay_step_from)
     {
-        // ── 1. Dual-slot KF update ──────────────────────────────────────────
         if (!tdkf_.updateWithTwoSlots(
                 innovation.template cast<double>(),
                 H_to.template cast<double>(),   delay_step_to,
@@ -193,29 +171,7 @@ public:
                 R_noise.template cast<double>())) {
             return false;
         }
-
-        // ── 2–5. Identical post-update logic as the single-block update ─────
-        const ErrorVec dx     = tdkf_.getLatestX().template cast<S>();
-        const S        dx_norm = dx.norm();
-
-        nominal_ = Model::applyErrorState(nominal_, dx);
-
-        const int n_hist = std::min(
-            tdkf_.maxDelayStep() - 1,
-            static_cast<int>(nominal_history_.size()));
-        for (int i = 0; i < n_hist; ++i) {
-            const ErrorVec dx_i = tdkf_.getXAtSlot(i + 1).template cast<S>();
-            if (dx_i.squaredNorm() > static_cast<S>(1e-20)) {
-                nominal_history_[static_cast<std::size_t>(i)] =
-                    Model::applyErrorState(
-                        nominal_history_[static_cast<std::size_t>(i)], dx_i);
-            }
-        }
-
-        const PMat P_lead      = tdkf_.getLatestP().template cast<S>();
-        const PMat P_projected = Model::projectCovariance(P_lead, dx);
-        tdkf_.setLeadingCovariance(P_projected.template cast<double>());
-        tdkf_.resetState();
+        const S dx_norm = finishCorrection();
 
         FINENAV_LOG_DEBUG(logger_,
             "dual update  ObsDim={}  to={}  from={}  "
@@ -223,6 +179,22 @@ public:
             ObsDim, delay_step_to, delay_step_from,
             static_cast<double>(innovation.norm()),
             static_cast<double>(dx_norm));
+        return true;
+    }
+
+    /// Runtime-dimension dual-epoch version.
+    bool updateDynamicTwoSlots(const Eigen::MatrixXd & innovation,
+                               const Eigen::MatrixXd & H_to,
+                               const Eigen::MatrixXd & H_from,
+                               const Eigen::MatrixXd & R_noise,
+                               int                    delay_step_to,
+                               int                    delay_step_from)
+    {
+        if (!tdkf_.updateWithTwoSlots(innovation, H_to, delay_step_to,
+                                      H_from, delay_step_from, R_noise)) {
+            return false;
+        }
+        finishCorrection();
         return true;
     }
 
@@ -366,6 +338,33 @@ private:
         for (std::size_t i = 1u; i < accumulated_delay_times_.size(); ++i) {
             accumulated_delay_times_[i] += dt;
         }
+    }
+
+    /// Common post-update: extract dx, inject into nominal + history, project cov, reset.
+    /// @return |dx| of the leading correction (for optional debug logging by caller).
+    S finishCorrection()
+    {
+        const ErrorVec dx = tdkf_.getLatestX().template cast<S>();
+        nominal_ = Model::applyErrorState(nominal_, dx);
+
+        const int n_hist = std::min(
+            tdkf_.maxDelayStep() - 1,
+            static_cast<int>(nominal_history_.size()));
+        for (int i = 0; i < n_hist; ++i) {
+            const ErrorVec dx_i = tdkf_.getXAtSlot(i + 1).template cast<S>();
+            if (dx_i.squaredNorm() > static_cast<S>(1e-20)) {
+                nominal_history_[static_cast<std::size_t>(i)] =
+                    Model::applyErrorState(
+                        nominal_history_[static_cast<std::size_t>(i)], dx_i);
+            }
+        }
+
+        const PMat P_lead      = tdkf_.getLatestP().template cast<S>();
+        const PMat P_projected = Model::projectCovariance(P_lead, dx);
+        tdkf_.setLeadingCovariance(P_projected.template cast<double>());
+        tdkf_.resetState();
+
+        return dx.norm();
     }
 
     NavStateT               nominal_{};        ///< nominal (best-estimate) state
