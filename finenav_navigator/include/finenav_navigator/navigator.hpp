@@ -5,10 +5,15 @@
 #pragma once
 
 #include <rclcpp/rclcpp.hpp>
+#include <unordered_map>
 
 #include "finenav_core/robot_state/robot_state.hpp"
+#include "finenav_core/plan/control_pipeline_tree.hpp"
 #include "finenav_navigator/behavior_tree_engine.hpp"
+#include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 
+#include "finenav_util/ros/task_channel.hpp"
+#include "finenav_interfaces/msg/task_feedback.hpp"
 #include "finenav_util/ros/simple_action_server.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 #include "finenav_interfaces/action/navigate_to_pose.hpp"
@@ -44,10 +49,19 @@ public:
 
     std::string getActionName() const { return params_.action_name; }
 
+    // ── IPC + topology (public for FineNavEngine wiring) ────────────────────
+    finenav::util::TaskMaster&       master()       { return master_; } // TODO: 如果没人用，就去掉
+    finenav::core::ControlPipelineTree& pipe()       { return pipe_; }
+
+    void setChassisCommand(std::shared_ptr<IChassisCommand> cmd) {
+        chassis_cmd_ = std::move(cmd);
+    }
+
 private:
     void execute();
 
     // ── ROS 基础设施 ──────────────────────────────────────────────────────────
+    rclcpp::Node::SharedPtr                     parent_node_;
     rclcpp::Node::SharedPtr                     pnode_;
     std::unique_ptr<finenav::util::NodeThread>  pnode_thread_;
 
@@ -58,6 +72,14 @@ private:
 
     finenav_navigator::Params                         params_;
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;
+
+    finenav::util::TaskMaster         master_;
+    finenav::core::ControlPipelineTree pipe_;
+    using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
+
+    std::shared_ptr<IChassisCommand>   chassis_cmd_;
+    std::unordered_map<std::string, std::shared_ptr<const FeedbackMsg>> last_consumed_fb_;
+    rclcpp::Time last_feedback_time_{0, 0, RCL_ROS_TIME};
 
     BT::Tree tree_;
 };

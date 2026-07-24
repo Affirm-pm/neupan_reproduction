@@ -22,7 +22,8 @@ ControlLayer<Planners...>::ControlLayer(
     const std::string& layer_name,
     ExecutionPolicyVariant policy,
     RobotStateProvider* state_provider)
-    : node_(node), layer_name_(layer_name), policy_(std::move(policy)),
+    : IControlLayer(layer_name),
+      node_(node), layer_name_(layer_name), policy_(std::move(policy)),
       state_provider_(state_provider)
 {
     rclcpp::NodeOptions pnode_opts;
@@ -38,13 +39,6 @@ ControlLayer<Planners...>::ControlLayer(
         }
     }, policy_);
 
-    if (!layer_name.empty()) {
-        action_server_ = std::make_unique<ActionServer>(
-            pnode_,
-            layer_name,
-            std::bind(&ControlLayer::execute, this));
-    }
-
     std::apply([this](auto&... planners) {
         ([this](auto& p) {
             using T = std::decay_t<decltype(p)>;
@@ -52,6 +46,33 @@ ControlLayer<Planners...>::ControlLayer(
             param_keeper_.keep_alive(AlgoConfigurator<T>::load(pnode_, p));
         }(planners), ...);
     }, planners_instance_);
+
+    worker_ = std::make_unique<finenav::util::TaskWorker>(pnode_, layer_name_);
+
+    worker_thread_ = std::thread([this]() {
+        while (rclcpp::ok() && !stop_execution_) {
+            if (worker_->hasNewGoal()) {
+                execute();
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+}
+
+template <typename... Planners>
+ControlLayer<Planners...>::~ControlLayer() {
+    stop_execution_ = true;
+    if (worker_thread_.joinable()) worker_thread_.join();
+}
+
+// ==============================================================================
+// IControlLayer
+// ==============================================================================
+
+template <typename... Planners>
+void ControlLayer<Planners...>::connectFrom(const std::string& parent_topic) {
+    setInputTopic(parent_topic);
+    setupDataPorts();
 }
 
 // ==============================================================================
@@ -69,16 +90,13 @@ void ControlLayer<Planners...>::setOutputTopic(const std::string& topic) {
 }
 
 template <typename... Planners>
-std::string ControlLayer<Planners...>::getName() const {
-    return pnode_->get_name();
-}
-
-template <typename... Planners>
 void ControlLayer<Planners...>::setupDataPorts() {
     if (!input_topic_.empty()) {
-        plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::Trajectory>(
+        plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::TaskFeedback>(
             input_topic_, 10,
-            std::bind(&ControlLayer::PlanRefCallback, this, std::placeholders::_1));
+            [this](std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg) {
+                PlanRefCallback(std::move(msg));
+            });
     }
     if (!output_topic_.empty()) {
         plan_result_pub_ = pnode_->create_publisher<finenav_interfaces::msg::Trajectory>(output_topic_, 10);
@@ -91,10 +109,10 @@ void ControlLayer<Planners...>::setupDataPorts() {
 
 template <typename... Planners>
 void ControlLayer<Planners...>::PlanRefCallback(
-    const finenav_interfaces::msg::Trajectory& msg)
+    std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg)
 {
     std::lock_guard<std::mutex> lock(plan_ref_mutex_);
-    plan_ref_msg_ = msg;
+    plan_ref_msg_ = std::move(msg);  // zero-copy: shared_ptr pass-through
 }
 
 // ==============================================================================
@@ -140,7 +158,9 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     finenav_interfaces::msg::Trajectory current_ref_msg;
     {
         std::lock_guard<std::mutex> lock(plan_ref_mutex_);
-        current_ref_msg = plan_ref_msg_;
+        if (plan_ref_msg_) {
+            current_ref_msg = plan_ref_msg_->trajectory;  // copy only the trajectory
+        }
     }
 
     bool plan_success  = false;
@@ -226,15 +246,13 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
 
 template <typename... Planners>
 void ControlLayer<Planners...>::execute() {
-    FINENAV_LOG_INFO(pnode_->get_logger(), "New goal received — starting episode.");
-
-    auto goal          = action_server_->get_current_goal();
+    auto goal = worker_->latestGoal();
+    if (!goal) return;
     active_planner_id_ = goal->planner_id;
+    worker_->ackGoal();  // consume the goal
 
-    // Episode 边界：在任何 plan() 调用前重置规划器内部状态
+    FINENAV_LOG_INFO(pnode_->get_logger(), "New goal received — starting episode.");
     resetActivePlanner();
-
-    // 按策略执行
     std::visit([this](auto& p) { this->executeImpl(p); }, policy_);
 }
 
@@ -244,21 +262,22 @@ void ControlLayer<Planners...>::execute() {
 
 template <typename... Planners>
 void ControlLayer<Planners...>::executeImpl(SingleShotPolicy&) {
-    auto goal_pose = action_server_->get_current_goal()->goal;
+    auto goal = worker_->latestGoal();
+    if (!goal) return;
 
-    if (action_server_->is_cancel_requested()) {
-        FINENAV_LOG_INFO(pnode_->get_logger(), "SingleShot: goal cancelled before plan.");
-        action_server_->terminate_all();
+    if (worker_->shouldStop()) {
+        FINENAV_LOG_INFO(pnode_->get_logger(), "SingleShot: cancelled.");
+        worker_->publishFailed();
         return;
     }
 
-    if (!planOnce(goal_pose)) {
+    if (!planOnce(goal->goal)) {
         FINENAV_LOG_ERROR(pnode_->get_logger(), "SingleShot: plan() failed.");
-        action_server_->terminate_all();
+        worker_->publishFailed();
         return;
     }
 
-    action_server_->succeeded_current();
+    worker_->publishCompleted({});
     FINENAV_LOG_INFO(pnode_->get_logger(), "SingleShot: goal succeeded.");
 }
 
@@ -268,44 +287,44 @@ void ControlLayer<Planners...>::executeImpl(SingleShotPolicy&) {
 
 template <typename... Planners>
 void ControlLayer<Planners...>::executeImpl(ContinuousPolicy& policy) {
-    auto goal_pose = action_server_->get_current_goal()->goal;
+    auto goal = worker_->latestGoal();
+    if (!goal) return;
+    auto goal_pose = goal->goal;
     rclcpp::Rate rate(policy.frequency_hz);
 
     FINENAV_LOG_INFO(pnode_->get_logger(),
         "Tracking: control loop started at %.1f Hz.", policy.frequency_hz);
 
     while (rclcpp::ok()) {
-        if (action_server_->is_cancel_requested()) {
-            // BT 驱动的正常取消（如 IsGoalReached/IsStuck 触发），不代表错误。
+        if (worker_->shouldStop()) {
             FINENAV_LOG_INFO(pnode_->get_logger(),
                 "Tracking: goal cancelled by BT (normal termination).");
-            action_server_->terminate_all();
+            worker_->publishFailed();
             return;
         }
 
-        // 检测 BT 侧通过 shouldResendGoal() 发来的新 goal（进入 pending slot）。
-        // 原地切换 goal_pose，不调用 resetActivePlanner()，保留 MPPI 热启动状态。
-        if (action_server_->is_preempt_requested()) {
-            auto new_goal = action_server_->accept_pending_goal();
+        // Preemption: BT sent a new goal → switch in-loop, preserve warm-start
+        if (worker_->hasNewGoal()) {
+            auto new_goal = worker_->latestGoal();
             if (new_goal) {
                 goal_pose = new_goal->goal;
+                worker_->ackGoal();
                 FINENAV_LOG_INFO(pnode_->get_logger(),
-                    "Tracking: goal preempted in-loop (%.2f, %.2f) — MPPI warm-start preserved.",
+                    "Tracking: goal preempted in-loop (%.2f, %.2f) — warm-start preserved.",
                     goal_pose.position.x, goal_pose.position.y);
             }
         }
 
         if (!planOnce(goal_pose)) {
             FINENAV_LOG_ERROR(pnode_->get_logger(), "Tracking: plan() failed — aborting.");
-            action_server_->terminate_all();
+            worker_->publishFailed();
             return;
         }
-
 
         rate.sleep();
     }
 
-    action_server_->succeeded_current();
+    worker_->publishCompleted({});
     FINENAV_LOG_INFO(pnode_->get_logger(), "Tracking: goal succeeded.");
 }
 

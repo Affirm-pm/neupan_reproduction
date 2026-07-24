@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
+#include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
@@ -35,7 +36,7 @@ namespace finenav::core {
  *               optional window-tracking feature is enabled at compile time.
  */
 template <SpatialContainer MapT>
-class MapServer {
+class MapServer : public IMapResource {
 public:
 
     /// Re-exported from ObservationSource.

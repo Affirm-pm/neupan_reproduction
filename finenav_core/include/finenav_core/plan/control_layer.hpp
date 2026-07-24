@@ -5,13 +5,12 @@
 #pragma once
 
 #include <any>
+#include <atomic>
 #include <mutex>
+#include <thread>
 #include <variant>
 
 #include "rclcpp/rclcpp.hpp"
-#include "rclcpp_action/rclcpp_action.hpp"
-
-#include "finenav_interfaces/action/compute_plan.hpp"
 #include "finenav_interfaces/msg/trajectory.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/map/map_server.hpp"
@@ -21,7 +20,8 @@
 #include "finenav_core/plan/ros_conversions.hpp"
 #include "finenav_core/algo_configurator.hpp"
 #include "finenav_core/param_handle_keeper.hpp"
-#include "finenav_util/ros/simple_action_server.hpp"
+#include "finenav_core/plan/i_control_layer.hpp"
+#include "finenav_util/ros/task_channel.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 
 namespace finenav::core {
@@ -36,13 +36,11 @@ namespace finenav::core {
  * @tparam Planners  The planner types supported by this layer (one or more).
  */
 template <typename... Planners>
-class ControlLayer {
+class ControlLayer : public IControlLayer {
 public:
     // ── Types ──────────────────────────────────────────────────────────────
 
     using MapViewsVariant = GenerateMapViewsVariant<Planners...>;
-    using ActionT         = finenav_interfaces::action::ComputePlan;
-    using ActionServer    = finenav::util::SimpleActionServer<ActionT>;
     using PrePlanCallback = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback = std::function<bool(PostPlanContext&)>;
     using ExecutionPolicyVariant = std::variant<SingleShotPolicy, ContinuousPolicy>;
@@ -55,11 +53,16 @@ public:
         ExecutionPolicyVariant policy = SingleShotPolicy{},
         RobotStateProvider* state_provider = nullptr);
 
+    ~ControlLayer();
+
+    // ── IControlLayer ─────────────────────────────────────────────────────
+
+    void connectFrom(const std::string& parent_topic) override;
+
     // ── Configuration ──────────────────────────────────────────────────────
 
     void setInputTopic(const std::string& topic);
     void setOutputTopic(const std::string& topic);
-    std::string getName() const;
     void setupDataPorts();
 
     /**
@@ -93,7 +96,7 @@ private:
 
     // ── Methods ────────────────────────────────────────────────────────────
 
-    void PlanRefCallback(const finenav_interfaces::msg::Trajectory& msg);
+    void PlanRefCallback(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
 
     /// Episode entry-point invoked by the ROS action server.
 
@@ -122,10 +125,12 @@ private:
     std::unique_ptr<finenav::util::NodeThread> pnode_thread_;
 
     rclcpp::TimerBase::SharedPtr timer_;
-    std::unique_ptr<ActionServer> action_server_;
+    std::unique_ptr<finenav::util::TaskWorker> worker_;
+    std::thread worker_thread_;
+    std::atomic<bool> stop_execution_{false};
 
-    rclcpp::Subscription<finenav_interfaces::msg::Trajectory>::SharedPtr plan_ref_sub_;
-    rclcpp::Publisher<finenav_interfaces::msg::Trajectory>::SharedPtr    plan_result_pub_;
+    rclcpp::Subscription<finenav_interfaces::msg::TaskFeedback>::SharedPtr plan_ref_sub_;
+    rclcpp::Publisher<finenav_interfaces::msg::Trajectory>::SharedPtr      plan_result_pub_;
 
     // ── Planner state ──────────────────────────────────────────────────────
 
@@ -147,7 +152,7 @@ private:
     std::string output_topic_;
 
     std::mutex                       plan_ref_mutex_;
-    finenav_interfaces::msg::Trajectory plan_ref_msg_;
+    std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;
 
     ParamHandleKeeper param_keeper_;
 };

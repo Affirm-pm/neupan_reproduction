@@ -13,18 +13,16 @@ namespace finenav::navigator
 
 DynamicGoalFollower::DynamicGoalFollower(
   const std::string & name,
-  const BT::NodeConfig & conf,
-  const BT::RosNodeParams & params)
-: BT::DecoratorNode(name, conf),
-  node_(params.nh)
+  const BT::NodeConfig & conf)
+: BT::DecoratorNode(name, conf)
 {
 }
 
 void DynamicGoalFollower::initialize()
 {
-  auto node = node_.lock();
+  auto node = config().blackboard->get<rclcpp::Node::SharedPtr>("_node");
   if (!node) {
-    throw BT::RuntimeError("DynamicGoalFollower: ROS node has gone out of scope.");
+    throw BT::RuntimeError("DynamicGoalFollower: _node not found on blackboard.");
   }
 
   std::string topic_name = "/target_pose";
@@ -143,5 +141,8 @@ void DynamicGoalFollower::onTargetPose(
 
 }  // namespace finenav::navigator
 
-#include "finenav_navigator/thirdparty/plugins.hpp"
-CreateRosNodePlugin(finenav::navigator::DynamicGoalFollower, "DynamicGoalFollower");
+#include <behaviortree_cpp/bt_factory.h>
+
+BT_REGISTER_NODES(factory) {
+    factory.registerNodeType<finenav::navigator::DynamicGoalFollower>("DynamicGoalFollower");
+}

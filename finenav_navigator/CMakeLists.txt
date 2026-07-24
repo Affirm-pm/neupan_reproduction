@@ -44,6 +44,8 @@ generate_parameter_library(
 add_library(finenav_navigator SHARED
         src/naviagtor.cpp
         src/behavior_tree_engine.cpp
+        src/chassis_command/chassis_cmd_vel.cpp
+        src/chassis_command/chassis_cmd_vel_stamped.cpp
 )
 target_include_directories(finenav_navigator PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -58,13 +60,20 @@ target_link_libraries(finenav_navigator
 )
 
 # Action Plugins
+# StopPlan Plugin
+add_library(finenav_stop_plan_behavior SHARED
+        src/plugins/action/stop_plan.cpp
+)
+ament_target_dependencies(finenav_stop_plan_behavior
+        ${dependencies}
+)
+
 add_library(finenav_compute_plan_behavior SHARED
         src/plugins/action/compute_plan.cpp
 )
 ament_target_dependencies(finenav_compute_plan_behavior
         ${dependencies}
 )
-target_compile_definitions(finenav_compute_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Condition Plugins (pure BT nodes, no ROS params needed)
 add_library(finenav_navigator_conditions SHARED
@@ -75,14 +84,14 @@ ament_target_dependencies(finenav_navigator_conditions
 )
 target_compile_definitions(finenav_navigator_conditions PRIVATE BT_PLUGIN_EXPORT)
 
-# PublishZeroCmdVel Plugin
-add_library(finenav_publish_zero_cmd_vel_behavior SHARED
-        src/plugins/action/publish_zero_cmd_vel.cpp
+
+# StopChassisMotion Plugin
+add_library(finenav_stop_chassis_motion_behavior SHARED
+        src/plugins/action/stop_chassis_motion.cpp
 )
-ament_target_dependencies(finenav_publish_zero_cmd_vel_behavior
+ament_target_dependencies(finenav_stop_chassis_motion_behavior
         ${dependencies}
 )
-target_compile_definitions(finenav_publish_zero_cmd_vel_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Control & Decorator Plugins (pure BT nodes, no ROS params needed)
 add_library(finenav_recovery_node SHARED
@@ -116,20 +125,13 @@ add_library(finenav_dynamic_goal_follower SHARED
 ament_target_dependencies(finenav_dynamic_goal_follower
         ${dependencies}
 )
-target_compile_definitions(finenav_dynamic_goal_follower PRIVATE BT_PLUGIN_EXPORT)
 
 # Install
-install(TARGETS finenav_navigator navigator_params
+install(TARGETS finenav_stop_plan_behavior finenav_navigator navigator_params
         EXPORT ${PROJECT_NAME}Targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION lib/${PROJECT_NAME}
-)
-
-install(TARGETS finenav_compute_plan_behavior finenav_navigator_conditions finenav_publish_zero_cmd_vel_behavior finenav_recovery_node finenav_round_robin_node finenav_rate_controller finenav_dynamic_goal_follower
-        ARCHIVE DESTINATION lib/plugins
-        LIBRARY DESTINATION lib/plugins
-        RUNTIME DESTINATION bin
 )
 
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})

@@ -3,52 +3,71 @@
 // All rights reserved.
 
 #include "finenav_navigator/plugins/action/compute_plan.hpp"
-#include "finenav_util/common/log_macros.hpp"
+
+#include <geometry_msgs/msg/pose.hpp>
 
 namespace finenav::navigator {
 
-ComputePlanAction::ComputePlanAction(
-    const std::string& name,
-    const BT::NodeConfig& conf,
-    const BT::RosNodeParams& params)
-    : BT::RosActionNode<finenav_interfaces::action::ComputePlan>(name, conf, params) {}
+BT::NodeStatus ComputePlan::tick() {
+    using CmdMsg = finenav_interfaces::msg::TaskCmd;
+    using Status = finenav_interfaces::msg::TaskFeedback;
 
-bool ComputePlanAction::setGoal(Goal& goal) {
-    if (!getInput("goal", goal.goal) ||
-        !getInput("planner_id", goal.planner_id)) {
-        FINENAV_LOG_ERROR(logger(), "ComputePlan: missing input ports");
-        return false;
+    auto* master = config().blackboard->get<finenav::util::TaskMaster*>("_nav_task_master");
+    if (!master) return BT::NodeStatus::FAILURE;
+
+    std::string layer;
+    if (!getInput("layer", layer)) return BT::NodeStatus::FAILURE;
+
+    auto fb = master->feedback(layer);
+
+    geometry_msgs::msg::Pose goal;
+    std::string planner_id;
+    if (!getInput("goal", goal) || !getInput("planner_id", planner_id))
+        return BT::NodeStatus::FAILURE;
+
+    // 1. Already running — check completion / task change
+    if (fb && fb->status == Status::RUNNING) {
+        if (taskChanged(goal, planner_id)) {
+            CmdMsg cmd;
+            cmd.goal = goal;
+            cmd.planner_id = planner_id;
+            master->start(layer, std::move(cmd));
+            last_goal_ = goal;
+            last_planner_id_ = planner_id;
+        }
+        return BT::NodeStatus::RUNNING;
     }
-    // Record the goal being sent so shouldResendGoal() can detect changes.
-    last_sent_goal_ = goal.goal;
-    return true;
+
+    // 2. Terminal states
+    if (fb && fb->status == Status::COMPLETED) return BT::NodeStatus::SUCCESS;
+    if (fb && fb->status == Status::FAILED)    return BT::NodeStatus::FAILURE;
+
+    // 3. First tick — send goal
+    CmdMsg cmd;
+    cmd.goal = goal;
+    cmd.planner_id = planner_id;
+    master->start(layer, std::move(cmd));
+    last_goal_ = goal;
+    last_planner_id_ = planner_id;
+    return BT::NodeStatus::RUNNING;
 }
 
-bool ComputePlanAction::shouldResendGoal() {
-    geometry_msgs::msg::Pose current_goal;
-    if (!getInput("goal", current_goal)) {
-        return false;
-    }
-    if (!posesEqual(current_goal, last_sent_goal_)) {
-        FINENAV_LOG_INFO(logger(),
-            "ComputePlan: goal changed ({:.2f},{:.2f})->({:.2f},{:.2f}), resending.",
-            last_sent_goal_.position.x, last_sent_goal_.position.y,
-            current_goal.position.x,   current_goal.position.y); // TODO： 只输出2维变化，感觉也不太合理
-        return true;
-    }
-    return false;
+bool ComputePlan::taskChanged(const geometry_msgs::msg::Pose& goal,
+                               const std::string& planner_id) const {
+    if (planner_id != last_planner_id_) return true;
+    return goal.position.x != last_goal_.position.x || // TODO： 会不会有浮点数不安全？
+           goal.position.y != last_goal_.position.y ||
+           goal.position.z != last_goal_.position.z ||
+           goal.orientation.x != last_goal_.orientation.x ||
+           goal.orientation.y != last_goal_.orientation.y ||
+           goal.orientation.z != last_goal_.orientation.z ||
+           goal.orientation.w != last_goal_.orientation.w;
 }
 
-BT::NodeStatus ComputePlanAction::onResultReceived(const WrappedResult& result) {
-    if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
-        std::cout << "ComputePlanAction of "
-                  << rclcpp_action::to_string(result.goal_id) << " succeeded." << std::endl;
-        return BT::NodeStatus::SUCCESS;
-    }
-    return BT::NodeStatus::FAILURE;
-}
+}  // namespace finenav::navigator
 
-}
+#include <behaviortree_cpp/bt_factory.h>
 
-#include "finenav_navigator/thirdparty/plugins.hpp"
-CreateRosNodePlugin(finenav::navigator::ComputePlanAction, "ComputePlan");
+BT_REGISTER_NODES(factory) {
+    factory.registerNodeType<finenav::navigator::ComputePlan>("ComputePlan");
+}

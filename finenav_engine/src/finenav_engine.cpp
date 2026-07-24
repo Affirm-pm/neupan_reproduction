@@ -31,9 +31,7 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
 
     goal_sub_ = node_->create_subscription<geometry_msgs::msg::PoseStamped>(
         "/goal_pose", 10,
-        [this](const geometry_msgs::msg::PoseStamped& msg) {
-            navigateTo(msg.pose);
-        });
+        [this](const geometry_msgs::msg::PoseStamped& msg) { navigateTo(msg.pose); });
     FINENAV_LOG_INFO(node_->get_logger(), "Goal pose subscriber ready (/goal_pose).");
 
     FINENAV_LOG_INFO(node_->get_logger(), "All singletons initialized.");
@@ -56,14 +54,46 @@ bool FineNavEngine::removeControlLayer(const std::string& name) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  connectEdge (private)
+// ══════════════════════════════════════════════════════════════════════════════
+
+void FineNavEngine::connectEdge(const std::string& from,
+                                std::shared_ptr<finenav::core::IControlLayer> to) {
+    to->connectFrom(finenav::util::TaskChannel::feedbackTopic(from));
+    navigator_->pipe().addEdge(from, to->layerName());
+}
+
+void FineNavEngine::connectEdge(const std::string& from, const std::string& to) {
+    auto it = layers_.find(to);
+    if (it == layers_.end()) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "wire: layer '{}' not found.", to);
+        return;
+    }
+    connectEdge(from, it->second);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  wire (public, fluent)
+// ══════════════════════════════════════════════════════════════════════════════
+
+void FineNavEngine::wireControlPipeline(std::initializer_list<ControlPipeEdge> edges) {
+    for (auto& edge : edges) {
+        for (size_t i = 1; i < edge.chain.size(); ++i) {
+            connectEdge(edge.chain[i - 1], edge.chain[i]);
+        }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  Navigation control
 // ══════════════════════════════════════════════════════════════════════════════
 
 void FineNavEngine::navigateTo(const geometry_msgs::msg::Pose& goal,
-                                const std::string& bt_id) {
+                               const std::string& bt_id) {
     if (!nav_client_->wait_for_action_server(std::chrono::seconds(1))) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "Navigator action server not available — cannot start navigation.");
+            "Navigator action server unavailable.");
         return;
     }
 
