@@ -5,6 +5,7 @@
 #pragma once
 
 #include <any>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -21,24 +22,11 @@
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/navigator.hpp"
+#include "finenav_engine/detail/pipe_syntax.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
 
-/**
- * @brief FineNavEngine — factory + connector for the navigation framework.
- *
- * ## Usage flow
- * 1. createMapServer<MapT>(name)        — engine stores the MapServer internally
- * 2. createControlLayer<PlannersT>(name) — engine stores the ControlLayer internally
- * 3. map_server    = getMapServer<MapT>(name)       — retrieve typed handle
- * 4. control_layer = getControlLayer<PlannersT>(name)
- * 5. control_layer->bind_map_view(map_server, ...) — user connects map to layer
- * 6. connectPipeline(p, control_layers...)         — engine wires the pipeline topics
- *
- * The engine owns all handles.  The user retrieves them by name + type at the
- * call site.  FineNavEngine itself is non-template — pass it by pointer.
- */
 class FineNavEngine {
 public:
     // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -61,111 +49,57 @@ public:
 
     // ── Factory: map ──────────────────────────────────────────────────────
 
-    /**
-     * @brief Create a named MapServer and store it internally.
-     * @tparam MapT  Must satisfy SpatialContainer.
-     */
     template <typename MapT>
-    void createMapServer(const std::string& name);
+    std::shared_ptr<finenav::core::MapServer<MapT>> createMapServer(const std::string& name);
 
-    /**
-     * @brief Retrieve a previously-created MapServer by name and type.
-     * @return nullptr if not found or type mismatch.
-     */
     template <typename MapT>
-    std::shared_ptr<finenav::core::MapServer<MapT>> getMapServer(const std::string& name);
+    [[nodiscard]] std::shared_ptr<finenav::core::MapServer<MapT>> getMapServer(const std::string& name);
 
-    /**
-     * @brief Remove a MapServer from the engine.  The handle (and map) is
-     *        destroyed once all external shared_ptrs to it are released.
-     * @return true if a map with the given name existed.
-     */
     bool removeMapServer(const std::string& name);
 
     // ── Factory: layer ────────────────────────────────────────────────────
 
-    /**
-     * @brief Create a named ControlLayer and store it internally.
-     * @tparam Planners  The planner types (one or more) supported by this layer.
-     * @tparam PolicyT   SingleShotPolicy or ContinuousPolicy (deduced from argument).
-     */
     template <typename... Planners, typename PolicyT = finenav::core::SingleShotPolicy>
-    void createControlLayer(const std::string& name, PolicyT policy = {});
+    std::shared_ptr<finenav::core::ControlLayer<Planners...>>
+    createLayer(const std::string& name, PolicyT policy = {});
 
-    /**
-     * @brief Retrieve a previously-created ControlLayer by name and type.
-     * @return nullptr if not found or type mismatch.
-     */
     template <typename... Planners>
-    std::shared_ptr<finenav::core::ControlLayer<Planners...>> getControlLayer(const std::string& name);
+    [[nodiscard]] std::shared_ptr<finenav::core::ControlLayer<Planners...>>
+    getControlLayer(const std::string& name);
 
-    /**
-     * @brief Remove a ControlLayer from the engine.  The handle (and layer) is
-     *        destroyed once all external shared_ptrs to it are released.
-     * @return true if a layer with the given name existed.
-     */
     bool removeControlLayer(const std::string& name);
 
     // ── Connector ─────────────────────────────────────────────────────────
 
-    struct Pipeline {
-        std::string input;
-        std::string output;
-    };
+    /// Wire multiple paths into a tree.  Each path is a chain built with >>.
+    /// @code
+    ///   engine->wire({
+    ///       _root >> rte >> det >> mppi,
+    ///              rte >> rot
+    ///   });
+    /// @endcode
+    void wireControlPipeline(std::initializer_list<ControlPipeEdge> edges);
 
-    /**
-     * @brief Wire one or more ControlLayers into a sequential pipeline.
-     *        The first layer subscribes to @p p.input; the last publishes
-     *        on @p p.output.  Intermediate topics are auto-generated.
-     */
-    template <typename... LayersT>
-    void connectPipeline(const Pipeline& p, std::shared_ptr<LayersT>... layers);
+    // ── Navigation control ────────────────────────────────────────────────
 
-    // ── Connector: tree ───────────────────────────────────────────────────
+    void navigateTo(const geometry_msgs::msg::Pose& goal,
+                    const std::string& bt_id = "");
+    void cancelNavigation();
 
-    /// Add a pipeline edge.  @p to subscribes to @p from's feedback topic.
+private:
     void connectEdge(const std::string& from, const std::string& to);
     void connectEdge(const std::string& from,
                      std::shared_ptr<finenav::core::IControlLayer> to);
 
-    // ── Configuration ──────────────────────────────────────────────────────
-
-    /// Load control_pipeline tree from JSON.  Layers must already exist.
-    void loadControlPipeline(const std::string& json_path);
-
-    // ── Navigation control ──────────────────────────────────────────────────
-
-    /**
-     * @brief Start navigating to a goal pose.
-     * @param goal   Target pose in the world frame.
-     * @param bt_id  Behavior tree identifier (uses default BT if empty).
-     */
-    void navigateTo(const geometry_msgs::msg::Pose& goal,
-                    const std::string& bt_id = "");
-
-    /**
-     * @brief Cancel the current navigation task.
-     *        Planners stop, but localizer / map updates continue.
-     */
-    void cancelNavigation();
-
-private:
-    template <typename FirstT, typename SecondT, typename... RestT>
-    void wire_layers(std::shared_ptr<FirstT> first,
-                     std::shared_ptr<SecondT> second,
-                     std::shared_ptr<RestT>... rest);
-
     std::shared_ptr<rclcpp::Node> node_;
 
-    // ── Handle storage (engine owns all user-facing handles) ───────────────
     std::unordered_map<std::string, std::any> maps_;
     std::unordered_map<std::string, std::shared_ptr<finenav::core::IControlLayer>> layers_;
 
-    // ── Engine-level singletons ────────────────────────────────────────────
     std::unique_ptr<finenav::localizer::FineNavLocalizer> localizer_;
-    std::unique_ptr<finenav::navigator::BtNavigator>        navigator_;
+    std::unique_ptr<finenav::navigator::BtNavigator>      navigator_;
     rclcpp_action::Client<finenav_interfaces::action::NavigateToPose>::SharedPtr nav_client_;
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr                goal_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr             goal_sub_;
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -173,10 +107,12 @@ private:
 // ══════════════════════════════════════════════════════════════════════════════
 
 template <typename MapT>
-void FineNavEngine::createMapServer(const std::string& name) {
+std::shared_ptr<finenav::core::MapServer<MapT>>
+FineNavEngine::createMapServer(const std::string& name) {
     auto server = std::make_shared<finenav::core::MapServer<MapT>>(
         node_, name, localizer_.get());
-    maps_[name] = std::any(std::move(server));
+    maps_[name] = std::any(server);
+    return server;
 }
 
 template <typename MapT>
@@ -187,7 +123,7 @@ std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(cons
         return std::any_cast<std::shared_ptr<finenav::core::MapServer<MapT>>>(it->second);
     } catch (const std::bad_any_cast&) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "getMapServer('{}'): type mismatch — stored MapT differs from requested type.", name);
+            "getMapServer('{}'): type mismatch.", name);
         return nullptr;
     }
 }
@@ -197,11 +133,13 @@ std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(cons
 // ══════════════════════════════════════════════════════════════════════════════
 
 template <typename... Planners, typename PolicyT>
-void FineNavEngine::createControlLayer(const std::string& name, PolicyT policy) {
+std::shared_ptr<finenav::core::ControlLayer<Planners...>>
+FineNavEngine::createLayer(const std::string& name, PolicyT policy) {
     navigator_->master().manageLayer(name);
     auto layer = std::make_shared<finenav::core::ControlLayer<Planners...>>(
         node_, name, std::move(policy), localizer_.get());
     layers_[name] = layer;
+    return layer;
 }
 
 template <typename... Planners>
@@ -209,49 +147,7 @@ std::shared_ptr<finenav::core::ControlLayer<Planners...>>
 FineNavEngine::getControlLayer(const std::string& name) {
     auto it = layers_.find(name);
     if (it == layers_.end()) return nullptr;
-    try {
-        return std::any_cast<std::shared_ptr<finenav::core::ControlLayer<Planners...>>>(
-            it->second);
-    } catch (const std::bad_any_cast&) {
-        FINENAV_LOG_ERROR(node_->get_logger(),
-            "getControlLayer('{}'): type mismatch — stored planner types differ from requested.", name);
-        return nullptr;
-    }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  Connector
-// ══════════════════════════════════════════════════════════════════════════════
-
-template <typename... LayersT>
-void FineNavEngine::connectPipeline(const Pipeline& p,
-                            std::shared_ptr<LayersT>... layers) {
-    static_assert(sizeof...(layers) >= 1, "connectPipeline() requires at least one layer!");
-    auto layer_tuple = std::make_tuple(layers...);
-
-    std::get<0>(layer_tuple)->setInputTopic(p.input);
-
-    constexpr auto last_idx = sizeof...(layers) - 1;
-    std::get<last_idx>(layer_tuple)->setOutputTopic(p.output);
-
-    if constexpr (sizeof...(layers) >= 2) {
-        wire_layers(layers...);
-    }
-
-    (layers->setupDataPorts(), ...);
-}
-
-template <typename FirstT, typename SecondT, typename... RestT>
-void FineNavEngine::wire_layers(std::shared_ptr<FirstT> first,
-                                std::shared_ptr<SecondT> second,
-                                std::shared_ptr<RestT>... rest) {
-    std::string internal_topic = first->layerName() + "_to_" + second->layerName();
-    FINENAV_LOG_INFO(node_->get_logger(),
-        "Connecting {} -> {} via topic: {}",
-        first->layerName(), second->layerName(), internal_topic);
-    first->setOutputTopic(internal_topic);
-    second->setInputTopic(internal_topic);
-    wire_layers(second, rest...);
+    return std::dynamic_pointer_cast<finenav::core::ControlLayer<Planners...>>(it->second);
 }
 
 }  // namespace finenav

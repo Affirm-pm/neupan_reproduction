@@ -40,34 +40,21 @@ int main(int argc, char** argv) {
     auto node = rclcpp::Node::make_shared("hello_finenav");
     auto engine = std::make_shared<finenav::FineNavEngine>(node);
 
-    // 1. Create MapServer — engine stores internally
-    engine->createMapServer<DummyMap>("my_map");
+    // 1. Create MapServer
+    auto map_server = engine->createMapServer<DummyMap>("my_map");
 
-    // 2. Create ControlLayer — engine stores internally
-    engine->createControlLayer<DummyPlanner>("my_layer", core::ContinuousPolicy{10.0});
-
-    auto map_server    = engine->getMapServer<DummyMap>("my_map");
-    auto control_layer = engine->getControlLayer<DummyPlanner>("my_layer"); // TODO: 暴露了太多东西
+    // 2. Create ControlLayer
+    auto layer = engine->createLayer<DummyPlanner>("my_layer", core::ContinuousPolicy{10.0});
 
     // 3. Bind map to layer
-    control_layer->bind_map_view(map_server, [node](const DummyMap& map_data, const std::string& active_planner) {
-            RCLCPP_INFO(node->get_logger(), "Binding map to planner: %s", active_planner.c_str());
+    layer->bind_map_view(map_server, [](const DummyMap& map_data, const std::string&) {
             return std::make_shared<ASimpleMapView>(map_data);
     });
 
-    // 5. Post-plan: publish cmd_vel // TODO： 不止支持cmd_vel
-    auto cmd_vel_pub = node->create_publisher<geometry_msgs::msg::Twist>(
-        "/cmd_vel", 10);
-    control_layer->set_on_post_plan(
-        [cmd_vel_pub](finenav::core::PostPlanContext& ctx) -> bool {
-            if (ctx.is_success && !ctx.result_traj.twists.empty()) {
-                cmd_vel_pub->publish(ctx.result_traj.twists[0]);
-            }
-            return ctx.is_success;
-        });
-
-    // 6. Connect pipeline
-    engine->connectPipeline({"line_path", "plan_result"}, control_layer);
+    // 4. Wire tree
+    engine->wireControlPipeline({
+        _root >> layer
+    });
 
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");
     rclcpp::spin(node);

@@ -72,11 +72,6 @@ void BtNavigator::execute()
     blackboard->set("_nav_task_master", &master_);
     blackboard->set("_chassis_cmd", chassis_cmd_.get());
 
-    // ── _root ref_traj publisher (first layer subscribes via connectEdge) ──
-    using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
-    auto root_pub = pnode_->create_publisher<FeedbackMsg>(
-        finenav::util::TaskChannel::feedbackTopic("_root"), 10);
-
     auto episode_start = pnode_->now();
     rclcpp::WallRate loop_rate(params_.tick_frequency);
     FINENAV_LOG_INFO(pnode_->get_logger(),

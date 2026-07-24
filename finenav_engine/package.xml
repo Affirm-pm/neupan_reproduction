@@ -15,7 +15,7 @@
     <depend>finenav_motion_decorator</depend>
     <depend>finenav_interfaces</depend>
     <depend>finenav_util</depend>
-    <depend>nlohmann_json</depend>
+
 
     <test_depend>ament_cmake_gtest</test_depend>
 
