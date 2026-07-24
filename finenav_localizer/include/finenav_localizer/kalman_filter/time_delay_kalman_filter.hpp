@@ -4,60 +4,55 @@
 
 #pragma once
 
-#include "finenav_localizer/kalman_filter/kalman_filter.hpp"
-
-#include <iostream>
+#include <algorithm>
 #include <utility>
+
+#include <Eigen/LU>
 
 namespace finenav::localizer {
 
-// ============================================================================
-//  TimeDelayKalmanFilter  —  KF with state-expansion for delayed observations
-//
-//  Extends KalmanFilter by maintaining an augmented state vector:
-//
-//      x_ex = [ x_k | x_{k-1} | ... | x_{k-d+1} ]   (dim_x * max_delay_step)
-//
-//  The expanded state transition matrix has the structure:
-//
-//      A_ex = [ A   0   0 … ]      Q_ex = [ Q   0   0 … ]
-//             [ I   0   0 … ]             [ 0   0   0 … ]
-//             [ 0   I   0 … ]             [ 0   0   0 … ]
-//             [ …   …   … … ]             [ …   …   … … ]
-//
-//  An observation arriving with delay_step d is associated with x_{k-d} and
-//  uses the measurement matrix:
-//
-//      C_ex = [ 0 | … | C | … | 0 ]   (C at column block d)
-//
-//  This lets the standard KF update simultaneously correct x_k (via the
-//  cross-covariance blocks) and x_{k-d} (directly).
-//
-//  ── Usage ─────────────────────────────────────────────────────────────────
-//  1. Call init(x0, P0, max_delay_step) once.
-//  2. Every filter tick:  predictWithDelay(x_next, F, Q)
-//  3. For each observation with known delay_step:
-//       updateWithDelay(y, C, R, delay_step)
-//  4. getLatestX() / getLatestP() return the leading (current-time) block.
-//  5. After ESKF error-state reset, call resetState() to zero x_ex.
-//  6. After ESKF covariance projection, call setLeadingCovariance(P_proj).
-// ============================================================================
-class TimeDelayKalmanFilter : public KalmanFilter {
+/**
+ * @brief TimeDelayKalmanFilter  —  KF with state augmentation for delayed observations
+ * @details
+ *      Maintains an augmented state vector that stacks the
+ *      current state together with a bounded history of past states:
+ * @code
+ *          x_ex = [ x_k | x_{k-1} | … | x_{k-d+1} ]   (dim_x · max_delay_step)
+ * @endcode
+ *      The augmented transition / process-noise matrices have the structure:
+ * @code
+ *          A_ex = [ A   0   0 … ]      Q_ex = [ Q   0   0 … ]
+ *                 [ I   0   0 … ]             [ 0   0   0 … ]
+ *                 [ 0   I   0 … ]             [ 0   0   0 … ]
+ *                 [ …   …   … … ]             [ …   …   … … ]
+ * @endcode
+ *      An observation arriving with delay_step d is associated with x_{k-d} through the
+ *      measurement matrix
+ * @code
+ *      C_ex = [ 0 | … | C | … | 0 ]  (C at column block d).
+ * @endcode
+ *      The standard KF update then corrects x_{k-d} directly and x_k, x_{k-1}, … indirectly
+ *      via the cross-covariance blocks.
+ *
+ */
+class TimeDelayKalmanFilter {
 public:
     TimeDelayKalmanFilter() = default;
 
-    // ---- Initialization ---------------------------------------------------
-
-    /// @param x              Initial state vector        (dim_x × 1)
-    /// @param P0             Initial covariance           (dim_x × dim_x)
-    /// @param max_delay_step Maximum number of delay slots (≥ 1)
-    ///
-    /// All delay slots are seeded with the same (x, P0) so that the filter
-    /// is consistent from the first tick.
-    void init(const Eigen::MatrixXd & x,
+    /**
+     * @brief Initialize every delay slot with the same state and covariance.
+     * @param x initial state vector          (dim_x × 1)
+     * @param P0 initial covariance matrix    (dim_x × dim_x)
+     * @param max_delay_step maximum number of delay slots (≥ 1)
+     * @return True if success; false if x/P0 is empty or max_delay_step < 1.
+     * @note Seeding all slots with (x, P0) keeps the filter consistent from the first tick.
+     */
+    bool init(const Eigen::MatrixXd & x,
               const Eigen::MatrixXd & P0,
               int                    max_delay_step)
     {
+        if (x.size() == 0 || P0.size() == 0 || max_delay_step < 1) { return false; }
+
         max_delay_step_ = max_delay_step;
         dim_x_          = static_cast<int>(x.rows());
         dim_x_ex_       = dim_x_ * max_delay_step_;
@@ -70,125 +65,138 @@ public:
             x_.block(i * dim_x_, 0,          dim_x_, 1)      = x;
             P_.block(i * dim_x_, i * dim_x_, dim_x_, dim_x_) = P0;
         }
+        return true;
     }
 
-    // ---- Accessors for the leading (current-time) block ------------------
+    /**
+     * @brief Read the leading (current-time) block of the augmented state.
+     * @return x_k  (dim_x × 1)
+     */
     [[nodiscard]] Eigen::MatrixXd getLatestX() const
     {
         return x_.block(0, 0, dim_x_, 1);
     }
 
+    /**
+     * @brief Read the leading (current-time) block of the augmented covariance.
+     * @return P(0,0)  (dim_x × dim_x)
+     */
     [[nodiscard]] Eigen::MatrixXd getLatestP() const
     {
         return P_.block(0, 0, dim_x_, dim_x_);
     }
 
-    // ---- ESKF helpers ----------------------------------------------------
-
-    /// Zero out the entire extended error-state vector.
-    /// Called after ESKF applies the error correction to the nominal state.
+    /**
+     * @brief Zero out the entire augmented error-state vector.
+     * @note Called after the ESKF applies the error correction to the nominal state.
+     */
     void resetState()
     {
         x_.setZero();
     }
 
-    /// Overwrite the leading (0,0) covariance block only.
-    /// Called after ESKF covariance projection (P ← G·P·Gᵀ).
+    /**
+     * @brief Overwrite only the leading (0,0) covariance block.
+     * @param P_new projected leading covariance  (dim_x × dim_x)
+     * @note Called after the ESKF covariance projection P ← G·P·Gᵀ.
+     */
     void setLeadingCovariance(const Eigen::MatrixXd & P_new)
     {
         P_.block(0, 0, dim_x_, dim_x_) = P_new;
     }
 
-    /// Read the error-state vector at a specific delay slot.
-    /// slot 0 = current time (same as getLatestX()), slot d = d ticks ago.
+    /**
+     * @brief Read the error-state vector at a specific delay slot.
+     * @param slot delay slot (0 = current time, d = d ticks ago)
+     * @return error-state block at the slot  (dim_x × 1)
+     */
     [[nodiscard]] Eigen::MatrixXd getXAtSlot(int slot) const
     {
         return x_.block(slot * dim_x_, 0, dim_x_, 1);
     }
 
-    /// Read the covariance block at a specific delay slot.
-    /// slot 0 = current time (same as getLatestP()), slot d = d ticks ago.
-    /// Returns P(d,d) — the covariance of the error-state at that delay slot.
-    /// Clamps to the last valid slot if slot >= max_delay_step_.
+    /**
+     * @brief Read the covariance block P(d,d) at a specific delay slot.
+     * @param slot delay slot (0 = current time, d = d ticks ago)
+     * @return covariance of the error-state at that slot  (dim_x × dim_x)
+     * @note Clamps to the last valid slot when slot ≥ max_delay_step.
+     */
     [[nodiscard]] Eigen::MatrixXd getPAtSlot(int slot) const
     {
         const int s = std::min(slot, max_delay_step_ - 1);
         return P_.block(s * dim_x_, s * dim_x_, dim_x_, dim_x_);
     }
 
-    // ---- Time-delay predict ----------------------------------------------
-
-    /// Slide all slots one step forward in time, then update covariance.
-    ///
-    /// Extended state slide:
-    ///   x_ex ← [ x_next | x_k | x_{k-1} | … | x_{k-d+2} ]
-    ///           (oldest slot x_{k-d+1} is discarded)
-    ///
-    /// Extended covariance (structured propagation, see class comment):
-    ///   P(0,0) ← A·P(0,0)·Aᵀ + Q
-    ///   P(0,j) ← A·P(0,j-1)     for j ≥ 1
-    ///   P(i,0) ← P(i-1,0)·Aᵀ   for i ≥ 1
-    ///   P(i,j) ← P(i-1,j-1)     for i,j ≥ 1
-    ///
-    /// @param x_next  Next nominal error state (zero in ESKF, since error
-    ///                state is always reset after every update).
-    /// @param A       Error-state transition Jacobian F  (dim_x × dim_x).
-    /// @param Q       Process-noise covariance           (dim_x × dim_x).
+    /**
+     * @brief Slide all delay slots one step forward in time, then propagate the covariance.
+     * @details
+     * State slide (the oldest slot x_{k-d+1} is discarded):
+     * @code
+     *         x_ex ← [ x_next | x_k | x_{k-1} | … | x_{k-d+2} ]
+     * @endcode
+     *
+     * Structured covariance propagation (block notation [i,j]):
+     * @code
+     *         P(0,0) ← A·P(0,0)·Aᵀ + Q
+     *         P(0,j) ← A·P(0,j-1)      for j ≥ 1
+     *         P(i,0) ← P(i-1,0)·Aᵀ    for i ≥ 1
+     *         P(i,j) ← P(i-1,j-1)      for i,j ≥ 1
+     * @endcode
+     * @param x_next next current-time state
+     * @param A error-state transition Jacobian    (dim_x × dim_x)
+     * @param Q process-noise covariance           (dim_x × dim_x)
+     */
     bool predictWithDelay(const Eigen::MatrixXd & x_next,
                           const Eigen::MatrixXd & A,
                           const Eigen::MatrixXd & Q)
     {
         const int d_dim_x = dim_x_ex_ - dim_x_;  // (max_delay_step - 1) * dim_x
 
-        // ── Slide state vector ──────────────────────────────────────────────
-        // x_tmp = [x_next; x_[0 .. d_dim_x-1]]
-        Eigen::MatrixXd x_tmp = Eigen::MatrixXd::Zero(dim_x_ex_, 1);
-        x_tmp.block(0,      0, dim_x_,  1) = x_next;
-        x_tmp.block(dim_x_, 0, d_dim_x, 1) = x_.block(0, 0, d_dim_x, 1);
-        x_ = std::move(x_tmp);
 
-        // ── Update extended covariance ─────────────────────────────────────
-        //
-        //  Symbolically (using block notation [i,j]):
-        //    P_tmp[0,0] = A * P[0,0] * A' + Q
-        //    P_tmp[0, 1..] = A * P[0, 0..d-2]    (first row of new cross-cov)
-        //    P_tmp[1.., 0] = P[0..d-2, 0] * A'   (first col of new cross-cov)
-        //    P_tmp[1.., 1..] = P[0..d-2, 0..d-2] (inner block = old leading sub)
-        //
-        Eigen::MatrixXd P_tmp = Eigen::MatrixXd::Zero(dim_x_ex_, dim_x_ex_);
+        // ── Prevent heap allocate overhead per tick with resued scratch buffers ─────
+        // Slide state vector: x_scratch = [x_next; x_[0 .. d_dim_x-1]]
+        x_scratch_.resize(dim_x_ex_, 1);
+        x_scratch_.block(0,      0, dim_x_,  1) = x_next;
+        x_scratch_.block(dim_x_, 0, d_dim_x, 1) = x_.block(0, 0, d_dim_x, 1);
+        x_.swap(x_scratch_);
 
-        P_tmp.block(0,      0,      dim_x_,  dim_x_)  =
+        // ── Propagate extended covariance (block notation [i,j]) ────────────
+        //    [0,0]     = A·P[0,0]·Aᵀ + Q
+        //    [0, 1..]  = A·P[0, 0..d-2]        (first row of new cross-cov)
+        //    [1.., 0]  = P[0..d-2, 0]·Aᵀ       (first col of new cross-cov)
+        //    [1.., 1..] = P[0..d-2, 0..d-2]    (inner block = old leading sub)
+        P_scratch_.resize(dim_x_ex_, dim_x_ex_);
+
+        P_scratch_.block(0,      0,      dim_x_,  dim_x_)  =
             A * P_.block(0, 0, dim_x_, dim_x_) * A.transpose() + Q;
 
-        P_tmp.block(0,      dim_x_, dim_x_,  d_dim_x) =
+        P_scratch_.block(0,      dim_x_, dim_x_,  d_dim_x) =
             A * P_.block(0, 0, dim_x_, d_dim_x);
 
-        P_tmp.block(dim_x_, 0,      d_dim_x, dim_x_)  =
+        P_scratch_.block(dim_x_, 0,      d_dim_x, dim_x_)  =
             P_.block(0, 0, d_dim_x, dim_x_) * A.transpose();
 
-        P_tmp.block(dim_x_, dim_x_, d_dim_x, d_dim_x) =
+        P_scratch_.block(dim_x_, dim_x_, d_dim_x, d_dim_x) =
             P_.block(0, 0, d_dim_x, d_dim_x);
 
-        P_ = std::move(P_tmp);
+        P_.swap(P_scratch_);
         return true;
     }
 
-    // ---- Dual-slot measurement update ------------------------------------
-
-    /// Apply a measurement whose observation function spans two state epochs:
-    ///   C_slot_a acts on error state at slot_a  (e.g. the "to"   epoch)
-    ///   C_slot_b acts on error state at slot_b  (e.g. the "from" epoch)
-    ///
-    /// Builds the full expanded C_ex with non-zero blocks at both slots,
-    /// then calls the standard KF update.  When slot_a == slot_b the
-    /// two blocks are summed at the same column (correct degenerate case).
-    ///
-    /// @param y       Measurement vector          (dim_y × 1)
-    /// @param C_a     Measurement Jacobian for slot_a  (dim_y × dim_x)
-    /// @param slot_a  Delay slot for C_a  (0 = current tick)
-    /// @param C_b     Measurement Jacobian for slot_b  (dim_y × dim_x)
-    /// @param slot_b  Delay slot for C_b
-    /// @param R       Measurement noise cov.     (dim_y × dim_y)
+    /**
+     * @brief Update with a measurement whose observation function spans two state epochs.
+     * @details
+     *     Builds the augmented C_ex with non-zero blocks at both slots, then calls the
+     *     standard KF update.  When slot_a == slot_b the two blocks are summed at the same
+     *     column (the correct degenerate case).
+     * @param y measurement vector                 (dim_y × 1)
+     * @param C_a measurement Jacobian for slot_a  (dim_y × dim_x)
+     * @param slot_a delay slot for C_a (e.g. the "to"   epoch; 0 = current tick)
+     * @param C_b measurement Jacobian for slot_b  (dim_y × dim_x)
+     * @param slot_b delay slot for C_b (e.g. the "from" epoch)
+     * @param R measurement-noise covariance       (dim_y × dim_y)
+     * @return false when either slot ≥ max_delay_step.
+     */
     bool updateWithTwoSlots(const Eigen::MatrixXd & y,
                             const Eigen::MatrixXd & C_a,
                             int                    slot_a,
@@ -197,65 +205,81 @@ public:
                             const Eigen::MatrixXd & R)
     {
         if (slot_a >= max_delay_step_ || slot_b >= max_delay_step_) {
-            std::cerr << "[TimeDelayKF] updateWithTwoSlots: slot " << slot_a
-                      << " or " << slot_b
-                      << " >= max_delay_step=" << max_delay_step_ << " — ignoring.\n";
             return false;
         }
-        const int dim_y = static_cast<int>(y.rows());
-        Eigen::MatrixXd C_ex = Eigen::MatrixXd::Zero(dim_y, dim_x_ex_);
-        C_ex.block(0, dim_x_ * slot_a, dim_y, dim_x_) += C_a;
-        C_ex.block(0, dim_x_ * slot_b, dim_y, dim_x_) += C_b;
-        return update(y, C_ex * x_, C_ex, R);
+        const int col_a = dim_x_ * slot_a, col_b = dim_x_ * slot_b;
+
+        // PCT = P_col_a * C_a^T + P_col_b * C_b^T.
+        const Eigen::MatrixXd PCT = P_.middleCols(col_a, dim_x_) * C_a.transpose()
+                                  + P_.middleCols(col_b, dim_x_) * C_b.transpose();
+        // x_pred = C_a * x_a + C_b * x_b.
+        const Eigen::MatrixXd x_pred = C_a * x_.middleRows(col_a, dim_x_)
+                                     + C_b * x_.middleRows(col_b, dim_x_);
+        // S = R + C_ex * PCT.  C_ex is sparse: only the a/b column blocks matter.
+        // C_ex * PCT = C_a * PCT.rows(col_a..col_a+dim_x) + C_b * PCT.rows(col_b..col_b+dim_x)
+        const Eigen::MatrixXd S_mat = R
+            + C_a * PCT.middleRows(col_a, dim_x_)
+            + C_b * PCT.middleRows(col_b, dim_x_);
+        const Eigen::MatrixXd K = PCT * S_mat.inverse();
+
+        if (K.array().isNaN().any() || K.array().isInf().any()) { return false; }
+
+        x_ += K * (y - x_pred);
+        P_.noalias() -= K * PCT.transpose();
+        P_ = (0.5 * (P_ + P_.transpose())).eval();
+        return true;
     }
 
-    // ---- Delayed measurement update ---------------------------------------
-
-    /// Apply a measurement that was captured delay_step ticks ago.
-    ///
-    /// Internally builds an expanded measurement matrix:
-    ///   C_ex = [ 0 | … | C | … | 0 ]   (C at column block delay_step)
-    ///
-    /// The standard KF update then simultaneously corrects:
-    ///   • x_{k-delay_step}  directly (via C)
-    ///   • x_k, x_{k-1}, …  indirectly (via cross-covariance blocks)
-    ///
-    /// @param y           Measurement vector        (dim_y × 1)
-    /// @param C           Measurement Jacobian      (dim_y × dim_x)
-    /// @param R           Measurement noise cov.    (dim_y × dim_y)
-    /// @param delay_step  0 = no delay (current tick), 1 = one tick old, …
+    /**
+     * @brief Update with a measurement captured delay_step ticks ago.
+     * @details
+     *     Builds the augmented measurement matrix C_ex = [ 0 | … | C | … | 0 ] with C at
+     *     column block delay_step, so the standard KF update simultaneously corrects
+     *     x_{k-delay_step} directly and x_k, x_{k-1}, … indirectly via cross-covariance.
+     * @param y measurement vector           (dim_y × 1)
+     * @param C measurement Jacobian         (dim_y × dim_x)
+     * @param R measurement-noise covariance (dim_y × dim_y)
+     * @param delay_step 0 = no delay (current tick), 1 = one tick old, …
+     * @return false when delay_step ≥ max_delay_step.
+     */
     bool updateWithDelay(const Eigen::MatrixXd & y,
                          const Eigen::MatrixXd & C,
                          const Eigen::MatrixXd & R,
                          int                    delay_step)
     {
         if (delay_step >= max_delay_step_) {
-            std::cerr << "[TimeDelayKF] delay_step=" << delay_step
-                      << " >= max_delay_step=" << max_delay_step_
-                      << " — ignoring update.\n";
             return false;
         }
 
-        const int dim_y = static_cast<int>(y.rows());
+        // PCT = P_[:, d·n : (d+1)·n] * C^T  — only the n-wide column block at slot d.
+        // C_ex is sparse; extracting the block directly saves O((n·d)·m·(n·d)) → O(n·m·(n·d)).
+        const int col0 = dim_x_ * delay_step;
+        const Eigen::MatrixXd PCT = P_.middleCols(col0, dim_x_) * C.transpose();
+        const Eigen::MatrixXd x_pred = C * x_.middleRows(col0, dim_x_);
+        const Eigen::MatrixXd S_mat = R + C * PCT;
+        const Eigen::MatrixXd K = PCT * S_mat.inverse();
 
-        // Build expanded C: C_ex[:, delay_step*dim_x : (delay_step+1)*dim_x] = C
-        Eigen::MatrixXd C_ex = Eigen::MatrixXd::Zero(dim_y, dim_x_ex_);
-        C_ex.block(0, dim_x_ * delay_step, dim_y, dim_x_) = C;
+        if (K.array().isNaN().any() || K.array().isInf().any()) { return false; }
 
-        // y_pred = C_ex * x_ (note: in ESKF x_ is always ≈ 0)
-        return update(y, C_ex * x_, C_ex, R);
+        x_ += K * (y - x_pred);
+        P_.noalias() -= K * PCT.transpose();
+        P_ = (0.5 * (P_ + P_.transpose())).eval();
+        return true;
     }
 
-    // ---- Introspection ----------------------------------------------------
+    /// Introspection
     [[nodiscard]] int maxDelayStep() const { return max_delay_step_; }
     [[nodiscard]] int dimX()         const { return dim_x_; }
     [[nodiscard]] int dimXEx()       const { return dim_x_ex_; }
 
 private:
+    Eigen::MatrixXd x_;   ///< augmented error-state vector  (dim_x_ex × 1)
+    Eigen::MatrixXd P_;   ///< augmented covariance          (dim_x_ex × dim_x_ex)
+    Eigen::MatrixXd x_scratch_;  ///< reused predict scratch — swapped into x_ (no per-tick alloc)
+    Eigen::MatrixXd P_scratch_;  ///< reused predict scratch — swapped into P_ (no per-tick alloc)
     int max_delay_step_ = 1;
     int dim_x_          = 0;
     int dim_x_ex_       = 0;
 };
 
 }  // namespace finenav::localizer
-

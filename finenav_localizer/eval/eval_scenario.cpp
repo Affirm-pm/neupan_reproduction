@@ -8,10 +8,16 @@
 //   2 — Uniform circular, Session-B stress events     [stub]
 //   3 — High-dynamic Lissajous figure-8, ideal        [stub]
 //
-// CSV schema (extended — all 12 state dims + non-2D covariance diagonals):
+// CSV schema (extended — all 12 state dims + covariance diagnostics):
 //   t | gt_{x,y,yaw,vx,vy,wz} | est_{x,y,yaw,vx,vy,wz} |
 //   est_{z,vz,wx,wy} | cov_{pz,rx,ry,vz,wx,wy} |
+//   cov_{xx,xy,yy,yaw,min_eig} |
 //   obs_{x,y,yaw,vx_body,wz_body} | has_pose_obs | has_twist_obs | scenario
+//
+//   cov_{xx,xy,yy} : position (x,y) covariance block → uncertainty ellipse.
+//   cov_yaw        : yaw (δθ_z) variance.
+//   cov_min_eig    : smallest eigenvalue of the full 12×12 P (PD-health monitor;
+//                    ≤ 0 means the covariance lost positive-definiteness).
 
 #include "eval_config.hpp"
 
@@ -25,8 +31,10 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <Eigen/Geometry>
+#include <Eigen/Eigenvalues>
 
-#include "finenav_localizer/finenav_localizer.hpp"
+#include "finenav_localizer/eskf_localizer.hpp"
+#include "bag_helpers.hpp"
 
 using namespace std::chrono_literals;
 namespace fn = finenav::localizer;
@@ -71,6 +79,16 @@ struct Row {
     double cov_wx{};   ///< P[9,9]
     double cov_wy{};   ///< P[10,10]
 
+    // Position covariance block (for the uncertainty ellipse) + PD health
+    double cov_xx{};       ///< P[0,0]
+    double cov_xy{};       ///< P[0,1] (= P[1,0])
+    double cov_yy{};       ///< P[1,1]
+    double cov_yaw{};      ///< P[5,5]  yaw (δθ_z) variance
+    double cov_vx{};        ///< P[6,6]  v_x variance
+    double cov_vy{};        ///< P[7,7]  v_y variance
+    double cov_wz{};        ///< P[11,11] ω_z variance
+    double cov_min_eig{};  ///< smallest eigenvalue of full 12×12 P (PD monitor)
+
     // Observations  (NaN = absent this tick)
     double obs_x{}, obs_y{}, obs_yaw{};       ///< pose
     double obs_vx_body{}, obs_wz_body{};      ///< twist (body frame)
@@ -98,29 +116,27 @@ static double yawFromState(const fn::NavStateD& s)
                       1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z()));
 }
 
-/// Assemble pnode parameter overrides from cfg:: constants.
-static rclcpp::NodeOptions makeOpts()
+/// Assemble the engine Config from cfg:: constants.
+static finenav_localizer::Params makeConfig()
 {
-    rclcpp::NodeOptions o;
-    o.append_parameter_override("update_rate_hz",        cfg::kUpdateRateHz);
-    o.append_parameter_override("max_delay_sec",         cfg::kMaxDelaySec);
-    o.append_parameter_override("pose_smoothing_steps",  int64_t{cfg::kPoseSmoothingSteps});
-    o.append_parameter_override("twist_smoothing_steps", int64_t{cfg::kTwistSmoothingSteps});
-    o.append_parameter_override("pose_gate_dist",        cfg::kPoseGateDist);
-    o.append_parameter_override("twist_gate_dist",       cfg::kTwistGateDist);
-    o.append_parameter_override("max_dt_sec",            cfg::kMaxDtSec);
-    o.append_parameter_override("model.vel_noise_std",   cfg::kVelNoiseStd);
-    o.append_parameter_override("model.omega_noise_std", cfg::kOmegaNoiseStd);
-    return o;
+    finenav_localizer::Params p;
+    p.update_rate_hz = cfg::kUpdateRateHz;
+    p.max_delay_sec  = cfg::kMaxDelaySec;
+    p.max_dt_sec     = cfg::kMaxDtSec;
+    p.model.pos_noise_std   = cfg::kPosNoiseStd;
+    p.model.rot_noise_std   = cfg::kRotNoiseStd;
+    p.model.vel_noise_std   = cfg::kVelNoiseStd;
+    p.model.omega_noise_std = cfg::kOmegaNoiseStd;
+    return p;
 }
 
 /// Initialise the filter at the exact GT pose with tight uncertainty.
 /// Velocity starts at zero with high covariance (filter learns from obs).
-static void initLocalizer(fn::FineNavLocalizer& loc, const GtState& g,
-                           const rclcpp::Node::SharedPtr& node)
+static void initLocalizer(fn::EskfLocalizer& loc, const GtState& g,
+                           const rclcpp::Time& stamp)
 {
-    fn::FineNavLocalizer::PoseMsg m;
-    m.header.stamp          = node->now();
+    fn::EskfLocalizer::PoseMsg m;
+    m.header.stamp          = stamp;
     m.header.frame_id       = "map";
     m.pose.pose.position.x  = g.x;
     m.pose.pose.position.y  = g.y;
@@ -137,13 +153,13 @@ static void initLocalizer(fn::FineNavLocalizer& loc, const GtState& g,
 }
 
 /// Build a noisy PoseWithCovarianceStamped from GT state.
-static fn::FineNavLocalizer::PoseMsg buildPose(
+static fn::EskfLocalizer::PoseMsg buildPose(
     const GtState& g, double p_sigma, double yaw_sigma,
     const rclcpp::Time& stamp, std::mt19937& rng)
 {
     const double yaw = noisy(g.yaw, yaw_sigma, rng);
 
-    fn::FineNavLocalizer::PoseMsg m;
+    fn::EskfLocalizer::PoseMsg m;
     m.header.stamp = (cfg::kPoseDelaySec > 0.0)
         ? stamp - rclcpp::Duration::from_seconds(cfg::kPoseDelaySec)
         : stamp;
@@ -166,11 +182,11 @@ static fn::FineNavLocalizer::PoseMsg buildPose(
 }
 
 /// Build a noisy TwistWithCovarianceStamped from GT state (body frame).
-static fn::FineNavLocalizer::TwistMsg buildTwist(
+static fn::EskfLocalizer::TwistMsg buildTwist(
     const GtState& g, double v_sigma, double w_sigma,
     const rclcpp::Time& stamp, std::mt19937& rng)
 {
-    fn::FineNavLocalizer::TwistMsg m;
+    fn::EskfLocalizer::TwistMsg m;
     m.header.stamp = (cfg::kTwistDelaySec > 0.0)
         ? stamp - rclcpp::Duration::from_seconds(cfg::kTwistDelaySec)
         : stamp;
@@ -192,7 +208,7 @@ static fn::FineNavLocalizer::TwistMsg buildTwist(
 }
 
 /// Fill all estimate fields of a Row from the current filter state.
-static void fillEstimate(Row& row, fn::FineNavLocalizer& loc)
+static void fillEstimate(Row& row, fn::EskfLocalizer& loc)
 {
     const fn::NavStateD              est = loc.getState();
     const fn::NavigationModelD::PMat P   = loc.getCovariance();
@@ -222,6 +238,21 @@ static void fillEstimate(Row& row, fn::FineNavLocalizer& loc)
     row.cov_vz = P(8,  8);
     row.cov_wx = P(9,  9);
     row.cov_wy = P(10, 10);
+
+    // Position (x,y) covariance block for the uncertainty ellipse + yaw variance.
+    row.cov_xx  = P(0, 0);
+    row.cov_xy  = P(0, 1);
+    row.cov_yy  = P(1, 1);
+    row.cov_yaw = P(5, 5);
+    row.cov_vx  = P(6, 6);
+    row.cov_vy  = P(7, 7);
+    row.cov_wz  = P(11, 11);
+
+    // PD health: smallest eigenvalue of the full 12×12 covariance.  A well-formed
+    // KF keeps this strictly positive; ≤ 0 signals the covariance lost positive-
+    // definiteness (e.g. under an aggressive / non-Joseph update form).
+    Eigen::SelfAdjointEigenSolver<fn::NavigationModelD::PMat> es(P, Eigen::EigenvaluesOnly);
+    row.cov_min_eig = es.eigenvalues().minCoeff();
 }
 
 /// Write all rows to cfg::kCsvPath.
@@ -236,6 +267,7 @@ static void writeCSV(const std::vector<Row>& rows)
          "est_x,est_y,est_yaw,est_vx,est_vy,est_wz,"
          "est_z,est_vz,est_wx,est_wy,"
          "cov_pz,cov_rx,cov_ry,cov_vz,cov_wx,cov_wy,"
+         "cov_xx,cov_xy,cov_yy,cov_yaw,cov_vx,cov_vy,cov_wz,cov_min_eig,"
          "obs_x,obs_y,obs_yaw,obs_vx_body,obs_wz_body,"
          "has_pose_obs,has_twist_obs,"
          "scenario\n";
@@ -255,6 +287,9 @@ static void writeCSV(const std::vector<Row>& rows)
           << r.est_wx  << "," << r.est_wy  << ","
           << r.cov_pz  << "," << r.cov_rx  << "," << r.cov_ry  << ","
           << r.cov_vz  << "," << r.cov_wx  << "," << r.cov_wy  << ","
+          << r.cov_xx  << "," << r.cov_xy  << "," << r.cov_yy  << ","
+          << r.cov_yaw << "," << r.cov_vx << "," << r.cov_vy << "," << r.cov_wz << ","
+          << r.cov_min_eig << ","
           << F(r.obs_x) << "," << F(r.obs_y) << "," << F(r.obs_yaw) << ","
           << F(r.obs_vx_body) << "," << F(r.obs_wz_body) << ","
           << (r.has_pose_obs  ? 1 : 0) << ","
@@ -300,8 +335,9 @@ static void runCircleIdeal(const rclcpp::Node::SharedPtr& node)
         return g;
     };
 
-    fn::FineNavLocalizer localizer(node, makeOpts());
-    initLocalizer(localizer, gt(0.0), node);
+    fn::EskfLocalizer  localizer(makeConfig());
+    const rclcpp::Time base_time(1, 0, RCL_ROS_TIME);
+    initLocalizer(localizer, gt(0.0), base_time);
     rclcpp::sleep_for(40ms);   // let timer thread start
 
     constexpr double kDt    = 1.0 / cfg::kUpdateRateHz;
@@ -318,7 +354,7 @@ static void runCircleIdeal(const rclcpp::Node::SharedPtr& node)
 
     while (t < kTotal) {
         const GtState      g   = gt(t);
-        const rclcpp::Time now = node->now();
+        const rclcpp::Time now = base_time + rclcpp::Duration::from_seconds(t);
 
         Row row;
         row.t             = t;
@@ -367,9 +403,8 @@ static void runCircleIdeal(const rclcpp::Node::SharedPtr& node)
             }
         }
 
-        // ── Wait one filter tick, then snapshot ──────────────────────────────
-        rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::duration<double>(kDt)));
+        // ── Deterministic tick: advance the estimator one cycle ──────────────
+        localizer.step(now);
 
         fillEstimate(row, localizer);
         log.push_back(row);
@@ -450,8 +485,9 @@ static void runCircleStress(const rclcpp::Node::SharedPtr& node)
         return kPhases[std::size(kPhases) - 1];
     };
 
-    fn::FineNavLocalizer localizer(node, makeOpts());
-    initLocalizer(localizer, gt(0.0), node);
+    fn::EskfLocalizer  localizer(makeConfig());
+    const rclcpp::Time base_time(1, 0, RCL_ROS_TIME);
+    initLocalizer(localizer, gt(0.0), base_time);
     rclcpp::sleep_for(40ms);
 
     constexpr double kDt    = 1.0 / cfg::kUpdateRateHz;
@@ -469,7 +505,7 @@ static void runCircleStress(const rclcpp::Node::SharedPtr& node)
     while (t < kTotal) {
         const Phase&       ph  = find_phase(t);
         const GtState      g   = gt(t);
-        const rclcpp::Time now = node->now();
+        const rclcpp::Time now = base_time + rclcpp::Duration::from_seconds(t);
 
         Row row;
         row.t             = t;
@@ -529,9 +565,8 @@ static void runCircleStress(const rclcpp::Node::SharedPtr& node)
             row.obs_wz_body   = tm.twist.twist.angular.z;
         }
 
-        // ── Wait one filter tick, then snapshot ──────────────────────────────
-        rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::duration<double>(kDt)));
+        // ── Deterministic tick: advance the estimator one cycle ──────────────
+        localizer.step(now);
 
         fillEstimate(row, localizer);
         log.push_back(row);
@@ -602,8 +637,9 @@ static void runHighDynIdeal(const rclcpp::Node::SharedPtr& node)
         return g;
     };
 
-    fn::FineNavLocalizer localizer(node, makeOpts());
-    initLocalizer(localizer, gt(0.0), node);
+    fn::EskfLocalizer  localizer(makeConfig());
+    const rclcpp::Time base_time(1, 0, RCL_ROS_TIME);
+    initLocalizer(localizer, gt(0.0), base_time);
     rclcpp::sleep_for(40ms);
 
     constexpr double kDt    = 1.0 / cfg::kUpdateRateHz;
@@ -620,7 +656,7 @@ static void runHighDynIdeal(const rclcpp::Node::SharedPtr& node)
 
     while (t < kTotal) {
         const GtState      g   = gt(t);
-        const rclcpp::Time now = node->now();
+        const rclcpp::Time now = base_time + rclcpp::Duration::from_seconds(t);
 
         Row row;
         row.t             = t;
@@ -669,9 +705,8 @@ static void runHighDynIdeal(const rclcpp::Node::SharedPtr& node)
             }
         }
 
-        // ── Wait one filter tick, then snapshot ──────────────────────────────
-        rclcpp::sleep_for(std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::duration<double>(kDt)));
+        // ── Deterministic tick: advance the estimator one cycle ──────────────
+        localizer.step(now);
 
         fillEstimate(row, localizer);
         log.push_back(row);
@@ -681,6 +716,151 @@ static void runHighDynIdeal(const rclcpp::Node::SharedPtr& node)
     writeCSV(log);
     RCLCPP_INFO(node->get_logger(),
         "[Scenario 3] %zu rows written → %s", log.size(), cfg::kCsvPath);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  Scenario 4 — Bag replay (real sensor data, deterministic rosbag2_cpp read)
+// ═════════════════════════════════════════════════════════════════════════════
+static void runBagScenario(const rclcpp::Node::SharedPtr & node)
+{
+    const std::string bag_path = cfg::kBagPath;
+    RCLCPP_INFO(node->get_logger(),
+        "═══ Scenario 4: Bag replay  odom=%s  bag=%s ═══",
+        cfg::kBagOdomAsRelPose ? "RelPose" : "Twist", bag_path.c_str());
+
+    std::vector<GtSample> gt_index;
+    auto all = readBagMessages(bag_path, std::string(cfg::kBagGtFrame), gt_index);
+
+    // Filter to the configured time window.
+    const double t0 = all.empty() ? 0.0
+        : all.front().stamp.seconds() + cfg::kBagStartOffsetSec;
+    const double tend = (cfg::kBagMaxDurationSec > 0.0)
+        ? t0 + cfg::kBagMaxDurationSec
+        : std::numeric_limits<double>::max();
+
+    std::vector<BagMessage> msgs;
+    msgs.reserve(all.size());
+    for (const auto & m : all) {
+        const double ts = m.stamp.seconds();
+        if (ts >= t0 && ts < tend) msgs.push_back(m);
+    }
+    if (msgs.empty()) {
+        RCLCPP_ERROR(node->get_logger(), "[Scenario 4] No messages in the configured time window.");
+        return;
+    }
+
+    // ── Build the engine ─────────────────────────────────────────────────────
+    fn::EskfLocalizer localizer([]() {
+        finenav_localizer::Params p;
+        p.update_rate_hz        = cfg::kUpdateRateHz;
+        p.max_delay_sec         = cfg::kMaxDelaySec;
+        p.max_dt_sec = cfg::kMaxDtSec;
+        p.model.pos_noise_std   = cfg::kPosNoiseStd;
+        p.model.rot_noise_std   = cfg::kRotNoiseStd;
+        p.model.vel_noise_std   = cfg::kVelNoiseStd;
+        p.model.omega_noise_std = cfg::kOmegaNoiseStd;
+        return p;
+    }());
+
+    // ── Initialise at the first pose.  All messages before it are skipped so
+    //     no stale observations accumulate in the queues.
+    const auto first_pose = std::find_if(msgs.begin(), msgs.end(),
+        [](const BagMessage & m) { return m.role == BagMsgRole::Pose; });
+    if (first_pose != msgs.end()) {
+        localizer.setInitialPose(first_pose->pose_msg);
+    } else {
+        RCLCPP_ERROR(node->get_logger(), "[Scenario 4] No pose message in the bag — cannot initialise.");
+        return;
+    }
+
+    // ── Main loop — 50 Hz virtual clock ──────────────────────────────────────
+    const double     kNaN  = std::numeric_limits<double>::quiet_NaN();
+    const int64_t    dt_ns = static_cast<int64_t>(1e9 / cfg::kUpdateRateHz);
+    std::vector<Row> log;
+
+    bool                     has_prev_odom = false;
+    nav_msgs::msg::Odometry  prev_odom;
+
+    // Message index (advances as we feed observations).
+    std::size_t msg_idx = static_cast<std::size_t>(
+        std::distance(msgs.begin(), first_pose));  // start at the init pose
+    // Prime the filter at the init pose before entering the 50 Hz loop.
+    localizer.step(first_pose->stamp);
+
+    // Feed the first pose as an observation (setInitialPose consumed it; the
+    // filter has no observation queued for it yet — feed it so the first tick
+    // processes it).
+    localizer.feedObservation(first_pose->pose_msg);
+    ++msg_idx;  // consumed the init pose
+
+    // Run the virtual clock from the init pose timestamp to the last message.
+    int64_t now_ns = first_pose->stamp.nanoseconds();
+    const int64_t end_ns = msgs.back().stamp.nanoseconds();
+
+    while (now_ns < end_ns) {
+        now_ns += dt_ns;
+        const rclcpp::Time tick_time(now_ns, RCL_ROS_TIME);
+
+        // Track what is fed this tick for the CSV observation columns.
+        double feed_pose_x = kNaN, feed_pose_y = kNaN, feed_pose_yaw = kNaN;
+        double feed_twist_vx = kNaN, feed_twist_wz = kNaN;
+        bool   fed_pose  = false;
+        bool   fed_twist = false;
+
+        // Feed all messages whose stamps fall within [prev_tick, this_tick].
+        while (msg_idx < msgs.size() && msgs[msg_idx].stamp.nanoseconds() <= now_ns) {
+            const auto & m = msgs[msg_idx];
+            if (m.role == BagMsgRole::Pose) {
+                localizer.feedObservation(m.pose_msg);
+                feed_pose_x   = m.pose_msg.pose.pose.position.x;
+                feed_pose_y   = m.pose_msg.pose.pose.position.y;
+                feed_pose_yaw = std::atan2(
+                    2.0 * m.pose_msg.pose.pose.orientation.w * m.pose_msg.pose.pose.orientation.z,
+                    1.0 - 2.0 * m.pose_msg.pose.pose.orientation.z * m.pose_msg.pose.pose.orientation.z);
+                fed_pose = true;
+            }
+            else if (m.role == BagMsgRole::Odom) {
+                if constexpr (cfg::kBagOdomAsRelPose) {
+                    if (has_prev_odom) {
+                        const auto rel = odomPairToRelPose(prev_odom, m.odom_msg,
+                            cfg::kBagOdomLinVelVar, cfg::kBagOdomAngVelVar);
+                        if ((rel.stamp_to - rel.stamp_from).seconds() > 1e-6) {
+                            localizer.feedRelativePose(rel);
+                        }
+                    }
+                    prev_odom     = m.odom_msg;
+                    has_prev_odom = true;
+                } else {
+                    const auto tw = odomToTwist(m.odom_msg, cfg::kBagOdomLinVelVar, cfg::kBagOdomAngVelVar);
+                    localizer.feedObservation(tw);
+                    feed_twist_vx = tw.twist.twist.linear.x;
+                    feed_twist_wz = tw.twist.twist.angular.z;
+                    fed_twist = true;
+                }
+            }
+            ++msg_idx;
+        }
+
+        localizer.step(tick_time);
+
+        Row row;
+        row.t        = tick_time.seconds() - msgs.front().stamp.seconds();
+        const auto * gt = closestGt(gt_index, tick_time);
+        row.gt_x   = gt ? gt->x   : kNaN;  row.gt_y   = gt ? gt->y   : kNaN;
+        row.gt_yaw = gt ? gt->yaw : kNaN;
+        row.gt_vx  = kNaN; row.gt_vy = kNaN; row.gt_wz = kNaN;
+        row.obs_x = feed_pose_x; row.obs_y = feed_pose_y; row.obs_yaw = feed_pose_yaw;
+        row.obs_vx_body = feed_twist_vx; row.obs_wz_body = feed_twist_wz;
+        row.has_pose_obs  = fed_pose;
+        row.has_twist_obs = fed_twist;
+        row.scenario = "BagReplay";
+        fillEstimate(row, localizer);
+        log.push_back(row);
+    }
+
+    writeCSV(log);
+    RCLCPP_INFO(node->get_logger(),
+        "[Scenario 4] %zu rows written → %s", log.size(), cfg::kCsvPath);
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────
@@ -700,9 +880,10 @@ int main(int argc, char** argv)
         case 1:  runCircleIdeal(node);   break;
         case 2:  runCircleStress(node);  break;
         case 3:  runHighDynIdeal(node);  break;
+        case 4:  runBagScenario(node);   break;
         default:
             RCLCPP_ERROR(node->get_logger(),
-                "Unknown cfg::kScenario=%d  (valid: 1, 2, 3).", cfg::kScenario);
+                "Unknown cfg::kScenario=%d  (valid: 1, 2, 3, 4).", cfg::kScenario);
             rclcpp::shutdown();
             return 1;
     }

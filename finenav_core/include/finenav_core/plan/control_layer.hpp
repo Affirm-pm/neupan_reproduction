@@ -53,7 +53,7 @@ public:
         rclcpp::Node::SharedPtr node,
         const std::string& layer_name,
         ExecutionPolicyVariant policy = SingleShotPolicy{},
-        IRobotStateProvider* state_provider = nullptr);
+        RobotStateProvider* state_provider = nullptr);
 
     // ── Configuration ──────────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@ private:
     MapViewFactory              map_view_factory_;
     PrePlanCallback             on_pre_plan_;
     PostPlanCallback            on_post_plan_;
-    IRobotStateProvider*        state_provider_{nullptr};
+    RobotStateProvider*        state_provider_{nullptr};
 
     // ── Data ───────────────────────────────────────────────────────────────
 

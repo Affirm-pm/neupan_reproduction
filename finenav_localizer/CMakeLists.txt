@@ -13,6 +13,7 @@ find_package(rclcpp REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(finenav_core REQUIRED)
 find_package(finenav_util REQUIRED)
 find_package(generate_parameter_library REQUIRED)
@@ -31,7 +32,9 @@ generate_parameter_library(
 
 # FineNav Localizer (ESKF-based localization module)
 add_library(${PROJECT_NAME} SHARED
+        src/eskf_localizer.cpp
         src/finenav_localizer.cpp
+        src/sensor_subscriber.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -43,6 +46,7 @@ ament_target_dependencies(${PROJECT_NAME}
         tf2_ros
         tf2_eigen
         geometry_msgs
+        nav_msgs
         finenav_core
         finenav_util
         generate_parameter_library
@@ -57,6 +61,7 @@ if (BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
     add_subdirectory(test)
     add_subdirectory(eval)
+    add_subdirectory(benchmark)
 endif ()
 
 install(TARGETS ${PROJECT_NAME} localizer_params
@@ -75,6 +80,7 @@ ament_export_dependencies(
         tf2_ros
         tf2_eigen
         geometry_msgs
+        nav_msgs
         finenav_core
         finenav_util
         Eigen3
