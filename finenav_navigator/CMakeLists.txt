@@ -67,6 +67,7 @@ add_library(finenav_stop_plan_behavior SHARED
 ament_target_dependencies(finenav_stop_plan_behavior
         ${dependencies}
 )
+target_compile_definitions(finenav_stop_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 add_library(finenav_compute_plan_behavior SHARED
         src/plugins/action/compute_plan.cpp
@@ -74,6 +75,7 @@ add_library(finenav_compute_plan_behavior SHARED
 ament_target_dependencies(finenav_compute_plan_behavior
         ${dependencies}
 )
+target_compile_definitions(finenav_compute_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Condition Plugins (pure BT nodes, no ROS params needed)
 add_library(finenav_navigator_conditions SHARED
@@ -92,6 +94,7 @@ add_library(finenav_stop_chassis_motion_behavior SHARED
 ament_target_dependencies(finenav_stop_chassis_motion_behavior
         ${dependencies}
 )
+target_compile_definitions(finenav_stop_chassis_motion_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Control & Decorator Plugins (pure BT nodes, no ROS params needed)
 add_library(finenav_recovery_node SHARED
@@ -125,12 +128,28 @@ add_library(finenav_dynamic_goal_follower SHARED
 ament_target_dependencies(finenav_dynamic_goal_follower
         ${dependencies}
 )
+target_compile_definitions(finenav_dynamic_goal_follower PRIVATE BT_PLUGIN_EXPORT)
 
-# Install
-install(TARGETS finenav_stop_plan_behavior finenav_navigator navigator_params
+# Install — main library
+install(TARGETS finenav_navigator navigator_params
         EXPORT ${PROJECT_NAME}Targets
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib
+        RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+# Install — BT plugins (separate subdirectory so the scanner doesn't pick up non-plugin .so)
+install(TARGETS
+        finenav_compute_plan_behavior
+        finenav_stop_plan_behavior
+        finenav_stop_chassis_motion_behavior
+        finenav_navigator_conditions
+        finenav_dynamic_goal_follower
+        finenav_recovery_node
+        finenav_round_robin_node
+        finenav_rate_controller
+        ARCHIVE DESTINATION lib/${PROJECT_NAME}
+        LIBRARY DESTINATION lib/${PROJECT_NAME}
         RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
