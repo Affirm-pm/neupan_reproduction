@@ -286,7 +286,7 @@ void ControlLayer<Planners...>::executeImpl(ContinuousPolicy& policy) {
     rclcpp::Rate rate(policy.frequency_hz);
 
     FINENAV_LOG_INFO(pnode_->get_logger(),
-        "Tracking: control loop started at %.1f Hz.", policy.frequency_hz);
+        "Tracking: control loop started at {:.1f} Hz.", policy.frequency_hz);
 
     while (rclcpp::ok()) {
         if (worker_->shouldStop()) {
@@ -303,7 +303,7 @@ void ControlLayer<Planners...>::executeImpl(ContinuousPolicy& policy) {
                 goal_pose = new_goal->goal;
                 worker_->ackGoal();
                 FINENAV_LOG_INFO(pnode_->get_logger(),
-                    "Tracking: goal preempted in-loop (%.2f, %.2f) — warm-start preserved.",
+                    "Tracking: goal preempted in-loop ({:.2f}, {:.2f}) — warm-start preserved.",
                     goal_pose.position.x, goal_pose.position.y);
             }
         }

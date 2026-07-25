@@ -40,7 +40,7 @@ struct ContinuousPolicy {
 
         if (frequency_hz <= 0.0) {
             FINENAV_LOG_WARN(node.get_logger(),
-                "frequency_hz must be > 0.0 (got %.1f). Using default 10.0.",
+                "frequency_hz must be > 0.0 (got {:.1f}). Using default 10.0.",
                 frequency_hz);
             frequency_hz = 10.0;
         }
