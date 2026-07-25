@@ -244,6 +244,18 @@ void ControlLayer<Planners...>::execute() {
     active_planner_id_ = goal->planner_id;
     worker_->ackGoal();  // consume the goal
 
+    // ── Wait for the localizer to initialise before any Policy runs ─────────
+    while (rclcpp::ok() && !worker_->shouldStop()) {
+        if (state_provider_ && state_provider_->getRobotState().has_value()) break;
+        FINENAV_LOG_WARN_THROTTLE(pnode_->get_logger(), 2000,
+            "Waiting for valid robot state...");
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if (worker_->shouldStop()) {
+        worker_->publishFailed();
+        return;
+    }
+
     FINENAV_LOG_INFO(pnode_->get_logger(), "New goal received — starting episode.");
     resetActivePlanner();
     std::visit([this](auto& p) { this->executeImpl(p); }, policy_);
