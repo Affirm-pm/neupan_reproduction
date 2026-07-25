@@ -164,14 +164,23 @@ void SensorSubscriber::odomCallback(OdomMsg::ConstSharedPtr msg, std::size_t idx
 {
     auto & s = odom_sensors_.at(idx);
 
+    // ── Absolute pose extraction (runs first, independent of mode) ──────────
+    if (std::any_of(s.extract_absolute_pose.begin(), s.extract_absolute_pose.end(),
+                    [](bool v) { return v; })) {
+        PoseMsg abs_pose;
+        abs_pose.header          = msg->header;
+        abs_pose.pose.pose       = msg->pose.pose;
+        abs_pose.pose.covariance = msg->pose.covariance;
+        localizer_.feedObservation(abs_pose, s.smooth, s.gate_dist,
+                                   s.extract_absolute_pose, s.cov_override);
+    }
+
+    // ── RelPose / Twist mode ────────────────────────────────────────────────
     if (s.use_relative) {
-        // Skip if no DOF is enabled in the mask.
         if (std::none_of(s.mask.begin(), s.mask.end(), [](bool v) { return v; })) {
             s.prev_msg = *msg;  // keep frame pair current
             return;
         }
-
-        // RelPose mode: compute body-frame displacement between consecutive frames.
         if (!s.prev_msg.has_value()) {
             s.prev_msg = *msg;
             return;
@@ -214,7 +223,6 @@ void SensorSubscriber::odomCallback(OdomMsg::ConstSharedPtr msg, std::size_t idx
                 rel.R_noise(c, r) = v;
             }
 
-        // Apply covariance overrides to the combined R_noise.
         for (int i = 0; i < 6; ++i) {
             if (s.cov_override[static_cast<std::size_t>(i)] >= 0.0) {
                 rel.R_noise(i, i) = s.cov_override[static_cast<std::size_t>(i)];
@@ -227,23 +235,11 @@ void SensorSubscriber::odomCallback(OdomMsg::ConstSharedPtr msg, std::size_t idx
         s.prev_msg = *msg;
         localizer_.feedRelativePose(rel);
     } else {
-        // Twist mode: extract body-frame velocity from odometry twist field.
         TwistMsg twist;
         twist.header           = msg->header;
         twist.twist.twist      = msg->twist.twist;
         twist.twist.covariance = msg->twist.covariance;
         localizer_.feedObservation(twist, s.smooth, s.gate_dist, s.mask, s.cov_override);
-    }
-
-    // ── Advanced: also extract absolute pose from odom.pose.pose ──────────
-    if (std::any_of(s.extract_absolute_pose.begin(), s.extract_absolute_pose.end(),
-                    [](bool v) { return v; })) {
-        PoseMsg abs_pose;
-        abs_pose.header          = msg->header;
-        abs_pose.pose.pose       = msg->pose.pose;
-        abs_pose.pose.covariance = msg->pose.covariance;
-        localizer_.feedObservation(abs_pose, s.smooth, s.gate_dist,
-                                   s.extract_absolute_pose, s.cov_override);
     }
 }
 
