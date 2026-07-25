@@ -28,13 +28,13 @@ hello_finenav:
 
       # ── Global filter settings ──────────────────────────────────────────────
 
-      update_rate_hz: 100.0            # Timer frequency [Hz] (1 – 1000)
+      update_rate_hz: 50.0            # Timer frequency [Hz] (1 – 1000) #TODO: 文档里需要标注这个最好不要高于最快的传感器频率
       max_delay_sec: 0.5               # Max tolerable observation age [s]
       max_dt_sec: 0.5                  # Upper clamp for dt between predict steps [s]
       max_consecutive_empty_ticks: 10  # Freeze filter after this many silent ticks
 
       publish_tf: false                 # Broadcast map → base_link on /tf
-      force_2d_mode: false              # Constrain z / roll / pitch to zero
+      force_2d_mode: true              # Constrain z / roll / pitch to zero
       publish_odom: true                # Publish ESKF state on ~/nav_state
       passthrough: false               # Bypass the ESKF (debug only)
 
@@ -54,7 +54,7 @@ hello_finenav:
       odom0: "/odom"
       odom0_mode: "relative_pose"
       odom0_config: [false, false, false, false, false, false]
-      odom0_extract_absolute_pose: [true, true, true, true, true, true]   # fuse all 6 DOF
+      odom0_extract_absolute_pose: [true, true, false, false, false, true]   # x, y, yaw
       odom0_smoothing_steps: 1
       odom0_gate_dist: 28.0
       odom0_covariance_override: [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0]  # use msg cov
