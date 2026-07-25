@@ -14,7 +14,7 @@ namespace finenav::navigator {
 
 BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
                      finenav::core::RobotStateProvider* state_provider)
-    : state_provider_(state_provider), master_(parent_node), parent_node_(parent_node)
+    : state_provider_(state_provider), parent_node_(parent_node)
 {
     // ── 创建私有子节点（参数前缀由 yaml 的顶层 key "finenav_navigator" 决定）──
     rclcpp::NodeOptions pnode_opts;
@@ -25,6 +25,10 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
         "finenav_navigator",            // 节点名称，与 yaml 顶层 key 一致
         parent_node->get_name(),        // 命名空间继承宿主节点名
         pnode_opts);
+
+    // TaskMaster on pnode_ so its topics share the /hello_finenav namespace
+    // with every ControlLayer's TaskWorker (also under /hello_finenav).
+    master_ = std::make_unique<finenav::util::TaskMaster>(pnode_);
 
     // ── 读取参数 ──────────────────────────────────────────────────────────────
     param_listener_ = std::make_unique<finenav_navigator::ParamListener>(pnode_);
@@ -75,7 +79,7 @@ void BtNavigator::execute()
     auto blackboard = tree_.rootBlackboard();
     blackboard->set("goal", goal->pose.pose);
     blackboard->set("_node", parent_node_);
-    blackboard->set("_nav_task_master", &master_);
+    blackboard->set("_nav_task_master", master_.get());
     blackboard->set("_chassis_cmd", chassis_cmd_.get());
 
     auto episode_start = pnode_->now();
@@ -87,7 +91,7 @@ void BtNavigator::execute()
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Cancellation requested.");
-            master_.stopAll();
+            master_->stopAll();
             tree_.haltTree();
             action_server_->terminate_all();
             return;
@@ -95,7 +99,7 @@ void BtNavigator::execute()
 
         if (action_server_->is_preempt_requested()) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Preemption requested.");
-            master_.stopAll();
+            master_->stopAll();
             tree_.haltTree();
             return;
         }
@@ -130,7 +134,7 @@ void BtNavigator::execute()
         if (chassis_cmd_) {
             std::vector<std::pair<std::string, std::shared_ptr<const FeedbackMsg>>> fresh;
             for (auto& leaf : pipe_.leaves()) {
-                auto fb = master_.feedback(leaf);
+                auto fb = master_->feedback(leaf);
                 if (fb && fb != last_consumed_fb_[leaf]) {
                     fresh.emplace_back(leaf, fb);
                 }
@@ -176,12 +180,12 @@ void BtNavigator::execute()
                 }
             }
             result->total_time = rclcpp::Duration(pnode_->now() - episode_start);
-            master_.stopAll();
+            master_->stopAll();
             action_server_->succeeded_current(result);
             return;
         } else if (status == BT::NodeStatus::FAILURE) {
             FINENAV_LOG_ERROR(pnode_->get_logger(), "[Navigator] Navigation failed.");
-            master_.stopAll();
+            master_->stopAll();
             action_server_->terminate_all();
             return;
         }

@@ -53,7 +53,7 @@ public:
     }
 
     // ── IPC + topology (public for FineNavEngine wiring) ────────────────────
-    finenav::util::TaskMaster&       master()       { return master_; } // TODO: 如果没人用，就去掉
+    finenav::util::TaskMaster&       master()       { return *master_; } // TODO: 如果没人用，就去掉
     finenav::core::ControlPipelineTree& pipe()       { return pipe_; }
 
     void setChassisCommand(std::shared_ptr<IChassisCommand> cmd) {
@@ -76,7 +76,7 @@ private:
     finenav_navigator::Params                         params_;
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;
 
-    finenav::util::TaskMaster         master_;
+    std::unique_ptr<finenav::util::TaskMaster> master_;
     finenav::core::ControlPipelineTree pipe_;
     using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
 
