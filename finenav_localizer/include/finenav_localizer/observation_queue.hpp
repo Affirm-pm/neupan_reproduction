@@ -109,29 +109,4 @@ private:
     std::queue<std::size_t> ages_;
 };
 
-/**
- * @brief Concrete type alias
- * @details
- * (1) PoseObsQueue - stores PoseWithCovarianceStamped (ros message);
- * (2) TwistObsQueue - stores TwistWithCovarianceStamped (ros message);
- * (3) RelativePoseObsQueue - stores RelativePoseObs (custom struct).
- */
-
-// PoseObsQueue / TwistObsQueue are now tagged wrappers — defined in eskf_localizer.hpp.
-
-struct RelativePoseObs {
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-    Eigen::Vector3d             delta_p_body_obs;
-    Sophus::SO3d                delta_R_obs;
-    Eigen::Matrix<double, 6, 6> R_noise;
-    rclcpp::Time                stamp_to;
-    rclcpp::Time                stamp_from;
-
-    int smooth{1};
-    double gate_dist{1e9};
-};
-
-using RelativePoseObsQueue = AgedObservationQueue<RelativePoseObs>;
-
 }  // namespace finenav::localizer

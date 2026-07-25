@@ -165,6 +165,12 @@ void SensorSubscriber::odomCallback(OdomMsg::ConstSharedPtr msg, std::size_t idx
     auto & s = odom_sensors_.at(idx);
 
     if (s.use_relative) {
+        // Skip if no DOF is enabled in the mask.
+        if (std::none_of(s.mask.begin(), s.mask.end(), [](bool v) { return v; })) {
+            s.prev_msg = *msg;  // keep frame pair current
+            return;
+        }
+
         // RelPose mode: compute body-frame displacement between consecutive frames.
         if (!s.prev_msg.has_value()) {
             s.prev_msg = *msg;
@@ -194,6 +200,7 @@ void SensorSubscriber::odomCallback(OdomMsg::ConstSharedPtr msg, std::size_t idx
         RelativePoseObs rel;
         rel.smooth     = s.smooth;
         rel.gate_dist  = s.gate_dist;
+        rel.mask       = s.mask;
         rel.delta_p_body_obs = R_prev.inverse() * (p_curr - p_prev);
         rel.delta_R_obs      = R_prev.inverse() * R_curr;
 

@@ -21,31 +21,10 @@
 #include "finenav_localizer/kalman_filter/eskf.hpp"
 #include "finenav_localizer/kalman_filter/filter_model.hpp"
 #include "finenav_localizer/observation_queue.hpp"
+#include "finenav_localizer/observation_types.hpp"
 #include "finenav_localizer/localizer_params.hpp"
 
 namespace finenav::localizer {
-
-/// Per-sensor overrides carried alongside a pose observation in the internal queue.
-struct TaggedPoseObs {
-    geometry_msgs::msg::PoseWithCovarianceStamped msg;
-    int                  smooth{1};
-    double               gate_dist{1e9};
-    std::array<bool, 6>  mask{{true, true, true, true, true, true}};
-    std::array<double, 6> cov_override{};  // < 0 → use from msg; ≥ 0 → override
-};
-
-/// Per-sensor overrides carried alongside a twist observation.
-struct TaggedTwistObs {
-    geometry_msgs::msg::TwistWithCovarianceStamped msg;
-    int                  smooth{1};
-    double               gate_dist{1e9};
-    std::array<bool, 6>  mask{{true, true, true, true, true, true}};
-    std::array<double, 6> cov_override{};  // < 0 → use from msg; ≥ 0 → override
-};
-
-// Internal queues now carry tagged wrappers — per-sensor config lives with the message.
-using PoseObsQueue  = AgedObservationQueue<TaggedPoseObs>;
-using TwistObsQueue = AgedObservationQueue<TaggedTwistObs>;
 
 /**
  * @brief EskfLocalizer  —  ROS-free ESKF localization engine (the C++ API layer)

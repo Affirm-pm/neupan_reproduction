@@ -527,6 +527,9 @@ void EskfLocalizer::applyUpdate(const TaggedTwistObs & tagged, int delay_step)
 void EskfLocalizer::applyUpdate(const RelativePoseObs & obs,
                                 int delay_step_to, int delay_step_from)
 {
+    const int k = static_cast<int>(std::count(obs.mask.begin(), obs.mask.end(), true));
+    if (k == 0) return;  // nothing enabled for this sensor
+
     const Eigen::Matrix<double, 6, 6> R_eff =
         obs.R_noise * static_cast<double>(obs.smooth);
 
@@ -536,13 +539,41 @@ void EskfLocalizer::applyUpdate(const RelativePoseObs & obs,
     const auto dual_obs = NavigationModelD::observeRelativePose(
         from_state, to_state, obs.delta_p_body_obs, obs.delta_R_obs);
 
-    const Eigen::Matrix<double, 6, 6> S_approx =
-        dual_obs.H_to   * eskf_.getCovarianceAtDelay(delay_step_to)   * dual_obs.H_to.transpose()
-      + dual_obs.H_from * eskf_.getCovarianceAtDelay(delay_step_from) * dual_obs.H_from.transpose()
+    const auto H_to_d   = dual_obs.H_to  .template cast<double>();
+    const auto H_from_d = dual_obs.H_from.template cast<double>();
+    const auto innov_d  = dual_obs.innovation.template cast<double>();
+
+    if (k < 6) {
+        auto [H_to_m, innov_m, R_m] = maskObservation(H_to_d,   innov_d, R_eff, obs.mask);
+        auto H_from_m = std::get<0>(maskObservation(H_from_d, innov_d, R_eff, obs.mask));
+
+        const Eigen::MatrixXd S_mat =
+            H_to_m   * eskf_.getCovarianceAtDelay(delay_step_to)  .template cast<double>() * H_to_m.transpose()
+          + H_from_m * eskf_.getCovarianceAtDelay(delay_step_from).template cast<double>() * H_from_m.transpose()
+          + R_m;
+
+        const double d2 = (innov_m.transpose() * S_mat.inverse() * innov_m)(0, 0);
+        FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
+            "RelPose Mahalanobis d²={:.1f} (gate={:.1f})", d2, obs.gate_dist);
+        if (d2 > obs.gate_dist) {
+            FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
+                "RelPose rejected by Mahalanobis gate (d²={:.1f} > {:.1f})",
+                d2, obs.gate_dist);
+            return;
+        }
+        eskf_.updateDynamicTwoSlots(innov_m, H_to_m, H_from_m, R_m,
+                                    delay_step_to, delay_step_from);
+        return;
+    }
+
+    // Fast path: all 6 DOFs active.
+    const Eigen::Matrix<double, 6, 6> S_mat =
+        H_to_d   * eskf_.getCovarianceAtDelay(delay_step_to)  .template cast<double>() * H_to_d.transpose()
+      + H_from_d * eskf_.getCovarianceAtDelay(delay_step_from).template cast<double>() * H_from_d.transpose()
       + R_eff;
 
     const double d2 = static_cast<double>(
-        dual_obs.innovation.transpose() * S_approx.inverse() * dual_obs.innovation);
+        innov_d.transpose() * S_mat.inverse() * innov_d);
 
     FINENAV_LOG_DEBUG_THROTTLE(logger_, 2000,
         "RelPose Mahalanobis d²={:.1f} (gate={:.1f})", d2, obs.gate_dist);
