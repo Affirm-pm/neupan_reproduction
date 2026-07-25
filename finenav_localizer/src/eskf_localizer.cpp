@@ -227,8 +227,7 @@ void EskfLocalizer::step(const rclcpp::Time & now)
     // Case B: normal ESKF mode
     // ==========================================
     if (!is_initialized_.load(std::memory_order_acquire)) {
-        FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
-            "Not initialised — call setInitialPose() first.");
+        FINENAV_LOG_WARN_ONCE(logger_, "No initial pose, waiting...");
         return;
     }
 
