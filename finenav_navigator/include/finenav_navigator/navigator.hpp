@@ -47,7 +47,10 @@ public:
 
     ~BtNavigator() = default;
 
-    std::string getActionName() const { return params_.action_name; }
+    /// Return the fully-qualified action name so clients on any node can reach the server.
+    std::string getActionName() const {
+        return std::string(pnode_->get_namespace()) + "/" + params_.action_name;
+    }
 
     // ── IPC + topology (public for FineNavEngine wiring) ────────────────────
     finenav::util::TaskMaster&       master()       { return master_; } // TODO: 如果没人用，就去掉
