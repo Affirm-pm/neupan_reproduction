@@ -7,9 +7,6 @@
 #include <chrono>
 
 namespace finenav {
-namespace {
-using NavAction = finenav_interfaces::action::NavigateToPose;
-}  // namespace
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  Constructor
@@ -17,24 +14,14 @@ using NavAction = finenav_interfaces::action::NavigateToPose;
 
 FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
     : node_(node) {
-    FINENAV_LOG_INFO(node_->get_logger(), "Initializing...");
 
     localizer_ = std::make_unique<finenav::localizer::FineNavLocalizer>(node_);
-    FINENAV_LOG_INFO(node_->get_logger(), "Localizer ready.");
-
     navigator_ = std::make_unique<finenav::navigator::BtNavigator>(node_, localizer_.get());
-    FINENAV_LOG_INFO(node_->get_logger(), "Navigator ready.");
-
-    nav_client_ = rclcpp_action::create_client<NavAction>(
-        node_, navigator_->getActionName());
-    FINENAV_LOG_INFO(node_->get_logger(), "Navigation client ready.");
+    nav_client_ = rclcpp_action::create_client<NavAction>(node_, navigator_->getActionName());
 
     goal_sub_ = node_->create_subscription<geometry_msgs::msg::PoseStamped>(
         "/goal_pose", 10,
         [this](const geometry_msgs::msg::PoseStamped& msg) { navigateTo(msg.pose); });
-    FINENAV_LOG_INFO(node_->get_logger(), "Goal pose subscriber ready (/goal_pose).");
-
-    FINENAV_LOG_INFO(node_->get_logger(), "All singletons initialized.");
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -113,7 +100,7 @@ void FineNavEngine::navigateTo(const geometry_msgs::msg::Pose& goal,
 
     nav_client_->async_send_goal(goal_msg);
     FINENAV_LOG_INFO(node_->get_logger(),
-        "Navigation goal sent: (%.2f, %.2f, %.2f)",
+        "Navigation goal sent: ({:.2f}, {:.2f}, {:.2f})",
         goal.position.x, goal.position.y, goal.position.z);
 }
 

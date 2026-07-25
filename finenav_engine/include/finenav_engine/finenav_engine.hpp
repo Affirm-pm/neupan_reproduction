@@ -96,6 +96,8 @@ private:
     void connectEdge(const std::string& from,
                      std::shared_ptr<finenav::core::IControlLayer> to);
 
+    using NavAction = finenav_interfaces::action::NavigateToPose;
+
     std::shared_ptr<rclcpp::Node> node_;
 
     std::unordered_map<std::string, std::any> maps_;
@@ -103,9 +105,10 @@ private:
 
     std::unique_ptr<finenav::localizer::FineNavLocalizer> localizer_;
     std::unique_ptr<finenav::navigator::BtNavigator>      navigator_;
-    rclcpp_action::Client<finenav_interfaces::action::NavigateToPose>::SharedPtr nav_client_;
-    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr             goal_sub_;
-    std::string                                                                   default_bt_id_;
+
+    rclcpp_action::Client<NavAction>::SharedPtr                     nav_client_;
+    rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
+    std::string                                                      default_bt_id_;
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
