@@ -91,6 +91,14 @@ void FineNavEngine::wireControlPipeline(std::initializer_list<ControlPipeEdge> e
 
 void FineNavEngine::navigateTo(const geometry_msgs::msg::Pose& goal,
                                const std::string& bt_id) {
+    const std::string tree_id = bt_id.empty() ? default_bt_id_ : bt_id;
+    if (tree_id.empty()) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "navigateTo: behavior tree ID is empty. "
+            "Pass a bt_id or call setDefaultBehaviorTree() first.");
+        return;
+    }
+
     if (!nav_client_->wait_for_action_server(std::chrono::seconds(1))) {
         FINENAV_LOG_ERROR(node_->get_logger(),
             "Navigator action server unavailable.");
@@ -101,7 +109,7 @@ void FineNavEngine::navigateTo(const geometry_msgs::msg::Pose& goal,
     goal_msg.pose.pose         = goal;
     goal_msg.pose.header.stamp = node_->now();
     goal_msg.pose.header.frame_id = "map";
-    goal_msg.behavior_tree     = bt_id;
+    goal_msg.behavior_tree     = tree_id;
 
     nav_client_->async_send_goal(goal_msg);
     FINENAV_LOG_INFO(node_->get_logger(),

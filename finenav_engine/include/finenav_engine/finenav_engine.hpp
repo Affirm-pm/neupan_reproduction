@@ -47,6 +47,11 @@ public:
         navigator_->setChassisCommand(std::move(cmd));
     }
 
+    /// Set the default behavior tree ID used when navigateTo() is called without one
+    /// (e.g. from the /goal_pose topic subscriber).
+    void setDefaultBehaviorTree(const std::string& bt_id) { default_bt_id_ = bt_id; }
+    [[nodiscard]] const std::string& getDefaultBehaviorTree() const { return default_bt_id_; }
+
     // ── Factory: map ──────────────────────────────────────────────────────
 
     template <typename MapT>
@@ -100,6 +105,7 @@ private:
     std::unique_ptr<finenav::navigator::BtNavigator>      navigator_;
     rclcpp_action::Client<finenav_interfaces::action::NavigateToPose>::SharedPtr nav_client_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr             goal_sub_;
+    std::string                                                                   default_bt_id_;
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
