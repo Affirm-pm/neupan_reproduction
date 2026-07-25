@@ -214,8 +214,8 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
         if (auto maybe_rs = state_provider_->getRobotState()) {
             pre_update_hook_(*maybe_rs, *map_instance_);
         } else {
-            FINENAV_LOG_WARN(node_->get_logger(),
-                "MapServer '{}': try to get current robot state but failed — skipping pre-update hook.",
+            FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
+                "MapServer '{}': robot state unavailable — skipping pre-update hook.",
                 server_name_);
         }
     }
@@ -230,8 +230,8 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
         if (auto maybe_rs = state_provider_->getRobotState()) {
             post_update_hook_(*maybe_rs, *map_instance_);
         } else {
-            FINENAV_LOG_WARN(node_->get_logger(),
-                "MapServer '{}': try to get current robot state but failed — skipping post-update hook.",
+            FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
+                "MapServer '{}': robot state unavailable — skipping post-update hook.",
                 server_name_);
         }
     }

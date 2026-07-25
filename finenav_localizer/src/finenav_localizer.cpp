@@ -102,12 +102,12 @@ void FineNavLocalizer::timerCallback()
     // ── Overrun detection (real-time concern; lives in the ROS layer) ────────
     const double elapsed_sec = (pnode_->now() - tick_time).seconds();
     const double period_sec  = 1.0 / params_.update_rate_hz;
-    FINENAV_LOG_INFO_THROTTLE(pnode_->get_logger(), 2000,
-        "tick complete  elapsed={:.1f} ms  period={:.1f} ms",
+    FINENAV_LOG_DEBUG_THROTTLE(pnode_->get_logger(), 2000,
+        "tick complete  elapsed={:.3f} ms  period={:.3f} ms",
         elapsed_sec * 1e3, period_sec * 1e3);
     if (elapsed_sec > period_sec) {
         FINENAV_LOG_WARN_THROTTLE(pnode_->get_logger(), 2000,
-            "Timer overrun: callback took {:.1f} ms but period is {:.1f} ms "
+            "Timer overrun: callback took {:.3f} ms but period is {:.3f} ms "
             "({:.0f}% over). Consider reducing update_rate_hz or max_delay_step.",
             elapsed_sec * 1e3, period_sec * 1e3, (elapsed_sec / period_sec - 1.0) * 100.0);
     }

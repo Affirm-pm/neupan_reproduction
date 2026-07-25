@@ -19,6 +19,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::util {
 
@@ -56,7 +57,7 @@ class SimpleActionServer
             std::bind(&SimpleActionServer::handle_accepted, this, _1)
         );
 
-        RCLCPP_INFO(node_->get_logger(), "FineNav ActionServer [%s] started.", action_name_.c_str());
+        FINENAV_LOG_INFO(node_->get_logger(), "Action server started.");
     }
 
     ~SimpleActionServer()
@@ -121,13 +122,13 @@ class SimpleActionServer
         std::lock_guard<std::recursive_mutex> lock(update_mutex_);
 
         if (!pending_handle_) {
-            RCLCPP_ERROR(node_->get_logger(), "[%s] No pending goal to accept!", action_name_.c_str());
+            FINENAV_LOG_ERROR(node_->get_logger(), "No pending goal to accept.");
             return nullptr;
         }
 
         // 如果当前还有旧目标在跑，先把它结束掉
         if (current_handle_ && current_handle_->is_active() && current_handle_ != pending_handle_) {
-            RCLCPP_INFO(node_->get_logger(), "[%s] Preempting current goal.", action_name_.c_str());
+            FINENAV_LOG_INFO(node_->get_logger(), "Preempting current goal.");
             auto result = std::make_shared<typename ActionT::Result>();
             current_handle_->abort(result); // 或者 canceled，视业务逻辑而定，通常抢占视为 abort 旧的
         }
@@ -211,11 +212,11 @@ class SimpleActionServer
 
         // If current goal is active, put new goal into pending slot
         if (current_handle_ && current_handle_->is_active()) {
-            RCLCPP_INFO(node_->get_logger(), "[%s] New goal received while busy. Storing in pending slot.", action_name_.c_str());
+            FINENAV_LOG_INFO(node_->get_logger(), "New goal received while busy, storing as pending.");
 
             // If there's already a pending goal, abort it
             if (pending_handle_ && pending_handle_->is_active()) {
-                RCLCPP_WARN(node_->get_logger(), "[%s] Overwriting previous pending goal.", action_name_.c_str());
+                FINENAV_LOG_WARN(node_->get_logger(), "Overwriting previous pending goal.");
                 auto result = std::make_shared<typename ActionT::Result>();
                 pending_handle_->abort(result);
             }
@@ -223,7 +224,7 @@ class SimpleActionServer
         }
         // Else, start executing the new goal immediately
         else {
-            RCLCPP_INFO(node_->get_logger(), "[%s] New goal received. Starting execution.", action_name_.c_str());
+            FINENAV_LOG_INFO(node_->get_logger(), "New goal received, starting execution.");
             current_handle_ = handle;
 
             if (worker_thread_.joinable()) { // Expeted that thread is not running
@@ -247,7 +248,7 @@ class SimpleActionServer
                     execute_callback_();
                 }
             } catch (const std::exception & ex) {
-                RCLCPP_ERROR(node_->get_logger(), "[%s] Exception in execution callback: %s", action_name_.c_str(), ex.what());
+                FINENAV_LOG_ERROR(node_->get_logger(), "Exception in execution callback: {}", ex.what());
                 terminate_all();
                 return;
             }
@@ -256,13 +257,13 @@ class SimpleActionServer
 
             // If current goal is still active, but not set to succeeded, abort it
             if (current_handle_ && current_handle_->is_active()) {
-                RCLCPP_WARN(node_->get_logger(), "[%s] Goal finished but result not set. Aborting.", action_name_.c_str());
+                FINENAV_LOG_WARN(node_->get_logger(), "Goal finished but result not set, aborting.");
                 current_handle_->abort(std::make_shared<typename ActionT::Result>());
             }
 
             // If there's a pending goal, promote it to current, and continue loop
             if (pending_handle_) {
-                RCLCPP_INFO(node_->get_logger(), "[%s] Processing pending goal immediately.", action_name_.c_str());
+                FINENAV_LOG_INFO(node_->get_logger(), "Processing pending goal immediately.");
                 current_handle_ = pending_handle_;
                 pending_handle_.reset();
             } else {

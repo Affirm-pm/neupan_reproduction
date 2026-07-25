@@ -57,12 +57,12 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
     // ── Default chassis command ─────────────────────────────────────────────
     chassis_cmd_ = std::make_shared<ChassisCmdVel>(parent_node_);
 
-    FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Initialized and spinning.");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "Initialized and spinning.");
 }
 
 void BtNavigator::execute()
 {
-    FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Executing action...");
+    FINENAV_LOG_INFO(pnode_->get_logger(), "Executing action...");
 
     auto goal = action_server_->get_current_goal();
 
@@ -70,7 +70,7 @@ void BtNavigator::execute()
         tree_ = bt_engine_->factory().createTree(goal->behavior_tree);
     } catch (std::exception& ex) {
         FINENAV_LOG_ERROR(pnode_->get_logger(),
-            "[Navigator] Failed to create tree [{}]: {}",
+            "Failed to create tree [{}]: {}",
             goal->behavior_tree, ex.what());
         action_server_->terminate_all();
         return;
@@ -85,12 +85,12 @@ void BtNavigator::execute()
     auto episode_start = pnode_->now();
     rclcpp::WallRate loop_rate(params_.tick_frequency);
     FINENAV_LOG_INFO(pnode_->get_logger(),
-        "[Navigator] Starting navigation to ({:.2f}, {:.2f})",
+        "Starting navigation to ({:.2f}, {:.2f})",
         goal->pose.pose.position.x, goal->pose.pose.position.y);
 
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
-            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Cancellation requested.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "Cancellation requested.");
             master_->stopAll();
             tree_.haltTree();
             action_server_->terminate_all();
@@ -98,7 +98,7 @@ void BtNavigator::execute()
         }
 
         if (action_server_->is_preempt_requested()) {
-            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Preemption requested.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "Preemption requested.");
             master_->stopAll();
             tree_.haltTree();
             return;
@@ -159,7 +159,7 @@ void BtNavigator::execute()
         }
 
         if (status == BT::NodeStatus::SUCCESS) {
-            FINENAV_LOG_INFO(pnode_->get_logger(), "[Navigator] Navigation succeeded.");
+            FINENAV_LOG_INFO(pnode_->get_logger(), "Navigation succeeded.");
             auto result = std::make_shared<typename ActionT::Result>();
             if (state_provider_) {
                 if (auto rs = state_provider_->getRobotState()) {
@@ -184,7 +184,7 @@ void BtNavigator::execute()
             action_server_->succeeded_current(result);
             return;
         } else if (status == BT::NodeStatus::FAILURE) {
-            FINENAV_LOG_ERROR(pnode_->get_logger(), "[Navigator] Navigation failed.");
+            FINENAV_LOG_ERROR(pnode_->get_logger(), "Navigation failed.");
             master_->stopAll();
             action_server_->terminate_all();
             return;
