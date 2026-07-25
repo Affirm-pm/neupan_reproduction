@@ -19,18 +19,10 @@ void DummyPlanner::reset() {}
 
 DummyPlanner::Result DummyPlanner::plan(const Context& ctx,const IMapView& map_view) {
 
-    using Trajectory = finenav::core::Trajectory<OutputProfile>;
+    using Trajectory = finenav::core::Trajectory<OutputProfile>; // TODO：这个写法不错，很漂亮
 
     double dx = ctx.goal_pose.position.x - ctx.robot_state.position.x();
     double dy = ctx.goal_pose.position.y - ctx.robot_state.position.y();
-    double distance = std::hypot(dx, dy);
-
-    if (distance < 0.1) {
-        Trajectory result;
-        geometry_msgs::msg::Twist stop;
-        result.twists.push_back(stop);
-        return result;
-    }
 
     double desired_yaw = std::atan2(dy, dx);
 
