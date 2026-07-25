@@ -38,6 +38,12 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
 
     // ── 初始化行为树引擎 ──────────────────────────────────────────────────────
     bt_engine_ = std::make_unique<BehaviorTreeEngine>();
+
+    // Always load framework built-in plugins and trees first.
+    bt_engine_->registerPlugins({"finenav_navigator/lib"});
+    bt_engine_->registerBehaviorTrees({"finenav_navigator/behavior_trees"});
+
+    // Then load any additional paths from user parameters.
     if (!params_.plugins.empty())       { bt_engine_->registerPlugins(params_.plugins); }
     if (!params_.behavior_trees.empty()){ bt_engine_->registerBehaviorTrees(params_.behavior_trees); }
 

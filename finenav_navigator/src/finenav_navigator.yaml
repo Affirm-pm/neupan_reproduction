@@ -15,7 +15,7 @@ finenav_navigator:
   plugins: {
     type: string_array,
     default_value: [],
-    description: "List of 'package_name/subfolder' containing BehaviorTree plugins to load into the factory",
+    description: "Additional 'package_name/subfolder' paths for BehaviorTree plugins (built-in plugins are always loaded)",
     validation: {
       unique<>: null,
     }
@@ -31,7 +31,7 @@ finenav_navigator:
   behavior_trees: {
     type: string_array,
     default_value: [],
-    description: "List of 'package_name/subfolder' containing SubTrees to load into the BehaviorTree factory",
+    description: "Additional 'package_name/subfolder' paths for SubTrees (built-in trees are always loaded)",
     validation: {
       unique<>: null,
     }
