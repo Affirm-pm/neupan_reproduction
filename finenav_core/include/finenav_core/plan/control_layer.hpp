@@ -62,7 +62,6 @@ public:
     // ── Configuration ──────────────────────────────────────────────────────
 
     void setInputTopic(const std::string& topic);
-    void setOutputTopic(const std::string& topic);
     void setupDataPorts();
 
     /**
@@ -130,7 +129,6 @@ private:
     std::atomic<bool> stop_execution_{false};
 
     rclcpp::Subscription<finenav_interfaces::msg::TaskFeedback>::SharedPtr plan_ref_sub_;
-    rclcpp::Publisher<finenav_interfaces::msg::Trajectory>::SharedPtr      plan_result_pub_;
 
     // ── Planner state ──────────────────────────────────────────────────────
 
@@ -149,7 +147,6 @@ private:
 
     std::string layer_name_;
     std::string input_topic_;
-    std::string output_topic_;
 
     std::mutex                       plan_ref_mutex_;
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;

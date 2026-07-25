@@ -85,11 +85,6 @@ void ControlLayer<Planners...>::setInputTopic(const std::string& topic) {
 }
 
 template <typename... Planners>
-void ControlLayer<Planners...>::setOutputTopic(const std::string& topic) {
-    output_topic_ = topic;
-}
-
-template <typename... Planners>
 void ControlLayer<Planners...>::setupDataPorts() {
     if (!input_topic_.empty()) {
         plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::TaskFeedback>(
@@ -97,9 +92,6 @@ void ControlLayer<Planners...>::setupDataPorts() {
             [this](std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg) {
                 PlanRefCallback(std::move(msg));
             });
-    }
-    if (!output_topic_.empty()) {
-        plan_result_pub_ = pnode_->create_publisher<finenav_interfaces::msg::Trajectory>(output_topic_, 10);
     }
 }
 
@@ -233,8 +225,9 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
         return false;
     }
 
-    if (plan_success && plan_result_pub_) {
-        plan_result_pub_->publish(output_traj_msg);
+    if (plan_success) {
+        // Publish trajectory via TaskChannel
+        worker_->publishRunning(std::move(output_traj_msg));
     }
 
     return plan_success;
