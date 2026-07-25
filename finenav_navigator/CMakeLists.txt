@@ -77,14 +77,18 @@ ament_target_dependencies(finenav_compute_plan_behavior
 )
 target_compile_definitions(finenav_compute_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
 
-# Condition Plugins (pure BT nodes, no ROS params needed)
-add_library(finenav_navigator_conditions SHARED
-        src/plugins/condition/conditions.cpp
+# Condition Plugins
+add_library(finenav_is_goal_reached_condition SHARED
+        src/plugins/condition/is_goal_reached.cpp
 )
-ament_target_dependencies(finenav_navigator_conditions
-        ${dependencies}
+ament_target_dependencies(finenav_is_goal_reached_condition ${dependencies})
+target_compile_definitions(finenav_is_goal_reached_condition PRIVATE BT_PLUGIN_EXPORT)
+
+add_library(finenav_is_stuck_condition SHARED
+        src/plugins/condition/is_stuck.cpp
 )
-target_compile_definitions(finenav_navigator_conditions PRIVATE BT_PLUGIN_EXPORT)
+ament_target_dependencies(finenav_is_stuck_condition ${dependencies})
+target_compile_definitions(finenav_is_stuck_condition PRIVATE BT_PLUGIN_EXPORT)
 
 
 # StopChassisMotion Plugin
@@ -143,7 +147,8 @@ install(TARGETS
         finenav_compute_plan_behavior
         finenav_stop_plan_behavior
         finenav_stop_chassis_motion_behavior
-        finenav_navigator_conditions
+        finenav_is_goal_reached_condition
+        finenav_is_stuck_condition
         finenav_dynamic_goal_follower
         finenav_recovery_node
         finenav_round_robin_node

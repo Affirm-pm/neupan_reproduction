@@ -13,7 +13,7 @@
                     <IsGoalReached  robot_pose="{robot_pose}"
                                     robot_twist="{robot_twist}"
                                     goal="{goal}"
-                                    tolerance="0.1"
+                                    xy_tolerance="0.25"
                                     yaw_tolerance="0.1"
                                     speed_tolerance="0.1"/>
                     <ComputePlan    layer="my_layer"

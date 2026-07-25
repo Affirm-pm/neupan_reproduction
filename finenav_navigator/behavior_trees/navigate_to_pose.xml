@@ -21,7 +21,7 @@
                     <IsGoalReached  robot_pose="{robot_pose}"
                                     robot_twist="{robot_twist}"
                                     goal="{goal}"
-                                    tolerance="0.25"
+                                    xy_tolerance="0.25"
                                     yaw_tolerance="1.57"
                                     speed_tolerance="0.1"/>
                     <ComputePlan    layer="mppi_layer"
@@ -42,7 +42,7 @@
                     <IsGoalReached  robot_pose="{robot_pose}"
                                     robot_twist="{robot_twist}"
                                     goal="{goal}"
-                                    tolerance="0.25"
+                                    xy_tolerance="0.25"
                                     yaw_tolerance="1.57"
                                     speed_tolerance="0.1"/>
                     <ReactiveSequence name="TrackUnlessStuck">
