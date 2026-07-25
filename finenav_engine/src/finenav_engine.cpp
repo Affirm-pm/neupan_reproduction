@@ -46,7 +46,11 @@ bool FineNavEngine::removeControlLayer(const std::string& name) {
 
 void FineNavEngine::connectEdge(const std::string& from,
                                 std::shared_ptr<finenav::core::IControlLayer> to) {
-    to->connectFrom(finenav::util::TaskChannel::feedbackTopic(from));
+    // Root connection (_root >> layer): no upstream node exists, nothing to
+    // subscribe to.  Subscribing results in a dead /__feedback topic.
+    if (!from.empty()) {
+        to->connectFrom(finenav::util::TaskChannel::feedbackTopic(from));
+    }
     navigator_->pipe().addEdge(from, to->layerName());
 }
 
