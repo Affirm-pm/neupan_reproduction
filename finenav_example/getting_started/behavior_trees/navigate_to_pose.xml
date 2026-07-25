@@ -1,0 +1,29 @@
+<!--
+  Getting Started — Behavior Tree for DummyPlanner example.
+
+  Navigate to a goal pose using the dummy planner.
+  When the goal is reached, stops the planner and succeeds.
+  -->
+<root BTCPP_format="4">
+
+    <BehaviorTree ID="GettingStartedNavigate">
+        <RetryUntilSuccessful num_attempts="-1">
+            <Sequence name="TrackThenStop">
+                <ReactiveFallback name="NavigateOrSucceed">
+                    <IsGoalReached  robot_pose="{robot_pose}"
+                                    robot_twist="{robot_twist}"
+                                    goal="{goal}"
+                                    tolerance="0.25"
+                                    yaw_tolerance="1.57"
+                                    speed_tolerance="0.1"/>
+                    <ComputePlan    layer="my_layer"
+                                    goal="{goal}"
+                                    planner_id="dummy_planner"/>
+                </ReactiveFallback>
+                <!-- Goal reached: publish zero velocity and succeed -->
+                <StopChassisMotion/>
+            </Sequence>
+        </RetryUntilSuccessful>
+    </BehaviorTree>
+
+</root>
