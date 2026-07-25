@@ -11,10 +11,10 @@
 
 namespace finenav::navigator {
 
-class ComputePlan : public BT::SyncActionNode {
+class ComputePlan : public BT::StatefulActionNode {
 public:
     ComputePlan(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+        : BT::StatefulActionNode(name, config) {}
 
     static BT::PortsList providedPorts() {
         return {
@@ -24,10 +24,13 @@ public:
         };
     }
 
-    BT::NodeStatus tick() override;
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override {}
 
 private:
     bool taskChanged(const geometry_msgs::msg::Pose& goal, const std::string& planner_id) const;
+    std::string              layer_;
     geometry_msgs::msg::Pose last_goal_{};
     std::string              last_planner_id_;
 };
