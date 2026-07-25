@@ -176,10 +176,12 @@ void BtNavigator::execute()
                 }
             }
             result->total_time = rclcpp::Duration(pnode_->now() - episode_start);
+            master_.stopAll();
             action_server_->succeeded_current(result);
             return;
         } else if (status == BT::NodeStatus::FAILURE) {
             FINENAV_LOG_ERROR(pnode_->get_logger(), "[Navigator] Navigation failed.");
+            master_.stopAll();
             action_server_->terminate_all();
             return;
         }
