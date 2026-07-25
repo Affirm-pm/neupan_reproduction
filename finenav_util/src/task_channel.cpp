@@ -111,6 +111,9 @@ bool TaskWorker::shouldStop() const {
 
 void TaskWorker::ackGoal() {
     new_goal_.store(false, std::memory_order_release);
+    // A Start naturally supersedes any previous Stop — the worker is
+    // about to begin a new episode.
+    should_stop_.store(false, std::memory_order_release);
 }
 
 void TaskWorker::publishRunning(finenav_interfaces::msg::Trajectory&& traj) {
