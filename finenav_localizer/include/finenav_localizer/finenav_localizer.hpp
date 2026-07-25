@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 
+#include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 
@@ -68,6 +69,7 @@ private:
     std::unique_ptr<ParamListener> param_listener_;        ///< dynamic-parameter listener
     Params                         params_;                ///< latest parameter snapshot
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_; ///< null when publish_tf is false
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr  nav_state_pub_; ///< null when publish_odom is false
 
     std::unique_ptr<EskfLocalizer> eskf_localizer_;        ///< inner ROS-free compute engine
 

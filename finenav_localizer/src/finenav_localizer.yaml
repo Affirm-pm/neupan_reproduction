@@ -62,6 +62,11 @@ finenav_localizer:
     default_value: false,
     description: "Whether to broadcast the map->base_link TF transform on each filter update tick",
   }
+  publish_odom: {
+    type: bool,
+    default_value: false,
+    description: "Publish the ESKF estimated state as nav_msgs/Odometry on '~/nav_state'",
+  }
   max_consecutive_empty_ticks: {
     type: int,
     default_value: 10,

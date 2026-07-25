@@ -8,6 +8,7 @@
 
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <nav_msgs/msg/odometry.hpp>
 
 #include "finenav_util/common/log_macros.hpp"
 
@@ -48,6 +49,11 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
         tf_br_ = std::make_shared<tf2_ros::TransformBroadcaster>(pnode_);
     }
 
+    // Odometry publisher exposing the ESKF estimated state.
+    if (params_.publish_odom) {
+        nav_state_pub_ = pnode_->create_publisher<nav_msgs::msg::Odometry>("~/nav_state", 10);
+    }
+
     // Update timer, then spin thread (last, so all entities are registered).
     const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::duration<double>(1.0 / params_.update_rate_hz));
@@ -78,6 +84,31 @@ void FineNavLocalizer::timerCallback()
     // Feed the latest state into the inherited RobotStateProvider history.
     if (eskf_localizer_->isInitialized()) {
         pushState(tick_time, toRobotState(eskf_localizer_->getState()));
+    }
+
+    // ── Odometry publisher (nav_state) ──────────────────────────────────────
+    if (nav_state_pub_ && eskf_localizer_->isInitialized()) {
+        const NavStateD s = eskf_localizer_->getRawState();
+        const Eigen::Quaterniond q(s.R.matrix());
+
+        nav_msgs::msg::Odometry odom;
+        odom.header.stamp    = tick_time;
+        odom.header.frame_id = "map";
+        odom.child_frame_id  = "base_link";
+        odom.pose.pose.position.x    = s.p.x();
+        odom.pose.pose.position.y    = s.p.y();
+        odom.pose.pose.position.z    = s.p.z();
+        odom.pose.pose.orientation.w = q.w();
+        odom.pose.pose.orientation.x = q.x();
+        odom.pose.pose.orientation.y = q.y();
+        odom.pose.pose.orientation.z = q.z();
+        odom.twist.twist.linear.x  = s.v.x();
+        odom.twist.twist.linear.y  = s.v.y();
+        odom.twist.twist.linear.z  = s.v.z();
+        odom.twist.twist.angular.x = s.omega.x();
+        odom.twist.twist.angular.y = s.omega.y();
+        odom.twist.twist.angular.z = s.omega.z();
+        nav_state_pub_->publish(odom);
     }
 
     // ── Broadcast TF: map → base_link (raw world-frame state) ────────────────

@@ -35,6 +35,7 @@ hello_finenav:
 
       publish_tf: false                 # Broadcast map → base_link on /tf
       force_2d_mode: false              # Constrain z / roll / pitch to zero
+      publish_odom: true                # Publish ESKF state on ~/nav_state
       passthrough: false               # Bypass the ESKF (debug only)
 
       # ── Process noise (constant-velocity model) ─────────────────────────────
