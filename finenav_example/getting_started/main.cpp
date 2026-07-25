@@ -40,6 +40,9 @@ int main(int argc, char** argv) {
     auto node = rclcpp::Node::make_shared("hello_finenav");
     auto engine = std::make_shared<finenav::FineNavEngine>(node);
 
+    // 0. Set the default behavior tree (used by /goal_pose and navigateTo() without bt_id).
+    engine->setDefaultBehaviorTree("GettingStartedNavigate");
+
     // 1. Create MapServer
     auto map_server = engine->createMapServer<DummyMap>("my_map");
 
