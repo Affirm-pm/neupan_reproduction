@@ -70,17 +70,15 @@ public:
                          const std::array<bool,6>& mask,
                          const std::array<double,6>& cov_override = {});
     void feedRelativePose(const RelativePoseObs & obs);
-    /// Planar constraint injection (called each tick when force_2d_mode is on).
-    void applyPlanarConstraints();
-
     /**
      * @brief Advance the estimator by one cycle using @p now as the reference epoch.
+     * @details If force_2d_mode is on, hard-constrains z/roll/pitch to zero before caching.
      */
     void step(const rclcpp::Time & now);
 
     /// Latest state, `v` in the **body frame** (API contract).
     [[nodiscard]] NavStateD    getState()          const;
-    /// Raw latest nominal state (world-frame v, no force_2d shaping) — for TF.
+    /// Raw latest nominal state (world-frame v) — for TF.
     [[nodiscard]] NavStateD    getRawState()       const;
     [[nodiscard]] PMat         getCovariance()     const;
     [[nodiscard]] rclcpp::Time getLastUpdateTime() const;
@@ -105,7 +103,8 @@ private:
     static std::tuple<Vec3d, Vec3d, Eigen::Matrix<double, 6, 6>>
     extractObservation(const TwistMsg & msg);
 
-    NavStateD force2DOutput(const NavStateD & s) const;
+    /// Hard-constrain z, roll, pitch of the ESKF nominal state to zero.
+    void applyPlanarConstraints();
 
     finenav_localizer::Params params_;                ///< latest parameter snapshot TODO: 只存储地址，不存储值
 

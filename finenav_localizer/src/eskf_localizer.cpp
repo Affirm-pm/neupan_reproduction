@@ -151,9 +151,6 @@ NavStateD EskfLocalizer::getState() const
     NavStateD s = cached_state_;
     // External API contract: v is expressed in the body frame.
     s.v = s.R.inverse() * s.v;
-    if (params_.force_2d_mode) {
-        s = force2DOutput(s);
-    }
     return s;
 }
 
@@ -411,7 +408,12 @@ void EskfLocalizer::step(const rclcpp::Time & now)
         }
     }
 
-    // ── 5. Update output cache + history buffer ────────────────────────────
+    // ── 5. Apply force_2d hard constraints to the nominal state ────────────
+    if (params_.force_2d_mode) {
+        applyPlanarConstraints();
+    }
+
+    // ── 6. Update output cache + history buffer ────────────────────────────
     {
         std::unique_lock<std::shared_mutex> cache_lk(cached_state_mutex_);
         cached_state_      = eskf_.getState();
@@ -657,29 +659,19 @@ EskfLocalizer::maskObservation(const Eigen::Matrix<double, 6, 12>& H_full,
 
 void EskfLocalizer::applyPlanarConstraints()
 {
-    constexpr double kSigmaZ     = 1e-4;  // [m]   — tight z=0 constraint
-    constexpr double kSigmaRP    = 1e-3;  // [rad] — soft roll/pitch=0 constraint
+    // Hard constraint: the world is 2D — z, roll, and pitch are identically zero.
+    // We modify the nominal state directly rather than injecting a synthetic
+    // observation, because an observation update would tighten the yaw covariance
+    // through off-diagonal Kalman gain
+    NavStateD state = eskf_.getState();
 
-    const auto cons = NavigationModelD::observePlanarConstraints(eskf_.getState());
+    state.p.z() = 0.0;
 
-    Eigen::Matrix<double, 3, 3> R_cons = Eigen::Matrix<double, 3, 3>::Zero();
-    R_cons(0, 0) = kSigmaZ  * kSigmaZ;
-    R_cons(1, 1) = kSigmaRP * kSigmaRP;
-    R_cons(2, 2) = kSigmaRP * kSigmaRP;
-
-    eskf_.updateDynamic(cons.innovation.template cast<double>(),
-                        cons.H.template cast<double>(),
-                        R_cons, 0);
-}
-
-NavStateD EskfLocalizer::force2DOutput(const NavStateD & s) const
-{
-    NavStateD out = s;
-    out.p.z() = 0.0;
-    const Eigen::Vector3d x_axis = s.R.matrix().col(0);
+    const Eigen::Vector3d x_axis = state.R.matrix().col(0);
     const double yaw = std::atan2(x_axis.y(), x_axis.x());
-    out.R = SO3d(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix());
-    return out;
+    state.R = SO3d(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix());
+
+    eskf_.setState(state);
 }
 
 }  // namespace finenav::localizer

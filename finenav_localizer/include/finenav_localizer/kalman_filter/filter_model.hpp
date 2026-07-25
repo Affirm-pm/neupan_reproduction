@@ -306,31 +306,6 @@ public:
         return {Hto, Hfrom, innov};
     }
 
-    /**
-     * @brief Observe planar constraint: z=0, roll=0, pitch=0   (3-DOF virtual observation).
-     * @details
-     *      Used by force_2d_mode.  Only the z, roll (δθ_x) and pitch (δθ_y) rows of the
-     *      full 6-DOF pose observation are active.  The rotation innovation uses the SO3 log
-     *      directly — for small angles the rotation vector ≈ [roll, pitch, yaw].
-     * @param nominal current nominal state.
-     * @return H (3×12) and innovation (3×1).
-     */
-    [[nodiscard]]
-    static ObsData<3> observePlanarConstraints(const NavStateT& nominal)
-    {
-        Eigen::Matrix<S, 3, kNavStateDim> H = Eigen::Matrix<S, 3, kNavStateDim>::Zero();
-        H(0, 2) = static_cast<S>(1.0);   // ∂z / ∂δz
-        H(1, 3) = static_cast<S>(1.0);   // ∂roll / ∂δθ_x  (approximate)
-        H(2, 4) = static_cast<S>(1.0);   // ∂pitch / ∂δθ_y (approximate)
-
-        const Eigen::Matrix<S, 3, 1> rv = nominal.R.log();
-        Eigen::Matrix<S, 3, 1> innov;
-        innov(0) = -nominal.p.z();
-        innov(1) = -rv(0);
-        innov(2) = -rv(1);
-
-        return {H, innov};
-    }
 };
 
 using NavigationModelF = NavigationModel<float>;

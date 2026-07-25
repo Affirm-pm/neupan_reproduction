@@ -76,11 +76,6 @@ void FineNavLocalizer::timerCallback()
     const rclcpp::Time tick_time = pnode_->now();
     eskf_localizer_->step(tick_time);
 
-    // ── force_2d_mode: inject planar constraints (z=0, roll=0, pitch=0) ────────
-    if (params_.force_2d_mode && eskf_localizer_->isInitialized()) {
-        eskf_localizer_->applyPlanarConstraints();
-    }
-
     // Feed the latest state into the inherited RobotStateProvider history.
     if (eskf_localizer_->isInitialized()) {
         pushState(tick_time, toRobotState(eskf_localizer_->getState()));
