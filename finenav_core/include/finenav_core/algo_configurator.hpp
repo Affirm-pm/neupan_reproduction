@@ -55,7 +55,9 @@ struct AlgoConfigurator<ALGO_TYPE> { \
     static std::shared_ptr<void> load(rclcpp::Node::SharedPtr node, ALGO_TYPE& algo) { \
         auto listener = std::make_shared<PARAM_NS::ParamListener>(node, #PARAM_NS); \
         algo.configure(listener->get_params()); \
-        listener->setUserCallback([&algo](const auto& params) { \
+        listener->setUserCallback([&algo, node](const auto& params) { \
+            RCLCPP_DEBUG(node->get_logger(), \
+                "Algo '{}': dynamic params updated, forwarding to configure().", name); \
             algo.configure(params); \
         }); \
         return listener; \
@@ -76,7 +78,9 @@ struct AlgoConfigurator<TEMPLATE_ALGO<Args...>> { \
     static std::shared_ptr<void> load(rclcpp::Node::SharedPtr node, TEMPLATE_ALGO<Args...>& algo) { \
         auto listener = std::make_shared<PARAM_NS::ParamListener>(node, #PARAM_NS); \
         algo.configure(listener->get_params()); \
-        listener->setUserCallback([&algo](const auto& params) { \
+        listener->setUserCallback([&algo, node](const auto& params) { \
+            RCLCPP_DEBUG(node->get_logger(), \
+                "Algo '{}': dynamic params updated, forwarding to configure().", name); \
             algo.configure(params); \
         }); \
         return listener; \
