@@ -1,7 +1,20 @@
-dummy_map: # Node that it should be the same as the registration name
+# DummyMap parameter definition.
+#
+# window_size is marked read_only: true because changing the map window size at
+# runtime would require rebuilding the entire internal data structure — it cannot
+# be applied safely while the planner is running.
+#
+# read_only means:
+#   - ✅ Accepted at launch (params file / --ros-args)
+#   - ❌ Rejected at runtime (ros2 param set)
+#   - DummyMap::configure() will only be called once at startup.
+#
+# For hot-reloadable parameters, simply omit read_only.
+dummy_map:
   window_size:
     type: double
     default_value: 50.0
-    description: "Half-extent of the map window (metres)"
+    read_only: true
+    description: "Half-extent of the map window (metres). Cannot be changed at runtime."
     validation:
       gt<>: [0.0]

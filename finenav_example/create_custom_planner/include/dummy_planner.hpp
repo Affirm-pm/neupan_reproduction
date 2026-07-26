@@ -23,6 +23,24 @@ public:
     virtual ~DummyMapView() = default;
 };
 
+/**
+ * @brief DummyPlanner — a minimal example planner demonstrating the parameter pattern.
+ *
+ * === Parameter hot-reload ===
+ *
+ * DummyPlanner's parameters (linear_speed, angular_speed) are hot-reloadable
+ * because their YAML does NOT have `read_only: true`.  The framework calls
+ * configure() in two scenarios:
+ *   1. Startup:  AlgoConfigurator loads initial values (YAML defaults or
+ *               --params-file overrides).
+ *   2. Runtime:  `ros2 param set` triggers the ParamListener callback, which
+ *               calls configure() with the full new parameter set.
+ *
+ * The same configure() handles both — check the .cpp for details.
+ *
+ * If any parameter marked read_only: true, configure() will only be called at
+ * startup and ros2 param set will be rejected by generate_parameter_library.
+ */
 class DummyPlanner {
 public:
     using ConfigType    = dummy_planner::Params;
@@ -33,6 +51,13 @@ public:
 
     DummyPlanner();
 
+    /**
+     * @brief Apply parameter configuration.
+     * @details
+     * Called by the framework at startup AND on every ros2 param update.
+     * If you do not want a parameter to support hot update, simply add `read_only: true` to its YAML entry.
+     * @param cfg  Full parameter struct (generated from YAML).
+     */
     void configure(const ConfigType& cfg);
     void reset();
 
@@ -49,4 +74,6 @@ private:
 
 }  // namespace finenav::example
 
+// Register this planner into the FineNav-Engine parameter system.
+// "dummy_planner" must match the top-level key in dummy_planner.yaml.
 FINENAV_REGISTER_ALGO_CONFIG(finenav::example::DummyPlanner, dummy_planner)
