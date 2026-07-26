@@ -50,7 +50,7 @@ static_assert(finenav::core::ShiftableMap<SmokeMap>);
 namespace finenav::core {
 template <>
 struct AlgoConfigurator<SmokeMap> {
-    static std::shared_ptr<void> load(rclcpp::Node::SharedPtr, SmokeMap&) {
+    static std::shared_ptr<IParamPollable> load(rclcpp::Node::SharedPtr, SmokeMap&) {
         return nullptr;
     }
 };

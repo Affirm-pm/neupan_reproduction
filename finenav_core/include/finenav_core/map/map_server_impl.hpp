@@ -205,6 +205,8 @@ void MapServer<MapT>::addObservationSource(
 // --- MapServer::runUpdateCycle  (private, see map_server.hpp) ------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
+    param_keeper_.pollAll(); // Apply pending dynamic parameter updates
+
     finenav::util::Stopwatch sw(node_->get_logger(), "runUpdateCycle");
 
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
