@@ -6,13 +6,24 @@
 
 #include <vector>
 
-#include "finenav_map_grid_map/grid_map_params.hpp"
-#include "finenav_core/algo_configurator.hpp"
-
 #include "finenav_map_grid_map/grid_map_math.hpp"
 #include "finenav_map_grid_map/grid_map_iterator.hpp"
 
 namespace finenav {
+
+/**
+ * @brief Configuration for GridMap — a pure container, not an algorithm.
+ *
+ * GridMap is a foundational utility (like std::vector).  It does NOT go through
+ * AlgoConfigurator or generate_parameter_library.  Higher-level map types
+ * (TemporalVoxelMap, OccupancyGrid2D, etc.) wrap GridMap internally and register
+ * themselves via FINENAV_REGISTER_ALGO_CONFIG.
+ */
+struct GridMapConfig {
+    Length   length     = Length(6.0, 6.0, 6.0);
+    double   resolution = 0.1;
+    Position origin     = Position::Zero();
+};
 using finenav::core::Position3D;
 using finenav::core::Region3D;
 // TODO: 架构大改造，嵌套命名空间
@@ -28,7 +39,7 @@ template <typename T>
 class GridMap {
 public:
 	using DataType = T;
-    using ConfigType = grid_map::Params;
+    using ConfigType = GridMapConfig;
 
     // 1. 延迟初始化问题：构造之后不着急初始化，要处理 ROS 参数读取，再进行初始化配置
     // 2. 怎么读 ROS 参数，这是个问题: 弄个 ROSWrapper, 需要传递 node 进去，而后在合适时候调用 configure(node)，通过 generate_parameter_library
@@ -46,50 +57,35 @@ public:
     GridMap(const Length& length, const double& resolution, const Position& origin = Position::Zero());
 
 
-    void configure(const ConfigType& params) {
-        // TODO: 之后整，主要把 GridMap( Length, double, Poosition ) 的构造函数搬过来
-        std::cout << "[GridMap] configure with params" << std::endl;
+    void configure(const ConfigType& cfg) {
+        resolution_ = cfg.resolution;
+        length_     = cfg.length;
+        origin_     = cfg.origin;
 
-    // ===== 固定测试参数 =====
-    resolution_ = 0.05;                     // 5cm
-    length_ = Length(5.0, 5.0, 5.0);     // 10m x 10m x 3m
-    origin_ = Position(0.0, 0.0, 0.0);
+        inv_resolution_ = 1.0 / resolution_;
 
-    // ===== 派生量 =====
-    inv_resolution_ = 1.0 / resolution_;
+        size_ = (length_.array() * inv_resolution_).ceil().cast<int>();
 
-    size_ = (length_.array() * inv_resolution_).ceil().cast<int>();
+        // ensure odd dimensions (centre cell exists)
+        size_ = size_.unaryExpr([](int v) {
+            return (v % 2 == 0) ? v + 1 : v;
+        });
 
-    // 保证是奇数（关键）
-    size_ = size_.unaryExpr([](int v) {
-        return (v % 2 == 0) ? v + 1 : v;
-    });
+        half_size_ = size_ / 2;
 
-    half_size_ = size_ / 2;
+        const size_t total_size =
+            static_cast<size_t>(size_.x()) *
+            static_cast<size_t>(size_.y()) *
+            static_cast<size_t>(size_.z());
 
-    // ===== 分配内存（核心）=====
-    const size_t total_size =
-        static_cast<size_t>(size_.x()) *
-        static_cast<size_t>(size_.y()) *
-        static_cast<size_t>(size_.z());
+        data_.clear();
+        data_.resize(total_size);
 
-    data_.clear();
-    data_.resize(total_size);
+        for (auto& cell : data_) {
+            cell = T{};
+        }
 
-    // 初始化每个 voxel
-    for (auto& cell : data_) {
-        cell = T{};   // 你的 Voxel 默认是 NAN / false / 0
-    }
-
-    start_index_ = Index::Zero();
-
-    // ===== debug 输出 =====
-    std::cout << "[GridMap] resolution: " << resolution_ << std::endl;
-    std::cout << "[GridMap] size: "
-              << size_.x() << " x "
-              << size_.y() << " x "
-              << size_.z() << std::endl;
-        std::cout << "[GridMap] total cells: " << total_size << std::endl;
+        start_index_ = Index::Zero();
     }
 
     /**
@@ -330,5 +326,3 @@ private:
 }
 
 #include "finenav_map_grid_map/grid_map_impl.hpp"
-
-FINENAV_REGISTER_TEMPLATE_ALGO_CONFIG(finenav::GridMap, grid_map)

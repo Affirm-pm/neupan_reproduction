@@ -13,11 +13,6 @@ find_package(eigen3_cmake_module REQUIRED)
 
 ament_auto_find_build_dependencies()
 
-generate_parameter_library(
-        grid_map_params
-        param/grid_map.yaml
-)
-
 add_library(${PROJECT_NAME} INTERFACE)
 
 target_include_directories(${PROJECT_NAME} INTERFACE
@@ -27,25 +22,11 @@ target_include_directories(${PROJECT_NAME} INTERFACE
 
 target_link_libraries(${PROJECT_NAME} INTERFACE
         Eigen3::Eigen
-        grid_map_params
 )
-
-#if (BUILD_TESTING)
-#    find_package(ament_cmake_gtest REQUIRED)
-#    ament_find_gtest()
-#    add_subdirectory(test)
-#endif ()
 
 ament_export_dependencies(
         eigen3_cmake_module
         Eigen3
 )
 
-install(TARGETS grid_map_params
-        EXPORT export_${PROJECT_NAME}_params
-        ARCHIVE DESTINATION lib
-        LIBRARY DESTINATION lib
-        RUNTIME DESTINATION bin
-)
-ament_export_targets(export_${PROJECT_NAME}_params HAS_LIBRARY_TARGET)
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
