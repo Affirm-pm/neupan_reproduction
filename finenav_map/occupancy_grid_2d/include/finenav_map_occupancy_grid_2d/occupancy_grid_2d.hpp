@@ -18,26 +18,23 @@ using finenav::core::Position3D;
 using finenav::core::Region3D;
 
 /**
- * @brief OccupancyGrid2D — 满足 MapConcept 的二维先验占用栅格地图数据容器
+ * @brief OccupancyGrid2D — 满足 SpatialContainer 的二维先验占用栅格地图
  *
- * 职责：仅持有原始 OccupancyGrid 数据，对外暴露 MapConcept 接口。
- * 处理逻辑（二值化、代价图等）由上层 IMapView 实现，不在此处进行。
+ * 持有 nav_msgs::msg::OccupancyGrid 原始数据，对外暴露 MapConcept 查询接口。
+ * 处理逻辑（二值化、代价图、膨胀）由上层 IMapView 实现。
+ *
+ * 不实现 shiftWindowTo —— 静态地图不可移动，MapServer 编译期跳过快门 timer。
  */
 class OccupancyGrid2D {
 public:
     using ConfigType = occupancy_grid_2d::Params;
-
-    // DataType 代表单个格子的原始占用值
-    struct CellData {
-        int8_t value = -1; ///< OccupancyGrid 原始值：0=free, 100=occupied, -1=unknown
-    };
-    using DataType = CellData;
+    using DataType   = int8_t;  ///< occupancy value per cell: 0=free, 100=occupied, -1=unknown
 
     OccupancyGrid2D()                              = default;
     OccupancyGrid2D(OccupancyGrid2D&&)            = default;
     OccupancyGrid2D& operator=(OccupancyGrid2D&&) = default;
 
-    // ── MapConcept 接口 ──────────────────────────────────────
+    // ── MapConcept (SpatialContainer) ────────────────────────
 
     void configure(const ConfigType& params);
 
@@ -47,13 +44,11 @@ public:
 
     Position3D getWindowCenter() const;
 
-    void shiftWindowTo(const Position3D& /*pos*/) {} // 静态先验地图，不移动
-
-    // ── 数据注入（MapServer fuser 回调中调用）───────────────
+    // ── 数据注入（MapServer ObservationSource fuser 回调中调用）──
 
     void update(const nav_msgs::msg::OccupancyGrid& msg);
 
-    // ── 原始数据访问（供 IMapView 使用）─────────────────────
+    // ── 查询接口（供 IMapView 使用）──────────────────────────
 
     bool hasMap() const;
 
