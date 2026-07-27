@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_map_occ_grid_2d/occ_grid_2d_map.hpp"
+#include "finenav_map_occ_grid_2d/occupancy_grid_2d.hpp"
 
 #include <limits>
 
@@ -10,11 +10,11 @@ namespace finenav {
 
 // ── MapConcept 接口实现 ────────────────────────────────────────────────
 
-void OccGrid2DMap::configure(const ConfigType& params) {
+void OccupancyGrid2D::configure(const ConfigType& params) {
     config_ = params;
 }
 
-bool OccGrid2DMap::isInside(const Position3D& pos) const {
+bool OccupancyGrid2D::isInside(const Position3D& pos) const {
     if (!grid_) return false;
     const auto& info = grid_->info;
     const double wx = pos.x() - info.origin.position.x;
@@ -23,7 +23,7 @@ bool OccGrid2DMap::isInside(const Position3D& pos) const {
            wy >= 0.0 && wy < info.height * info.resolution;
 }
 
-Region3D OccGrid2DMap::getWindowBounds() const {
+Region3D OccupancyGrid2D::getWindowBounds() const {
     if (!grid_) return Region3D(Position3D::Zero(), Position3D::Zero());
     const auto& info = grid_->info;
     constexpr double inf = std::numeric_limits<double>::infinity();
@@ -34,7 +34,7 @@ Region3D OccGrid2DMap::getWindowBounds() const {
                    info.origin.position.y + info.height * info.resolution, inf));
 }
 
-Position3D OccGrid2DMap::getWindowCenter() const {
+Position3D OccupancyGrid2D::getWindowCenter() const {
     if (!grid_) return Position3D::Zero();
     const auto& info = grid_->info;
     return Position3D(
@@ -45,17 +45,16 @@ Position3D OccGrid2DMap::getWindowCenter() const {
 
 // ── 数据注入 ───────────────────────────────────────────────────────────
 
-void OccGrid2DMap::update(const nav_msgs::msg::OccupancyGrid& msg) {
+void OccupancyGrid2D::update(const nav_msgs::msg::OccupancyGrid& msg) {
     grid_ = msg;
 }
 
-bool OccGrid2DMap::hasMap() const {
+bool OccupancyGrid2D::hasMap() const {
     return grid_.has_value();
 }
 
-const nav_msgs::msg::OccupancyGrid& OccGrid2DMap::grid() const {
+const nav_msgs::msg::OccupancyGrid& OccupancyGrid2D::grid() const {
     return *grid_;
 }
 
 } // namespace finenav
-

@@ -11,25 +11,25 @@ find_package(ament_cmake_auto REQUIRED)
 
 ament_auto_find_build_dependencies()
 
-# ── 从 YAML 生成参数结构体（occ_grid_2d::Params / occ_grid_2d::ParamListener）──
+# ── 从 YAML 生成参数结构体（occupancy_grid_2d::Params / ParamListener）──
 generate_parameter_library(
-    occ_grid_2d_params
-    param/occ_grid_2d.yaml
+    occupancy_grid_2d_params
+    param/occupancy_grid_2d.yaml
 )
 
-# ── 地图库（非 header-only，因为依赖 OpenCV）────────────────────────────
+# ── 地图库 ────────────────────────────────────────────────────────────
 add_library(${PROJECT_NAME} SHARED
-    src/occ_grid_2d_map.cpp
+    src/occupancy_grid_2d.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/occ_grid_2d_params_parameters>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/occupancy_grid_2d_params_parameters>
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
-    occ_grid_2d_params
+    occupancy_grid_2d_params
 )
 
 ament_target_dependencies(${PROJECT_NAME} PUBLIC
@@ -40,7 +40,7 @@ ament_target_dependencies(${PROJECT_NAME} PUBLIC
 )
 
 # ── 安装 ─────────────────────────────────────────────────────────────
-install(TARGETS ${PROJECT_NAME} occ_grid_2d_params
+install(TARGETS ${PROJECT_NAME} occupancy_grid_2d_params
     EXPORT ${PROJECT_NAME}Targets
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib

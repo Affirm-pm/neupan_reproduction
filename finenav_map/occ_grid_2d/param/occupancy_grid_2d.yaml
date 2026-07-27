@@ -1,4 +1,4 @@
-occ_grid_2d:
+occupancy_grid_2d:
   occupancy_threshold:
     type: int
     default_value: 50

@@ -11,21 +11,21 @@
 
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/algo_configurator.hpp"
-#include "finenav_map_occ_grid_2d/occ_grid_2d_params.hpp"
+#include "finenav_map_occ_grid_2d/occupancy_grid_2d_params.hpp"
 
 namespace finenav {
 using finenav::core::Position3D;
 using finenav::core::Region3D;
 
 /**
- * @brief OccGrid2DMap — 满足 MapConcept 的二维先验占用栅格地图数据容器
+ * @brief OccupancyGrid2D — 满足 MapConcept 的二维先验占用栅格地图数据容器
  *
  * 职责：仅持有原始 OccupancyGrid 数据，对外暴露 MapConcept 接口。
  * 处理逻辑（二值化、代价图等）由上层 IMapView 实现，不在此处进行。
  */
-class OccGrid2DMap {
+class OccupancyGrid2D {
 public:
-    using ConfigType = occ_grid_2d::Params;
+    using ConfigType = occupancy_grid_2d::Params;
 
     // DataType 代表单个格子的原始占用值
     struct CellData {
@@ -33,9 +33,9 @@ public:
     };
     using DataType = CellData;
 
-    OccGrid2DMap()                          = default;
-    OccGrid2DMap(OccGrid2DMap&&)            = default;
-    OccGrid2DMap& operator=(OccGrid2DMap&&) = default;
+    OccupancyGrid2D()                              = default;
+    OccupancyGrid2D(OccupancyGrid2D&&)            = default;
+    OccupancyGrid2D& operator=(OccupancyGrid2D&&) = default;
 
     // ── MapConcept 接口 ──────────────────────────────────────
 
@@ -68,4 +68,4 @@ private:
 
 } // namespace finenav
 
-FINENAV_REGISTER_ALGO_CONFIG(finenav::OccGrid2DMap, occ_grid_2d)
+FINENAV_REGISTER_ALGO_CONFIG(finenav::OccupancyGrid2D, occupancy_grid_2d)
