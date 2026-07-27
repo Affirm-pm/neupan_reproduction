@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(finenav_map_occ_grid_2d)
+project(finenav_map_occupancy_grid_2d)
 
 set(CMAKE_CXX_STANDARD 20)
 

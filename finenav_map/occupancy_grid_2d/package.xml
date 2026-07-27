@@ -6,7 +6,7 @@
   -->
 
 <package format="3">
-    <name>finenav_map_occ_grid_2d</name>
+    <name>finenav_map_occupancy_grid_2d</name>
     <version>0.1.0</version>
     <description>2D Prior Occupancy Grid Map for FineNav, satisfying MapConcept</description>
 

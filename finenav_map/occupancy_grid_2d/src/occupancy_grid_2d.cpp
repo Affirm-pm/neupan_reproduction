@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_map_occ_grid_2d/occupancy_grid_2d.hpp"
+#include "finenav_map_occupancy_grid_2d/occupancy_grid_2d.hpp"
 
 #include <limits>
 

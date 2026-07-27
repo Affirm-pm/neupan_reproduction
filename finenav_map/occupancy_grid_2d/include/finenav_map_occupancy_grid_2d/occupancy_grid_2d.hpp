@@ -11,7 +11,7 @@
 
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/algo_configurator.hpp"
-#include "finenav_map_occ_grid_2d/occupancy_grid_2d_params.hpp"
+#include "finenav_map_occupancy_grid_2d/occupancy_grid_2d_params.hpp"
 
 namespace finenav {
 using finenav::core::Position3D;
