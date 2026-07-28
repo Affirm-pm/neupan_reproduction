@@ -36,9 +36,20 @@ std::optional<Trajectory<RotateShim::OutputProfile>> RotateShim::plan(
 {
   const auto& ref_traj = ctx.ref_traj;
 
-  // 参考轨迹为空则无法旋转，直接退出
+  // 参考轨迹为空 → 输出零速占位，保持 TrackingPolicy loop 不 abort
   if (ref_traj.poses.empty()) {
-    return std::nullopt;
+    Trajectory<RotateShim::OutputProfile> output;
+    geometry_msgs::msg::Pose p;
+    p.position.x = ctx.robot_state.position.x();
+    p.position.y = ctx.robot_state.position.y();
+    p.position.z = ctx.robot_state.position.z();
+    p.orientation.w = ctx.robot_state.orientation.w();
+    p.orientation.x = ctx.robot_state.orientation.x();
+    p.orientation.y = ctx.robot_state.orientation.y();
+    p.orientation.z = ctx.robot_state.orientation.z();
+    output.poses.push_back(p);
+    output.twists.push_back(geometry_msgs::msg::Twist{});
+    return output;
   }
 
   // 1. 在参考路径上采样前方 sampling_distance 处的点
@@ -56,7 +67,7 @@ std::optional<Trajectory<RotateShim::OutputProfile>> RotateShim::plan(
   q.z = ctx.robot_state.orientation.z();
   const double current_yaw = yawFromQuat(q);
 
-  // 4. 计算 angular distance：采样点在机器人前方方向角 — 当前朝向
+  // 4. 采用机器人当前位姿 yaw 对路径方向的角度差
   const double target_yaw = std::atan2(dy, dx);
   const double angular_distance = normalizeAngle(target_yaw - current_yaw);
 
