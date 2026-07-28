@@ -1,0 +1,109 @@
+// Copyright (c) 2026.
+// IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+// All rights reserved.
+
+#pragma once
+
+#include <chrono>
+#include <memory>
+#include <unordered_set>
+
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+
+#include "finenav_core/map/map_concept.hpp"
+#include "finenav_core/algo_configurator.hpp"
+#include "finenav_map_grid_map/grid_map.hpp"
+#include "finenav_map_temporal_voxel_map/temporal_voxel_map_params.hpp"
+#include "finenav_map_temporal_voxel_map/voxel.hpp"
+
+namespace finenav {
+
+using finenav::core::Position3D;
+using finenav::core::Region3D;
+
+/**
+ * @brief TemporalVoxelMap — 3D voxel grid with time-based dynamic obstacle filtering.
+ *
+ * Wraps GridMap<Voxel> internally and adds:
+ *   - Point-cloud insertion with single-cone FOV filtering
+ *   - Time-based pruning of expired dynamic voxels
+ *
+ * Satisfies SpatialContainer and ShiftableMap — usable with MapServer.
+ * All methods are called from the MapServer update thread (write lock held),
+ * so no additional locking is needed.
+ */
+class TemporalVoxelMap {
+public:
+    using ConfigType = temporal_voxel_map::Params;
+    using DataType   = Voxel;
+
+    TemporalVoxelMap() = default;
+
+    // ── MapConcept ─────────────────────────────────────────────────
+
+    void configure(const ConfigType& cfg);
+
+    bool isInside(const Position3D& pos) const { return grid_.isInside(pos); }
+
+    Region3D getWindowBounds() const { return grid_.getWindowBounds(); }
+
+    Position3D getWindowCenter() const { return grid_.getWindowCenter(); }
+
+    void shiftWindowTo(const Position3D& pos) { grid_.shiftWindowTo(pos); }
+
+    // ── Sensor data injection ─────────────────────────────────────
+
+    /**
+     * @brief Transform and insert a point cloud into the voxel grid.
+     *
+     * Points outside the single-cone FOV or outside the map bounds are skipped.
+     * Each inserted voxel's timestamp is set to steady_clock::now() and its
+     * position is added to the dynamic-cell set for later pruning.
+     *
+     * @param cloud       Point cloud in body frame.
+     * @param T_map_body  Body-to-map transform.
+     */
+    void insertPointCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud,
+                          const Eigen::Isometry3d& T_map_body);
+
+    // ── Temporal decay ────────────────────────────────────────────
+
+    /**
+     * @brief Remove voxels whose timestamp exceeds the configured lifetime.
+     *
+     * Called from MapServer's preUpdateHook.  Voxels inside the FOV use
+     * decay_time_fov_sec_; those outside use decay_time_sec_.
+     *
+     * @param T_map_body  Current body-to-map transform (for FOV check).
+     */
+    void pruneExpiredCells(const Eigen::Isometry3d& T_map_body);
+
+private:
+    /// Single-cone FOV: polar angle from body +Z axis.
+    bool isInFrustum(const Position& p_world,
+                     const Eigen::Isometry3d& T_map_body) const;
+
+    static double normalizeAngle(double angle);
+
+    // ── Internal state ────────────────────────────────────────────
+
+    GridMap<Voxel> grid_;
+    DynamicPosSet   dynamic_cells_;
+
+    // ── Parameters (set by configure) ─────────────────────────────
+
+    double min_range_          = 0.0;
+    double max_range_          = 50.0;
+    double min_angle_rad_      = 0.0;
+    double max_angle_rad_      = 1.047;   // π/3
+    double decay_time_sec_     = 10.0;
+    double decay_time_fov_sec_ = 1.0;
+};
+
+}  // namespace finenav
+
+FINENAV_REGISTER_ALGO_CONFIG(finenav::TemporalVoxelMap, temporal_voxel_map)

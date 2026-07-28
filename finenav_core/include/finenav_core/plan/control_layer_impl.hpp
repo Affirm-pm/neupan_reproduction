@@ -155,6 +155,8 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
         }
     }
 
+    param_keeper_.pollAll(); // Apply pending dynamic parameter updates
+
     bool plan_success  = false;
     bool planner_found = false;
     finenav_interfaces::msg::Trajectory output_traj_msg;

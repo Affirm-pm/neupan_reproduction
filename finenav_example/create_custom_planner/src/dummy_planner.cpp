@@ -11,6 +11,10 @@ namespace finenav::example {
 DummyPlanner::DummyPlanner() = default;
 
 void DummyPlanner::configure(const ConfigType& cfg) {
+    RCLCPP_INFO(rclcpp::get_logger("dummy_planner"),
+        "Params updated: linear_speed=%.2f -> %.2f, angular_speed=%.2f -> %.2f",
+        linear_speed_, cfg.linear_speed, angular_speed_, cfg.angular_speed);
+
     linear_speed_  = cfg.linear_speed;
     angular_speed_ = cfg.angular_speed;
 }

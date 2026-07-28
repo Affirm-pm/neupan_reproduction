@@ -10,18 +10,31 @@
 namespace finenav::core {
 
 /**
- * @brief Stores shared_ptr<void> handles to prevent their managed objects
- * (typically generated ParamListener instances) from being destroyed.
+ * @brief IParamPollable -- Abstract interface for a pollable parameter handle.
+ */
+class IParamPollable {
+public:
+    virtual ~IParamPollable() = default;
+    virtual void poll() = 0;
+};
+
+/**
+ * @brief ParamHandleKeeper -- Owns IParamPollable handles and provides a single pollAll() entry point.
  */
 class ParamHandleKeeper {
 public:
-    template <typename T>
-    void keep_alive(std::shared_ptr<T> handle) {
-        if (handle) handles_.push_back(handle);
+    /// Take ownership of a pollable parameter handle.
+    void keep_alive(std::shared_ptr<IParamPollable> handle) {
+        if (handle) pollables_.push_back(std::move(handle));
+    }
+
+    /// Poll all registered handles.
+    void pollAll() {
+        for (auto& p : pollables_) p->poll();
     }
 
 private:
-    std::vector<std::shared_ptr<void>> handles_;
+    std::vector<std::shared_ptr<IParamPollable>> pollables_;
 };
 
 }  // namespace finenav::core

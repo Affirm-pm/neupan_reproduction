@@ -1,0 +1,54 @@
+temporal_voxel_map:
+  # ── Grid geometry ──────────────────────────────────────────────────
+  resolution:
+    type: double
+    default_value: 0.1
+    description: "Voxel resolution [m]"
+    validation:
+      gt<>: [0.0]
+  map_length:
+    type: double
+    default_value: 6.0
+    description: "Map side length per axis [m] (cube-shaped grid)"
+    validation:
+      gt<>: [0.0]
+
+  # ── FOV (single cone, axis = body +Z) ──
+  min_range:
+    type: double
+    default_value: 0.0
+    description: "Minimum detection range [m]"
+    validation:
+      gt_eq<>: [0.0]
+  max_range:
+    type: double
+    default_value: 50.0
+    description: "Maximum detection range [m]"
+    validation:
+      gt<>: [0.0]
+  min_angle:
+    type: double
+    default_value: 0.0
+    description: "Minimum polar angle from sensor axis [rad]"
+    validation:
+      bounds<>: [0.0, 3.1416]
+  max_angle:
+    type: double
+    default_value: 1.047
+    description: "Maximum polar angle from sensor axis [rad] (default: π/3 ≈ 60°)"
+    validation:
+      bounds<>: [0.0, 3.1416]
+
+  # ── Decay (voxel lifetime) ──
+  decay_time_sec:
+    type: double
+    default_value: 10.0
+    description: "Voxel lifetime outside FOV [s]"
+    validation:
+      gt_eq<>: [0.0]
+  decay_time_fov_sec:
+    type: double
+    default_value: 1.0
+    description: "Voxel lifetime inside FOV [s]"
+    validation:
+      gt_eq<>: [0.0]
