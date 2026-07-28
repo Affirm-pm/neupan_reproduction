@@ -90,6 +90,12 @@ add_library(finenav_is_stuck_condition SHARED
 ament_target_dependencies(finenav_is_stuck_condition ${dependencies})
 target_compile_definitions(finenav_is_stuck_condition PRIVATE BT_PLUGIN_EXPORT)
 
+add_library(finenav_is_near_point_condition SHARED
+        src/plugins/condition/is_near_point.cpp
+)
+ament_target_dependencies(finenav_is_near_point_condition ${dependencies})
+target_compile_definitions(finenav_is_near_point_condition PRIVATE BT_PLUGIN_EXPORT)
+
 
 # StopChassisMotion Plugin
 add_library(finenav_stop_chassis_motion_behavior SHARED
@@ -125,6 +131,14 @@ ament_target_dependencies(finenav_rate_controller
 )
 target_compile_definitions(finenav_rate_controller PRIVATE BT_PLUGIN_EXPORT)
 
+add_library(finenav_keep_for_duration SHARED
+        src/plugins/decorator/keep_for_duration.cpp
+)
+ament_target_dependencies(finenav_keep_for_duration
+        ${dependencies}
+)
+target_compile_definitions(finenav_keep_for_duration PRIVATE BT_PLUGIN_EXPORT)
+
 # DynamicGoalFollower Plugin (ROS node params needed)
 add_library(finenav_dynamic_goal_follower SHARED
         src/plugins/decorator/dynamic_goal_follower.cpp
@@ -149,10 +163,12 @@ install(TARGETS
         finenav_stop_chassis_motion_behavior
         finenav_is_goal_reached_condition
         finenav_is_stuck_condition
+        finenav_is_near_point_condition
         finenav_dynamic_goal_follower
         finenav_recovery_node
         finenav_round_robin_node
         finenav_rate_controller
+        finenav_keep_for_duration
         ARCHIVE DESTINATION lib/${PROJECT_NAME}
         LIBRARY DESTINATION lib/${PROJECT_NAME}
         RUNTIME DESTINATION lib/${PROJECT_NAME}
