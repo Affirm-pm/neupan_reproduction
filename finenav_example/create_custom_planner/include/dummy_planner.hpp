@@ -14,6 +14,7 @@
 #include "finenav_core/plan/trajectory.hpp"
 
 #include "finenav_example/dummy_planner_params.hpp"
+#include "finenav_visualizer/finenav_visualizer.hpp"
 
 namespace finenav::example {
 
@@ -59,8 +60,14 @@ public:
      * @param cfg  Full parameter struct (generated from YAML).
      */
     void configure(const ConfigType& cfg);
-    void reset();
 
+    // ── Framework injectors ─────────────────────────────────────────
+    // Declare these to receive the logger and visualizer automatically.
+    // The framework detects them via if constexpr — no extra registration needed.
+    void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
+    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; }
+
+    void reset();
 
     using Context = finenav::core::PlanningContext<DummyPlanner>;
     using Result  = std::optional<finenav::core::OutputTrajectoryT<DummyPlanner>>;
@@ -70,6 +77,8 @@ public:
 private:
     double linear_speed_  = 0.5;
     double angular_speed_ = 1.0;
+    rclcpp::Logger                logger_{rclcpp::get_logger("DummyPlanner")};
+    finenav::viz::FineNavVisualizer* viz_ = nullptr;
 };
 
 }  // namespace finenav::example

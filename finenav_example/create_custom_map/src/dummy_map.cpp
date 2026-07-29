@@ -11,6 +11,7 @@ DummyMap::DummyMap()
               finenav::core::Position3D( 50,  50,  5)) {}
 
 void DummyMap::configure(const ConfigType& cfg) {
+    RCLCPP_INFO(logger_, "DummyMap configured: window_size=%.1f", cfg.window_size);
     window_size_ = cfg.window_size;
 }
 

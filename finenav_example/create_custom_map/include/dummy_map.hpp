@@ -8,6 +8,7 @@
 #include "finenav_core/math_def.hpp"
 
 #include "finenav_example/dummy_map_params.hpp"
+#include "finenav_visualizer/finenav_visualizer.hpp"
 
 namespace finenav::example {
 
@@ -35,14 +36,11 @@ public:
 
     DummyMap();
 
-    /**
-     * @brief Apply parameter configuration.
-     * @details
-     * Called by the framework at startup AND on every ros2 param update.
-     * If you do not want a parameter to support hot update, simply add `read_only: true` to its YAML entry.
-     * @param cfg  Full parameter struct (generated from YAML).
-     */
     void configure(const ConfigType& cfg);
+
+    // ── Framework injectors ─────────────────────────────────────────
+    void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
+    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; }
 
     bool isInside(const finenav::core::Position3D& p) const;
     finenav::core::Region3D   getWindowBounds()  const;
@@ -53,6 +51,8 @@ public:
 private:
     double window_size_ = 50.0;
     finenav::core::Region3D bounds_;
+    rclcpp::Logger                logger_{rclcpp::get_logger("DummyMap")};
+    finenav::viz::FineNavVisualizer* viz_ = nullptr;
 };
 
 }  // namespace finenav::example
