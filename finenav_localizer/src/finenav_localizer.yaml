@@ -1,113 +1,65 @@
 finenav_localizer:
-  passthrough: {
+
+  # ── Pose channel — absolute pose, EMA-smoothed ─────────────────────────
+
+  pose_topic: {
+    type: string,
+    default_value: "",
+    description: "PoseWithCovarianceStamped topic (absolute pose; empty = disabled)"
+  }
+  pose_smoothing_time: {
+    type: double,
+    default_value: 0.0,
+    description: "Pose convergence time [s]. 0.0 = instant / jump to target, 0.5 = converge within ~500 ms",
+    validation: { bounds<>: [0.0, 10.0] }
+  }
+  initial_pose_topic: {
+    type: string,
+    default_value: "/initialpose",
+    description: "One-shot topic to set initial pose (feeds Pose channel once, then unsubscribes)"
+  }
+
+  # ── Twist channel — body-frame velocity: integrates pose + sets velocity ─
+
+  twist_topic: {
+    type: string,
+    default_value: "",
+    description: "TwistWithCovarianceStamped topic (integrates position + sets velocity; empty = disabled)"
+  }
+
+  # ── Odometry — composite input ─────────────────────────────────────────
+  #
+  #  odom.pose is always used for RelPose frame-to-frame integration.
+  #
+  #  odom_use_twist: whether to use odom.twist to set velocity
+  #    true  — directly set state velocity from odom.twist
+  #    false — ignore odom.twist (default; may be all zeros)
+
+  odom_topic: {
+    type: string,
+    default_value: "",
+    description: "Odometry topic (empty = disabled)"
+  }
+  odom_use_twist: {
     type: bool,
     default_value: false,
-    description: "If true, bypass ESKF and output latest Pose/Twist directly (Zero calculation)",
+    description: "Whether to use odometry twist data to set state velocity"
   }
-  update_rate_hz: {
-    type: double,
-    default_value: 100.0,
-    description: "Timer frequency [Hz] for the ESKF update loop",
-    validation: {
-      bounds<>: [1.0, 1000.0]
-    }
-  }
-  max_delay_sec: {
-    type: double,
-    default_value: 0.5,
-    description: "Maximum tolerable observation delay [s]",
-    validation: {
-      bounds<>: [0.0, 5.0]
-    }
-  }
-  max_dt_sec: {
-    type: double,
-    default_value: 0.5,
-    description: "Upper bound clamp for dt [s]",
-    validation: {
-      bounds<>: [0.001, 5.0]
-    }
-  }
-  max_pose_queue_size: {
-    type: int,
-    default_value: 64,
-    description: "Pose observation queue capacity",
-    validation: {
-      bounds<>: [1, 1024]
-    }
-  }
-  max_twist_queue_size: {
-    type: int,
-    default_value: 64,
-    description: "Twist observation queue capacity",
-    validation: {
-      bounds<>: [1, 1024]
-    }
-  }
-  max_rel_pose_queue_size: {
-    type: int,
-    default_value: 64,
-    description: "Relative-pose observation queue capacity",
-    validation: {
-      bounds<>: [1, 1024]
-    }
-  }
+
+  # ── Output ─────────────────────────────────────────────────────────────
+
   force_2d_mode: {
     type: bool,
     default_value: false,
-    description: "If true, constrain z, roll, and pitch to zero via per-tick virtual observations (uses fixed internal covariances)",
+    description: "Constrain z, roll, and pitch to zero in output state"
   }
   publish_tf: {
     type: bool,
     default_value: false,
-    description: "Whether to broadcast the map->base_link TF transform on each filter update tick",
+    description: "Broadcast map->base_link TF transform"
   }
   publish_odom: {
     type: bool,
     default_value: false,
-    description: "Publish the ESKF estimated state as nav_msgs/Odometry on '~/nav_state'",
+    description: "Publish the estimated state as nav_msgs/Odometry on '~/nav_state'"
   }
-  max_consecutive_empty_ticks: {
-    type: int,
-    default_value: 10,
-    description: "Max consecutive empty ticks before freezing the filter",
-    validation: {
-      bounds<>: [1, 100000]
-    }
-  }
-  model:
-    pos_noise_std: {
-      type: double,
-      default_value: 0.03,
-      description: "Unmodeled position process noise std [m/√s] (prevents cov collapse)",
-      validation: {
-        bounds<>: [0.0, 100.0]
-      }
-    }
-    rot_noise_std: {
-      type: double,
-      default_value: 0.01,
-      description: "Unmodeled rotation process noise std [rad/√s] (prevents yaw cov collapse)",
-      validation: {
-        bounds<>: [0.0, 100.0]
-      }
-    }
-    vel_noise_std: {
-      type: double,
-      default_value: 0.05,
-      description: "Linear velocity process noise std [m/s/√s]",
-      validation: {
-        bounds<>: [0.000001, 100.0]
-      }
-    }
-    omega_noise_std: {
-      type: double,
-      default_value: 0.03,
-      description: "Angular velocity process noise std [rad/s/√s]",
-      validation: {
-        bounds<>: [0.000001, 100.0]
-      }
-    }
-
-
-

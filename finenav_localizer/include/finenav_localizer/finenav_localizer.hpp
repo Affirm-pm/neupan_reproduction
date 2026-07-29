@@ -5,78 +5,114 @@
 #pragma once
 
 #include <memory>
-#include <optional>
+#include <mutex>
+#include <string>
 
-#include <nav_msgs/msg/odometry.hpp>
-#include <rclcpp/rclcpp.hpp>
-#include <tf2_ros/transform_broadcaster.h>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
+#include "rclcpp/rclcpp.hpp"
+#include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/twist_with_covariance_stamped.hpp"
+#include "nav_msgs/msg/odometry.hpp"
+#include "tf2_ros/transform_broadcaster.h"
 
 #include "finenav_core/robot_state/robot_state.hpp"
-#include "finenav_localizer/eskf_localizer.hpp"
-#include "finenav_localizer/sensor_subscriber.hpp"
+#include "finenav_localizer/sources/pose_anchor.hpp"
+#include "finenav_localizer/sources/integrator.hpp"
+#include "finenav_localizer/sources/velocity_provider.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 #include "finenav_localizer/localizer_params.hpp"
 
 namespace finenav::localizer {
 
 /**
- * @brief FineNavLocalizer  —  ROS wrapper around the EskfLocalizer engine
- * @details
- *      The outer half of the localizer.  Owns the ROS runtime (a private sub-node,
- *      spin thread, periodic timer, parameter listener and TF broadcaster) and
- *      drives the inner EskfLocalizer (the ROS-free C++ engine):
- *        • each timer tick: refresh params → setConfig → step → broadcast TF →
- *          overrun check,
- *        • is a RobotStateProvider: each tick it converts the engine's latest state
- *          to RobotState and pushState()s into the inherited history;
- *          getRobotState()/(t) are served by the base.
+ * @brief FineNavLocalizer — observation-driven robot-state provider.
  *
- *      Input side (ROS subscriptions to pose / twist / odom / initial-pose topics)
- *      is intentionally NOT implemented here yet — see the TODO below.  For direct
- *      C++ use (benchmarks / tests / offline eval), construct and drive EskfLocalizer
- *      directly.
+ * Organised around three effects:
+ *   PoseAnchor       — EMA-smoothed convergence to absolute pose targets.
+ *   Integrator       — dead-reckoning position advancement (twist or relpose).
+ *   VelocityProvider — current-velocity estimate (explicit or auto-diff).
+ *
+ * pushState() is event-driven: one sample per real or virtual observation.
  */
 class FineNavLocalizer : public finenav::core::RobotStateProvider {
 public:
-    using PMat          = EskfLocalizer::PMat;
     using Params        = finenav_localizer::Params;
     using ParamListener = finenav_localizer::ParamListener;
 
-    /**
-     * @brief Construct the ROS wrapper.  Creates a private "finenav_localizer"
-     *        sub-node, reads parameters, builds the inner engine, and starts the
-     *        update timer + spin thread.
-     */
     explicit FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
-                              rclcpp::NodeOptions pnode_overrides = rclcpp::NodeOptions{});
+                              rclcpp::NodeOptions pnode_overrides =
+                                  rclcpp::NodeOptions());
 
-    FineNavLocalizer(const FineNavLocalizer &)             = delete;
-    FineNavLocalizer & operator=(const FineNavLocalizer &) = delete;
-    ~FineNavLocalizer() = default;
-
-    //  getRobotState() / getRobotState(t) are inherited from RobotStateProvider
-    //  (history-backed); this wrapper feeds the history via pushState() each tick.
-
-    /// Sensor subscription manager — discovers numbered pose/twist/odom params
-    /// and creates ROS subscriptions that feed the inner engine.
-    std::unique_ptr<SensorSubscriber> sensor_sub_;
+    FineNavLocalizer(const FineNavLocalizer&)            = delete;
+    FineNavLocalizer& operator=(const FineNavLocalizer&) = delete;
+    ~FineNavLocalizer() override = default;
 
 private:
+    using PoseMsg  = geometry_msgs::msg::PoseWithCovarianceStamped;
+    using TwistMsg = geometry_msgs::msg::TwistWithCovarianceStamped;
+    using OdomMsg  = nav_msgs::msg::Odometry;
+
+    struct Routing {
+        enum class PoseSrc { None, Pose };
+        enum class IntegSrc { None, Twist, RelPose };
+        enum class VelSrc  { None, Twist, Odom, AutoDiff };
+
+        PoseSrc  pose;
+        IntegSrc integration;
+        VelSrc   velocity;
+    };
+
+    /// Build routing table from params + validate.  Throws on conflict.
+    static Routing buildRouting(const Params& p);
+
+    // ── ROS callbacks ────────────────────────────────────────────────────
+
+    /// ROS Callbacks
+    void onPose(const PoseMsg& msg);
+    void onTwist(const TwistMsg& msg);
+    void onOdometry(const OdomMsg& msg);
+    void onInitialPose(const PoseMsg& msg);
+
+    /// TimerCallback with frequency of kInternalTickRateHz (default = 100Hz)
+    /// Used for:
+    /// 1. Pose observation smoothing
+    /// 2. Dynamic update parameters
     void timerCallback();
 
-    rclcpp::Node::SharedPtr        parent_node_;           ///< host node (use_sim_time, namespace)
-    rclcpp::Node::SharedPtr        pnode_;                 ///< private sub-node (parameter prefix)
-    std::unique_ptr<ParamListener> param_listener_;        ///< dynamic-parameter listener
-    Params                         params_;                ///< latest parameter snapshot
-    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_br_; ///< null when publish_tf is false
-    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr  nav_state_pub_; ///< null when publish_odom is false
+    // ── Output ───────────────────────────────────────────────────────────
 
-    std::unique_ptr<EskfLocalizer> eskf_localizer_;        ///< inner ROS-free compute engine
+    void force2D();
+    void publishOutput(const rclcpp::Time& now);
 
-    /// Driver (declared last → destroyed first: the spin thread is stopped and
-    /// joined before eskf_localizer_ is torn down, so no tick touches a dead engine).
+    // Robot state
+    finenav::core::RobotState state_{};
+    bool initialized_{false};
+    mutable std::mutex state_mutex_;
+
+    // Effect sources
+    Routing                    routing_;
+    PoseAnchor                 pose_anchor_;
+    Integrator                 integrator_;
+    VelocityProvider           velocity_;
+
+    // ROS infrastructure
+    rclcpp::Node::SharedPtr        parent_node_;
+    rclcpp::Node::SharedPtr        pnode_;
+    std::unique_ptr<ParamListener> param_listener_;
+    Params                         params_;
+
+    std::shared_ptr<tf2_ros::TransformBroadcaster>        tf_br_;
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr nav_state_pub_;
+
     rclcpp::TimerBase::SharedPtr               update_timer_;
     std::unique_ptr<finenav::util::NodeThread> pnode_thread_;
+
+    rclcpp::Subscription<PoseMsg>::SharedPtr  initial_pose_sub_;
+    rclcpp::Subscription<PoseMsg>::SharedPtr  pose_sub_;
+    rclcpp::Subscription<TwistMsg>::SharedPtr twist_sub_;
+    rclcpp::Subscription<OdomMsg>::SharedPtr  odom_sub_;
 };
 
 }  // namespace finenav::localizer

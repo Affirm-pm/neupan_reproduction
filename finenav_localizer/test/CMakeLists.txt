@@ -1,43 +1,11 @@
-# ── filter_model (pure math, no ROS) ──────────────────────────────────────────
-ament_add_gtest(test_filter_model
-        test_filter_model.cpp
-)
-target_include_directories(test_filter_model PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
-)
-target_link_libraries(test_filter_model
-        finenav_localizer
-)
+# ── FineNavLocalizer unit tests ─────────────────────────────────────────────────
 
-# ── TimeDelayKalmanFilter standalone ────────────────────────────────────────────
-ament_add_gtest(test_time_delay_kf
-        test_time_delay_kf.cpp
+ament_add_gtest(test_localizer
+        test_localizer.cpp
 )
-target_include_directories(test_time_delay_kf PRIVATE
+target_include_directories(test_localizer PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
 )
-target_link_libraries(test_time_delay_kf
-        finenav_localizer
-)
-
-# ── ESKF standalone ────────────────────────────────────────────────────────────
-ament_add_gtest(test_eskf
-        test_eskf.cpp
-)
-target_include_directories(test_eskf PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
-)
-target_link_libraries(test_eskf
-        finenav_localizer
-)
-
-# ── AgedObservationQueue ────────────────────────────────────────────────────────
-ament_add_gtest(test_observation_queue
-        test_observation_queue.cpp
-)
-target_include_directories(test_observation_queue PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>
-)
-target_link_libraries(test_observation_queue
+target_link_libraries(test_localizer
         finenav_localizer
 )

@@ -5,6 +5,9 @@
 #include "finenav_localizer/finenav_localizer.hpp"
 
 #include <chrono>
+#include <cmath>
+#include <stdexcept>
+#include <string>
 
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -15,128 +18,293 @@
 namespace finenav::localizer {
 
 namespace {
-/// Engine state (NavStateD, v in body frame) → canonical core RobotState.
-finenav::core::RobotState toRobotState(const NavStateD & s)
-{
-    return finenav::core::RobotState{s.p, s.R.unit_quaternion(), s.v, s.omega};
-}
+// Fixed internal timer rate [Hz] for the pose-smoothing tick.
+inline constexpr double  kInternalTickRateHz = 100.0;
 }  // namespace
 
+
+FineNavLocalizer::Routing FineNavLocalizer::buildRouting(const Params& p) {
+    Routing r{};
+
+    const bool has_pose_topic  = !p.pose_topic.empty();
+    const bool has_twist_topic = !p.twist_topic.empty();
+    const bool has_odom        = !p.odom_topic.empty();
+
+    // ── Pose source ──────────────────────────────────────────────────────
+    r.pose = has_pose_topic ? Routing::PoseSrc::Pose
+                            : Routing::PoseSrc::None;
+
+    // ── Integration source ───────────────────────────────────────────────
+    if (has_twist_topic && has_odom) {
+        RCLCPP_WARN(rclcpp::get_logger("finenav_localizer"),
+            "FineNavLocalizer: twist_topic ignored for position integration — "
+            "odom_topic takes priority.");
+    }
+
+    if (has_odom) {
+        r.integration = Routing::IntegSrc::RelPose;
+    } else if (has_twist_topic) {
+        r.integration = Routing::IntegSrc::Twist;
+    } else {
+        r.integration = Routing::IntegSrc::None;
+    }
+
+    // ── Velocity source ──────────────────────────────────────────────────
+    if (has_twist_topic && has_odom && p.odom_use_twist) {
+        RCLCPP_WARN(rclcpp::get_logger("finenav_localizer"),
+            "FineNavLocalizer: odom_use_twist ignored for velocity — "
+            "twist_topic takes priority.");
+    }
+
+    if (has_twist_topic) {
+        r.velocity = Routing::VelSrc::Twist;
+    } else if (has_odom && p.odom_use_twist) {
+        r.velocity = Routing::VelSrc::Odom;
+    } else if (r.pose != Routing::PoseSrc::None) {
+        r.velocity = Routing::VelSrc::AutoDiff;
+    } else {
+        r.velocity = Routing::VelSrc::None;
+    }
+
+    return r;
+}
 
 FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
                                    rclcpp::NodeOptions pnode_overrides)
     : parent_node_(std::move(parent_node))
 {
-    // Private sub-node (parameter prefix from the yaml top-level key).
     pnode_overrides.append_parameter_override(
-        "use_sim_time",
-        parent_node_->get_parameter("use_sim_time").as_bool());
+        "use_sim_time", parent_node_->get_parameter("use_sim_time").as_bool());
     pnode_ = rclcpp::Node::make_shared(
         "finenav_localizer", parent_node_->get_name(), pnode_overrides);
 
-    // Parameters → inner engine Config.
     param_listener_ = std::make_unique<ParamListener>(pnode_);
     params_         = param_listener_->get_params();
-    eskf_localizer_ = std::make_unique<EskfLocalizer>(
-        params_, pnode_->get_logger().get_child("EskfLocalizer"));
 
-    // Sensor subscriptions (numbered pose/twist/odom topics from yaml params).
-    sensor_sub_ = std::make_unique<SensorSubscriber>(*pnode_, *eskf_localizer_);
-    sensor_sub_->discoverAndSubscribe();
+    // Resolve and validate routing
+    routing_ = buildRouting(params_);
 
-    // TF broadcaster (only if publish_tf is enabled).
+    // Create effect sources
+    pose_anchor_.configure(params_.pose_smoothing_time, kInternalTickRateHz);
+
+    // Subscriptions
+    if (!params_.initial_pose_topic.empty()) {
+        initial_pose_sub_ = pnode_->create_subscription<PoseMsg>(
+            params_.initial_pose_topic, rclcpp::SystemDefaultsQoS(),
+            [this](PoseMsg::ConstSharedPtr msg) {
+                onInitialPose(*msg);
+                initial_pose_sub_.reset();  // one-shot
+            });
+    }
+    if (!params_.pose_topic.empty()) {
+        pose_sub_ = pnode_->create_subscription<PoseMsg>(
+            params_.pose_topic, rclcpp::SystemDefaultsQoS(),
+            [this](PoseMsg::ConstSharedPtr msg) { onPose(*msg); });
+    }
+    if (!params_.twist_topic.empty()) {
+        twist_sub_ = pnode_->create_subscription<TwistMsg>(
+            params_.twist_topic, rclcpp::SystemDefaultsQoS(),
+            [this](TwistMsg::ConstSharedPtr msg) { onTwist(*msg); });
+    }
+    if (!params_.odom_topic.empty()) {
+        odom_sub_ = pnode_->create_subscription<OdomMsg>(
+            params_.odom_topic, rclcpp::SystemDefaultsQoS(),
+            [this](OdomMsg::ConstSharedPtr msg) { onOdometry(*msg); });
+    }
+
+    // Optional outputs
     if (params_.publish_tf) {
         tf_br_ = std::make_shared<tf2_ros::TransformBroadcaster>(pnode_);
     }
-
-    // Odometry publisher exposing the ESKF estimated state.
     if (params_.publish_odom) {
-        nav_state_pub_ = pnode_->create_publisher<nav_msgs::msg::Odometry>("~/nav_state", 10);
+        nav_state_pub_ = pnode_->create_publisher<nav_msgs::msg::Odometry>(
+            "~/nav_state", 10);
     }
 
-    // Update timer, then spin thread (last, so all entities are registered).
+    // Timer
     const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::duration<double>(1.0 / params_.update_rate_hz));
+        std::chrono::duration<double>(1.0 / kInternalTickRateHz));
     update_timer_ = rclcpp::create_timer(
         pnode_, pnode_->get_clock(), period, [this]() { timerCallback(); });
-    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
-    FINENAV_LOG_INFO(pnode_->get_logger(),
-        "ROS wrapper ready. rate={:.1f} Hz  publish_tf={}",
-        params_.update_rate_hz, params_.publish_tf ? "true" : "false");
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 }
 
-void FineNavLocalizer::timerCallback()
-{
+
+void FineNavLocalizer::onInitialPose(const PoseMsg& msg) {
+    onPose(msg);
+}
+
+void FineNavLocalizer::onPose(const PoseMsg& msg) {
+    const auto& pose = msg.pose.pose;
+    const Eigen::Vector3d    p(pose.position.x, pose.position.y, pose.position.z);
+    const Eigen::Quaterniond q(pose.orientation.w, pose.orientation.x,
+                                pose.orientation.y, pose.orientation.z);
+    const auto stamp = rclcpp::Time(msg.header.stamp);
+
+    {
+        std::lock_guard<std::mutex> lk(state_mutex_);
+
+        // Pose source: store target in PoseAnchor (deferred to smoothing tick)
+        if (routing_.pose == Routing::PoseSrc::Pose) {
+            pose_anchor_.feed(p, q, stamp);
+        }
+
+        // Velocity: auto-diff from consecutive poses
+        if (routing_.velocity == Routing::VelSrc::AutoDiff) {
+            velocity_.autoDiffFromPose(p, q, stamp, state_);
+        }
+
+        initialized_ = true;
+    }
+    // No pushState — pose correction is deferred to the smoothing tick.
+}
+
+void FineNavLocalizer::onTwist(const TwistMsg& msg) {
+    const auto& t = msg.twist.twist;
+    const Eigen::Vector3d v(t.linear.x, t.linear.y, t.linear.z);
+    const Eigen::Vector3d omega(t.angular.x, t.angular.y, t.angular.z);
+    const auto stamp = rclcpp::Time(msg.header.stamp);
+
+    {
+        std::lock_guard<std::mutex> lk(state_mutex_);
+
+        // Integration: integrate body-frame velocity
+        if (routing_.integration == Routing::IntegSrc::Twist) {
+            integrator_.acceptTwist(v, omega, stamp, state_);
+        }
+
+        // Velocity: set directly from twist
+        if (routing_.velocity == Routing::VelSrc::Twist) {
+            velocity_.setFromTwist(v, omega, state_);
+        }
+
+        initialized_ = true;
+
+        if (params_.force_2d_mode) {
+            force2D();
+        }
+        pushState(stamp, state_);
+    }
+}
+
+void FineNavLocalizer::onOdometry(const OdomMsg& msg) {
+    std::lock_guard<std::mutex> lk(state_mutex_);
+
+    bool position_touched = false;
+
+    // ── Integration: RelPose frame-to-frame ──────────────────────────────
+    if (routing_.integration == Routing::IntegSrc::RelPose) {
+        integrator_.acceptRelPose(msg, state_);
+        position_touched = true;
+    }
+
+    // ── Velocity: odom.twist as explicit velocity ───────────────────────
+    if (routing_.velocity == Routing::VelSrc::Odom) {
+        const auto& t = msg.twist.twist;
+        const Eigen::Vector3d v(t.linear.x, t.linear.y, t.linear.z);
+        const Eigen::Vector3d omega(t.angular.x, t.angular.y, t.angular.z);
+        velocity_.setFromTwist(v, omega, state_);
+    }
+
+    initialized_ = true;
+
+    if (position_touched) {
+        if (params_.force_2d_mode) {
+            force2D();
+        }
+        pushState(rclcpp::Time(msg.header.stamp), state_);
+    }
+}
+
+void FineNavLocalizer::timerCallback() {
+    // ── Refresh dynamic parameters ───────────────────────────────────────
     if (param_listener_->is_old(params_)) {
+        const auto old_smoothing = params_.pose_smoothing_time;
         params_ = param_listener_->get_params();
-        eskf_localizer_->setConfig(params_);
+        if (params_.pose_smoothing_time != old_smoothing) {
+            pose_anchor_.configure(params_.pose_smoothing_time, kInternalTickRateHz);
+        }
     }
 
-    const rclcpp::Time tick_time = pnode_->now();
-    eskf_localizer_->step(tick_time);
+    const rclcpp::Time now = pnode_->now();
 
-    // Feed the latest state into the inherited RobotStateProvider history.
-    if (eskf_localizer_->isInitialized()) {
-        pushState(tick_time, toRobotState(eskf_localizer_->getState()));
+    if (!initialized_) {
+        FINENAV_LOG_INFO_THROTTLE(pnode_->get_logger(), 2000,
+            "FineNavLocalizer: waiting for first observation...");
+        return;
     }
 
-    // ── Odometry publisher (nav_state) ──────────────────────────────────────
-    if (nav_state_pub_ && eskf_localizer_->isInitialized()) {
-        const NavStateD s = eskf_localizer_->getRawState();
-        const Eigen::Quaterniond q(s.R.matrix());
+    {
+        std::lock_guard<std::mutex> lk(state_mutex_);
 
-        nav_msgs::msg::Odometry odom;
-        odom.header.stamp    = tick_time;
-        odom.header.frame_id = "map";
-        odom.child_frame_id  = "base_link";
-        odom.pose.pose.position.x    = s.p.x();
-        odom.pose.pose.position.y    = s.p.y();
-        odom.pose.pose.position.z    = s.p.z();
-        odom.pose.pose.orientation.w = q.w();
-        odom.pose.pose.orientation.x = q.x();
-        odom.pose.pose.orientation.y = q.y();
-        odom.pose.pose.orientation.z = q.z();
-        odom.twist.twist.linear.x  = s.v.x();
-        odom.twist.twist.linear.y  = s.v.y();
-        odom.twist.twist.linear.z  = s.v.z();
-        odom.twist.twist.angular.x = s.omega.x();
-        odom.twist.twist.angular.y = s.omega.y();
-        odom.twist.twist.angular.z = s.omega.z();
-        nav_state_pub_->publish(odom);
+        // ── Pose smoothing tick ──────────────────────────────────────────
+        if (auto correction = pose_anchor_.tick(state_)) {
+            state_.position += correction->position_delta;
+            state_.orientation =
+                state_.orientation * correction->orientation_delta;
+
+            if (params_.force_2d_mode) {
+                force2D();
+            }
+
+            pushState(now, state_);
+            publishOutput(now);
+        }
+
+        // ── Warning: no absolute pose data ───────────────────────────────
+        if (!pose_anchor_.hasAbsolutePoseData()) {
+            FINENAV_LOG_WARN_THROTTLE(pnode_->get_logger(), 5000,
+                "FineNavLocalizer: no absolute pose source configured or no pose "
+                "data received — position will drift without absolute reference.");
+        }
     }
+}
 
-    // ── Broadcast TF: map → base_link (raw world-frame state) ────────────────
-    if (tf_br_ && eskf_localizer_->isInitialized()) {
-        const NavStateD s = eskf_localizer_->getRawState();
-
+void FineNavLocalizer::publishOutput(const rclcpp::Time& now) {
+    if (tf_br_) {
         geometry_msgs::msg::TransformStamped tf;
-        tf.header.stamp    = tick_time;
+        tf.header.stamp    = now;
         tf.header.frame_id = "map";
         tf.child_frame_id  = "base_link";
-        tf.transform.translation.x = s.p.x();
-        tf.transform.translation.y = s.p.y();
-        tf.transform.translation.z = s.p.z();
-        const Eigen::Quaterniond q(s.R.matrix());
-        tf.transform.rotation.w = q.w();
-        tf.transform.rotation.x = q.x();
-        tf.transform.rotation.y = q.y();
-        tf.transform.rotation.z = q.z();
+        tf.transform.translation.x = state_.position.x();
+        tf.transform.translation.y = state_.position.y();
+        tf.transform.translation.z = state_.position.z();
+        tf.transform.rotation.w = state_.orientation.w();
+        tf.transform.rotation.x = state_.orientation.x();
+        tf.transform.rotation.y = state_.orientation.y();
+        tf.transform.rotation.z = state_.orientation.z();
         tf_br_->sendTransform(tf);
     }
 
-    // ── Overrun detection (real-time concern; lives in the ROS layer) ────────
-    const double elapsed_sec = (pnode_->now() - tick_time).seconds();
-    const double period_sec  = 1.0 / params_.update_rate_hz;
-    FINENAV_LOG_DEBUG_THROTTLE(pnode_->get_logger(), 2000,
-        "tick complete  elapsed={:.3f} ms  period={:.3f} ms",
-        elapsed_sec * 1e3, period_sec * 1e3);
-    if (elapsed_sec > period_sec) {
-        FINENAV_LOG_WARN_THROTTLE(pnode_->get_logger(), 2000,
-            "Timer overrun: callback took {:.3f} ms but period is {:.3f} ms "
-            "({:.0f}% over). Consider reducing update_rate_hz or max_delay_step.",
-            elapsed_sec * 1e3, period_sec * 1e3, (elapsed_sec / period_sec - 1.0) * 100.0);
+    if (nav_state_pub_) {
+        nav_msgs::msg::Odometry odom;
+        odom.header.stamp    = now;
+        odom.header.frame_id = "map";
+        odom.child_frame_id  = "base_link";
+        odom.pose.pose.position.x    = state_.position.x();
+        odom.pose.pose.position.y    = state_.position.y();
+        odom.pose.pose.position.z    = state_.position.z();
+        odom.pose.pose.orientation.w = state_.orientation.w();
+        odom.pose.pose.orientation.x = state_.orientation.x();
+        odom.pose.pose.orientation.y = state_.orientation.y();
+        odom.pose.pose.orientation.z = state_.orientation.z();
+        odom.twist.twist.linear.x  = state_.linear_velocity.x();
+        odom.twist.twist.linear.y  = state_.linear_velocity.y();
+        odom.twist.twist.linear.z  = state_.linear_velocity.z();
+        odom.twist.twist.angular.x = state_.angular_velocity.x();
+        odom.twist.twist.angular.y = state_.angular_velocity.y();
+        odom.twist.twist.angular.z = state_.angular_velocity.z();
+        nav_state_pub_->publish(odom);
     }
+}
+
+void FineNavLocalizer::force2D() {
+    state_.position.z() = 0.0;
+    const Eigen::Vector3d x_axis = state_.orientation.matrix().col(0);
+    const double yaw = std::atan2(x_axis.y(), x_axis.x());
+    state_.orientation =
+        Eigen::Quaterniond(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
 }
 
 }  // namespace finenav::localizer
