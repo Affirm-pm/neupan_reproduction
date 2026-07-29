@@ -51,7 +51,4 @@ private:
     std::string   topic_name_;
 };
 
-using FineNavVisualizerPtr      = std::shared_ptr<FineNavVisualizer>;
-using FineNavVisualizerConstPtr = std::shared_ptr<const FineNavVisualizer>;
-
 }  // namespace finenav::viz

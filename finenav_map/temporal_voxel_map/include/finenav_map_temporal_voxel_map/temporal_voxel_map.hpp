@@ -45,7 +45,7 @@ public:
     TemporalVoxelMap() = default;
 
     /// Receive FineNavVisualizer injected by AlgoConfigurator.
-    void setVisualizer(finenav::viz::FineNavVisualizerPtr viz) { viz_ = std::move(viz); }
+    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; }
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
 
     // ── MapConcept ─────────────────────────────────────────────────
@@ -108,8 +108,8 @@ private:
     double decay_time_sec_     = 10.0;
     double decay_time_fov_sec_ = 1.0;
 
-    rclcpp::Logger                     logger_{rclcpp::get_logger("TemporalVoxelMap")};
-    finenav::viz::FineNavVisualizerPtr viz_;
+    rclcpp::Logger                logger_{rclcpp::get_logger("TemporalVoxelMap")};
+    finenav::viz::FineNavVisualizer* viz_ = nullptr;
 };
 
 }  // namespace finenav

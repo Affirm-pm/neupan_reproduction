@@ -64,18 +64,17 @@ struct AlgoConfigurator<ALGO_TYPE> { \
             algo.setLogger(node->get_logger().get_child(std::string{name})); \
         } \
         auto viz = std::make_shared<finenav::viz::FineNavVisualizer>(node); \
-        if constexpr (requires { algo.setVisualizer( \
-                std::declval<finenav::viz::FineNavVisualizerPtr>()); }) { \
-            algo.setVisualizer(viz); \
+        if constexpr (requires { algo.setVisualizer(*viz); }) { \
+            algo.setVisualizer(*viz); \
         } \
         struct Handle : public IParamPollable { \
             std::shared_ptr<PARAM_NS::ParamListener> listener; \
-            finenav::viz::FineNavVisualizerPtr viz; \
+            std::shared_ptr<finenav::viz::FineNavVisualizer> viz; \
             ALGO_TYPE* algo_ptr; \
             PARAM_NS::Params params; \
             std::string algo_name; \
             Handle(std::shared_ptr<PARAM_NS::ParamListener> l, \
-                   finenav::viz::FineNavVisualizerPtr v, \
+                   std::shared_ptr<finenav::viz::FineNavVisualizer> v, \
                    ALGO_TYPE* a, PARAM_NS::Params p, std::string n) \
                 : listener(std::move(l)), viz(std::move(v)), \
                   algo_ptr(a), params(std::move(p)), algo_name(std::move(n)) {} \
