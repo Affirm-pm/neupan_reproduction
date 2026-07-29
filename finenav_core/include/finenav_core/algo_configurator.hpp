@@ -59,6 +59,10 @@ struct AlgoConfigurator<ALGO_TYPE> { \
         auto listener = std::make_shared<PARAM_NS::ParamListener>(node, #PARAM_NS); \
         auto params = listener->get_params(); \
         algo.configure(params); \
+        if constexpr (requires { algo.setLogger( \
+                std::declval<rclcpp::Logger>()); }) { \
+            algo.setLogger(node->get_logger().get_child(std::string{name})); \
+        } \
         auto viz = std::make_shared<finenav::viz::FineNavVisualizer>(node); \
         if constexpr (requires { algo.setVisualizer( \
                 std::declval<finenav::viz::FineNavVisualizerPtr>()); }) { \

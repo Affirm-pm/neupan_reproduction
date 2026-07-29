@@ -30,11 +30,19 @@ void TemporalVoxelMap::configure(const ConfigType& cfg) {
     decay_time_sec_     = cfg.decay_time_sec;
     decay_time_fov_sec_ = cfg.decay_time_fov_sec;
 
-    // Configure the underlying GridMap
     grid_.configure(GridMapConfig{
         .length     = Length(cfg.map_length, cfg.map_length, cfg.map_length),
         .resolution = cfg.resolution,
     });
+
+    RCLCPP_INFO(logger_,
+        "TemporalVoxelMap configured: "
+        "res=%.2f m, length=%.1f m, FOV=%.0f°-%.0f°, range=%.1f-%.1f m, "
+        "decay=%.1f/%.1f s",
+        cfg.resolution, cfg.map_length,
+        cfg.min_angle * 180.0 / M_PI, cfg.max_angle * 180.0 / M_PI,
+        cfg.min_range, cfg.max_range,
+        cfg.decay_time_sec, cfg.decay_time_fov_sec);
 }
 
 // ==============================================================================
