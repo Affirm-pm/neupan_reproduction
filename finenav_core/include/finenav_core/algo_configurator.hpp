@@ -43,6 +43,27 @@ struct AlgoConfigurator {
     }
 };
 
+// ── Injection helpers (function templates so if constexpr works) ───────
+
+template <typename AlgoT>
+void injectLogger(rclcpp::Node::SharedPtr node, AlgoT& algo, std::string_view name) {
+    if constexpr (requires { algo.setLogger(rclcpp::Logger{}); }) {
+        algo.setLogger(node->get_logger().get_child(std::string{name}));
+    }
+}
+
+template <typename AlgoT>
+std::shared_ptr<finenav::viz::FineNavVisualizer> injectVisualizer(
+    rclcpp::Node::SharedPtr node, AlgoT& algo) {
+    if constexpr (requires { algo.setVisualizer(
+            std::declval<finenav::viz::FineNavVisualizer&>()); }) {
+        auto viz = std::make_shared<finenav::viz::FineNavVisualizer>(node);
+        algo.setVisualizer(*viz);
+        return viz;
+    }
+    return nullptr;
+}
+
 }  // namespace finenav::core
 
 /**
@@ -59,14 +80,8 @@ struct AlgoConfigurator<ALGO_TYPE> { \
         auto listener = std::make_shared<PARAM_NS::ParamListener>(node, #PARAM_NS); \
         auto params = listener->get_params(); \
         algo.configure(params); \
-        if constexpr (requires { algo.setLogger( \
-                std::declval<rclcpp::Logger>()); }) { \
-            algo.setLogger(node->get_logger().get_child(std::string{name})); \
-        } \
-        auto viz = std::make_shared<finenav::viz::FineNavVisualizer>(node); \
-        if constexpr (requires { algo.setVisualizer(*viz); }) { \
-            algo.setVisualizer(*viz); \
-        } \
+        injectLogger(node, algo, name); \
+        auto viz = injectVisualizer(node, algo); \
         struct Handle : public IParamPollable { \
             std::shared_ptr<PARAM_NS::ParamListener> listener; \
             std::shared_ptr<finenav::viz::FineNavVisualizer> viz; \
