@@ -10,6 +10,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_core/param_handle_keeper.hpp"
+#include "finenav_visualizer/finenav_visualizer.hpp"
 
 namespace finenav::core {
 
@@ -58,14 +59,22 @@ struct AlgoConfigurator<ALGO_TYPE> { \
         auto listener = std::make_shared<PARAM_NS::ParamListener>(node, #PARAM_NS); \
         auto params = listener->get_params(); \
         algo.configure(params); \
+        auto viz = std::make_shared<finenav::viz::FineNavVisualizer>(node); \
+        if constexpr (requires { algo.setVisualizer( \
+                std::declval<finenav::viz::FineNavVisualizerPtr>()); }) { \
+            algo.setVisualizer(viz); \
+        } \
         struct Handle : public IParamPollable { \
             std::shared_ptr<PARAM_NS::ParamListener> listener; \
+            finenav::viz::FineNavVisualizerPtr viz; \
             ALGO_TYPE* algo_ptr; \
             PARAM_NS::Params params; \
             std::string algo_name; \
-            Handle(std::shared_ptr<PARAM_NS::ParamListener> l, ALGO_TYPE* a, \
-                   PARAM_NS::Params p, std::string n) \
-                : listener(std::move(l)), algo_ptr(a), params(std::move(p)), algo_name(std::move(n)) {} \
+            Handle(std::shared_ptr<PARAM_NS::ParamListener> l, \
+                   finenav::viz::FineNavVisualizerPtr v, \
+                   ALGO_TYPE* a, PARAM_NS::Params p, std::string n) \
+                : listener(std::move(l)), viz(std::move(v)), \
+                  algo_ptr(a), params(std::move(p)), algo_name(std::move(n)) {} \
             void poll() override { \
                 if (listener->is_old(params)) { \
                     params = listener->get_params(); \
@@ -76,7 +85,7 @@ struct AlgoConfigurator<ALGO_TYPE> { \
                 } \
             } \
         }; \
-        return std::make_shared<Handle>(listener, &algo, params, std::string{name}); \
+        return std::make_shared<Handle>(listener, viz, &algo, params, std::string{name}); \
     } \
 }; \
 }

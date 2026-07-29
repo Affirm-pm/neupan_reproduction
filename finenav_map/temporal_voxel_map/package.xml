@@ -12,6 +12,7 @@
     <depend>generate_parameter_library</depend>
     <depend>finenav_core</depend>
     <depend>finenav_map_grid_map</depend>
+    <depend>finenav_visualizer</depend>
     <depend>rclcpp</depend>
     <depend>Eigen3</depend>
     <depend>PCL</depend>

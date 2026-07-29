@@ -142,6 +142,14 @@ void TemporalVoxelMap::pruneExpiredCells(const Eigen::Isometry3d& T_map_body)
             ++it;
         }
     }
+
+    // FOV visualization
+    if (viz_) {
+        viz_->markers().setBaseFrame("map");
+        viz_->markers().addCone(T_map_body, max_angle_rad_, max_range_,
+                                finenav::viz::getColor(finenav::viz::ColorName::TRANSLUCENT));
+        viz_->publishAll();
+    }
 }
 
 }  // namespace finenav

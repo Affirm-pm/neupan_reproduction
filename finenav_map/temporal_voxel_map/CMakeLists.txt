@@ -38,6 +38,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME} PUBLIC
     finenav_core
     finenav_map_grid_map
+    finenav_visualizer
     rclcpp
 )
 

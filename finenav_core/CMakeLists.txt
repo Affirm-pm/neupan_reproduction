@@ -10,6 +10,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(finenav_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(finenav_util REQUIRED)
+find_package(finenav_visualizer REQUIRED)
 
 
 set(ros_dependencies
@@ -19,6 +20,7 @@ set(ros_dependencies
         finenav_interfaces
         geometry_msgs
         finenav_util
+        finenav_visualizer
 )
 
 install(DIRECTORY include/
