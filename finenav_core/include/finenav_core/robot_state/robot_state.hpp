@@ -20,10 +20,10 @@ namespace finenav::core {
  *  @brief RobotState — the canonical robot state representation in FineNav-Engine.
  */
 struct RobotState {
-    Eigen::Vector3d    position;           ///< world-frame position (m)
-    Eigen::Quaterniond orientation;        ///< world ← body rotation
-    Eigen::Vector3d    linear_velocity;    ///< body-frame linear velocity (m/s)
-    Eigen::Vector3d    angular_velocity;   ///< body-frame angular velocity (rad/s)
+    Eigen::Vector3d    position{0, 0, 0};                ///< world-frame position (m)
+    Eigen::Quaterniond orientation{1, 0, 0, 0};          ///< world ← body rotation
+    Eigen::Vector3d    linear_velocity{0, 0, 0};         ///< body-frame linear velocity (m/s)
+    Eigen::Vector3d    angular_velocity{0, 0, 0};        ///< body-frame angular velocity (rad/s)
 };
 
 /**
