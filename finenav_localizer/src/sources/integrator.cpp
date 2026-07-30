@@ -37,40 +37,42 @@ void Integrator::acceptTwist(const Eigen::Vector3d& v_body,
     has_twist_source_ = true;
 }
 
+void Integrator::resetAnchor(const finenav::core::RobotState& map_state) {
+    ref_map_p_ = map_state.position;
+    ref_map_q_ = map_state.orientation;
+    ref_ready_ = false;  // force re-capture of ref_odom on next msg
+}
+
 void Integrator::acceptRelPose(const nav_msgs::msg::Odometry& msg,
                                 finenav::core::RobotState& state) {
+    const rclcpp::Time stamp(msg.header.stamp, RCL_ROS_TIME);
+
     // Reject out-of-order
-    if (last_odom_.has_value() &&
-        rclcpp::Time(msg.header.stamp, RCL_ROS_TIME) <=
-        rclcpp::Time(last_odom_->header.stamp, RCL_ROS_TIME)) {
+    if (ref_ready_ && stamp <= prev_stamp_) return;
+    prev_stamp_ = stamp;
+
+    const Eigen::Quaterniond q_curr(
+        msg.pose.pose.orientation.w, msg.pose.pose.orientation.x,
+        msg.pose.pose.orientation.y, msg.pose.pose.orientation.z);
+    const Eigen::Vector3d p_curr(
+        msg.pose.pose.position.x, msg.pose.pose.position.y,
+        msg.pose.pose.position.z);
+
+    if (!ref_ready_) {
+        // (Re)capture odometry reference at this frame — no state change
+        ref_odom_p_ = p_curr;
+        ref_odom_q_ = q_curr;
+        ref_ready_  = true;
         return;
     }
 
-    if (last_odom_.has_value()) {
-        const auto& prev = *last_odom_;
-        const auto& curr = msg;
+    // delta = ref_odom⁻¹ ∘ current_odom  (in odometry frame)
+    const Eigen::Vector3d    dp = ref_odom_q_.conjugate() * (p_curr - ref_odom_p_);
+    const Eigen::Quaterniond dq = ref_odom_q_.conjugate() * q_curr;
 
-        const Eigen::Quaterniond q_prev(
-            prev.pose.pose.orientation.w, prev.pose.pose.orientation.x,
-            prev.pose.pose.orientation.y, prev.pose.pose.orientation.z);
-        const Eigen::Quaterniond q_curr(
-            curr.pose.pose.orientation.w, curr.pose.pose.orientation.x,
-            curr.pose.pose.orientation.y, curr.pose.pose.orientation.z);
-
-        const Eigen::Vector3d p_prev(prev.pose.pose.position.x,
-                                     prev.pose.pose.position.y,
-                                     prev.pose.pose.position.z);
-        const Eigen::Vector3d p_curr(curr.pose.pose.position.x,
-                                     curr.pose.pose.position.y,
-                                     curr.pose.pose.position.z);
-
-        const Eigen::Vector3d    dp = q_prev.conjugate() * (p_curr - p_prev);
-        const Eigen::Quaterniond dq = q_prev.conjugate() * q_curr;
-
-        state.position += state.orientation * dp;
-        state.orientation = state.orientation * dq;
-    }
-    last_odom_ = msg;
+    // state = ref_map ∘ delta  →  place odom delta into the anchored map frame
+    state.position    = ref_map_p_ + ref_map_q_ * dp;
+    state.orientation = ref_map_q_ * dq;
 }
 
 }  // namespace finenav::localizer
