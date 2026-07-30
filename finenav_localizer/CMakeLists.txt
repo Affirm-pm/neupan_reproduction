@@ -52,6 +52,7 @@ target_link_libraries(${PROJECT_NAME}
 if (BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
     add_subdirectory(test)
+    add_subdirectory(eval)
 endif ()
 
 install(TARGETS ${PROJECT_NAME} localizer_params

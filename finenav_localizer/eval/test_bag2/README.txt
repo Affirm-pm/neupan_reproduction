@@ -1,26 +1,23 @@
-test_bag1 — FineNavLocalizer bag-replay test data (normal conditions)
+test_bag2 — FineNavLocalizer bag-replay test data (high-speed motion)
 ======================================================================
 
 Bag info
 --------
-  Duration  : 60.0 s
-  Start     : 2026-07-13 16:38:32
-  Messages  : 5391
-  Size      : 1.4 MiB
+  Duration  : 57.3 s
+  Messages  : 22996
+  Size      : 12 MiB
   Storage   : sqlite3 (rosbag2 v5)
 
 Topics
 ------
-  /tf                  tf2_msgs/msg/TFMessage    4189 msgs (~70 Hz)
-  /localization_pose   geometry_msgs/msg/PoseStamped  601 msgs (~10 Hz)
-  /Odometry            nav_msgs/msg/Odometry      601 msgs (~10 Hz)
+  /Odometry            nav_msgs/msg/Odometry              11470 msgs (~200 Hz)
+  /tf                  tf2_msgs/msg/TFMessage              11498 msgs (~200 Hz)
+  /localization_pose   geometry_msgs/msg/PoseWithCovarianceStamped   28 msgs (~0.5 Hz)
 
-Data sources
-------------
-  /Odometry            — 10 Hz body-frame odometry from FAST-LIO.
-  /localization_pose   — 10 Hz absolute pose from GICP relocalisation.
-                         NOTE: PoseStamped (no covariance); eval synthesises
-                         a diagonal covariance from configuration.
-  /tf                  — map -> base_link transform at ~70 Hz, used as
-                         ground truth reference.
-
+Characteristics
+---------------
+  — 200 Hz high-rate body-frame odometry for fast, responsive dead-reckoning.
+  — Rapid motion profile: high-speed translation + rotation.
+  — Sparse absolute-pose corrections from GICP (only ~28 frames over 57 s).
+  — Filter relies heavily on odometry integration between rare pose fixes.
+  — Excellent test for Integrator accuracy under sustained high dynamics.

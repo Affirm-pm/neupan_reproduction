@@ -8,23 +8,23 @@ rosbag2_bagfile_information:
   message_count: 5391
   topics_with_message_count:
     - topic_metadata:
-        name: /tf
-        type: tf2_msgs/msg/TFMessage
-        serialization_format: cdr
-        offered_qos_profiles: ""
-      message_count: 4189
-    - topic_metadata:
-        name: /localization_pose
-        type: geometry_msgs/msg/PoseStamped
-        serialization_format: cdr
-        offered_qos_profiles: ""
-      message_count: 601
-    - topic_metadata:
         name: /Odometry
         type: nav_msgs/msg/Odometry
         serialization_format: cdr
         offered_qos_profiles: ""
       message_count: 601
+    - topic_metadata:
+        name: /localization_pose
+        type: geometry_msgs/msg/PoseWithCovarianceStamped
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 601
+    - topic_metadata:
+        name: /tf
+        type: tf2_msgs/msg/TFMessage
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 4189
   compression_format: ""
   compression_mode: ""
   relative_file_paths:

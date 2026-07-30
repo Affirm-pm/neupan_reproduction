@@ -124,6 +124,7 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     // Timer
     const auto period = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::duration<double>(1.0 / kInternalTickRateHz));
+
     update_timer_ = rclcpp::create_timer(
         pnode_, pnode_->get_clock(), period, [this]() { timerCallback(); });
 
@@ -229,11 +230,11 @@ void FineNavLocalizer::timerCallback() {
 
     const rclcpp::Time now = pnode_->now();
 
-    if (!initialized_) {
-        FINENAV_LOG_INFO_THROTTLE(pnode_->get_logger(), 2000,
-            "FineNavLocalizer: waiting for first observation...");
-        return;
-    }
+    // if (!initialized_) {
+    //     FINENAV_LOG_INFO_THROTTLE(pnode_->get_logger(), 2000,
+    //         "FineNavLocalizer: waiting for first observation...");
+    //     return;
+    // }
 
     {
         std::lock_guard<std::mutex> lk(state_mutex_);
@@ -248,9 +249,12 @@ void FineNavLocalizer::timerCallback() {
                 force2D();
             }
 
+            integrator_.resetAnchor(state_);
+
             pushState(now, state_);
-            publishOutput(now);
         }
+
+        publishOutput(now);
 
         // ── Warning: no absolute pose data ───────────────────────────────
         if (!pose_anchor_.hasAbsolutePoseData()) {
