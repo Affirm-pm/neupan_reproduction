@@ -4,8 +4,6 @@
 
 #include "finenav_localizer/sources/integrator.hpp"
 
-#include <cmath>
-
 namespace finenav::localizer {
 
 namespace {
@@ -38,10 +36,6 @@ void Integrator::acceptTwist(const Eigen::Vector3d& v_body,
     last_twist_ = TwistRef{v_body, omega_body, stamp};
     has_twist_source_ = true;
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  RelPose mode
-// ══════════════════════════════════════════════════════════════════════════════
 
 void Integrator::acceptRelPose(const nav_msgs::msg::Odometry& msg,
                                 finenav::core::RobotState& state) {

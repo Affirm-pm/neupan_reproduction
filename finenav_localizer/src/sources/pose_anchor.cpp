@@ -13,6 +13,9 @@ void PoseAnchor::configure(double smoothing_time_sec, double tick_rate_hz) {
         alpha_ = 1.0;
     } else {
         const double N = smoothing_time_sec * tick_rate_hz;
+        // EMA: after N ticks, remaining drift = (1-α)^N · initial
+        // We want (1-α)^N = 0.05  →  α = 1 − 0.05^(1/N)
+        // i.e. 95 % converged within smoothing_time_sec
         alpha_ = 1.0 - std::pow(0.05, 1.0 / N);
     }
 }
@@ -49,8 +52,6 @@ std::optional<PoseCorrection> PoseAnchor::tick(
 
     return corr;
 }
-
-// ── private ──────────────────────────────────────────────────────────────────
 
 void PoseAnchor::freezeDrift(const finenav::core::RobotState& current_state) {
     remaining_drift_p_ = pending_target_->p - current_state.position;

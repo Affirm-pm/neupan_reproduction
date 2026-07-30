@@ -4,8 +4,6 @@
 
 #include "finenav_localizer/sources/velocity_provider.hpp"
 
-#include <cmath>
-
 namespace finenav::localizer {
 
 void VelocityProvider::setFromTwist(const Eigen::Vector3d& v_body,
