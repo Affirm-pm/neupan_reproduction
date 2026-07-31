@@ -26,7 +26,7 @@ generate_parameter_library(
 
 add_library(${PROJECT_NAME} SHARED
         src/finenav_localizer.cpp
-        src/sources/pose_anchor.cpp
+        src/sources/world_anchor.cpp
         src/sources/integrator.cpp
         src/sources/velocity_provider.cpp
 )

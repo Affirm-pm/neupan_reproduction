@@ -1,8 +1,3 @@
-ament_add_gtest(test_pose_anchor test_pose_anchor.cpp)
-target_include_directories(test_pose_anchor PRIVATE
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>)
-target_link_libraries(test_pose_anchor finenav_localizer)
-
 ament_add_gtest(test_integrator test_integrator.cpp)
 target_include_directories(test_integrator PRIVATE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>)

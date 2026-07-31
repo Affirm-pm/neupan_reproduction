@@ -18,7 +18,8 @@
 #include "tf2_ros/transform_broadcaster.h"
 
 #include "finenav_core/robot_state/robot_state.hpp"
-#include "finenav_localizer/sources/pose_anchor.hpp"
+#include "finenav_localizer/sources/world_anchor.hpp"
+#include "finenav_localizer/sources/odometry_cache.hpp"
 #include "finenav_localizer/sources/integrator.hpp"
 #include "finenav_localizer/sources/velocity_provider.hpp"
 #include "finenav_util/ros/node_thread.hpp"
@@ -29,12 +30,14 @@ namespace finenav::localizer {
 /**
  * @brief FineNavLocalizer — observation-driven robot-state provider.
  *
- * Organised around three effects:
- *   PoseAnchor       — EMA-smoothed convergence to absolute pose targets.
- *   Integrator       — dead-reckoning position advancement (twist or relpose).
- *   VelocityProvider — current-velocity estimate (explicit or auto-diff).
+ * Architecture:
+ *   WorldAnchor      — the odometry frame's placement in the world frame
+ *   OdometryCache    — latest odometry reading (pure cache, no integration)
+ *   Integrator       — dead-reckoning (twist mode only)
+ *   VelocityProvider — current-velocity estimate
  *
- * pushState() is event-driven: one sample per real or virtual observation.
+ * Output state = world_anchor ⊕ odom_cache.
+ * pushState() is event-driven: one sample per observation.
  */
 class FineNavLocalizer : public finenav::core::RobotStateProvider {
 public:
@@ -93,7 +96,8 @@ private:
 
     // Effect sources
     Routing                    routing_;
-    PoseAnchor                 pose_anchor_;
+    WorldAnchor                world_anchor_;
+    OdometryCache              odom_cache_;
     Integrator                 integrator_;
     VelocityProvider           velocity_;
 

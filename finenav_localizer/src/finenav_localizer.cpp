@@ -85,7 +85,7 @@ FineNavLocalizer::FineNavLocalizer(rclcpp::Node::SharedPtr parent_node,
     routing_ = buildRouting(params_);
 
     // Create effect sources
-    pose_anchor_.configure(params_.pose_smoothing_time, kInternalTickRateHz);
+    world_anchor_.configure(params_.pose_smoothing_time, kInternalTickRateHz);
 
     // Subscriptions
     if (!params_.initial_pose_topic.empty()) {
@@ -138,27 +138,50 @@ void FineNavLocalizer::onInitialPose(const PoseMsg& msg) {
 
 void FineNavLocalizer::onPose(const PoseMsg& msg) {
     const auto& pose = msg.pose.pose;
-    const Eigen::Vector3d    p(pose.position.x, pose.position.y, pose.position.z);
-    const Eigen::Quaterniond q(pose.orientation.w, pose.orientation.x,
-                                pose.orientation.y, pose.orientation.z);
+    const Eigen::Vector3d    obs_p(pose.position.x, pose.position.y, pose.position.z);
+    const Eigen::Quaterniond obs_q(pose.orientation.w, pose.orientation.x,
+                                    pose.orientation.y, pose.orientation.z);
     const auto stamp = rclcpp::Time(msg.header.stamp);
 
     {
         std::lock_guard<std::mutex> lk(state_mutex_);
 
-        // Pose source: store target in PoseAnchor (deferred to smoothing tick)
-        if (routing_.pose == Routing::PoseSrc::Pose) {
-            pose_anchor_.feed(p, q, stamp);
+        if (routing_.pose != Routing::PoseSrc::Pose) return;
+
+        // Back out the anchor:  obs = anchor ⊕ odom
+        //   →  anchor.orientation = obs.orientation * odom.orientation⁻¹
+        //   →  anchor.position    = obs.position − anchor.orientation * odom.position
+        if (odom_cache_.hasData()) {
+            const Eigen::Quaterniond anchor_ori = obs_q * odom_cache_.orientation().conjugate();
+            const Eigen::Vector3d    anchor_pos = obs_p - anchor_ori * odom_cache_.position();
+
+            if (params_.pose_smoothing_time <= 0.0) {
+                world_anchor_.set(anchor_pos, anchor_ori);
+            } else {
+                world_anchor_.setTarget(anchor_pos, anchor_ori);
+            }
+        }
+
+        // Compose state from the (possibly updated) anchor
+        if (world_anchor_.isReady()) {
+            composeState(world_anchor_.position(), world_anchor_.orientation(),
+                         odom_cache_.position(), odom_cache_.orientation(),
+                         state_.position, state_.orientation);
+        } else if (odom_cache_.hasData()) {
+            // Bootstrap: no anchor yet — output odometry as-is
+            state_.position    = odom_cache_.position();
+            state_.orientation = odom_cache_.orientation();
         }
 
         // Velocity: auto-diff from consecutive poses
         if (routing_.velocity == Routing::VelSrc::AutoDiff) {
-            velocity_.autoDiffFromPose(p, q, stamp, state_);
+            velocity_.autoDiffFromPose(obs_p, obs_q, stamp, state_);
         }
 
         initialized_ = true;
     }
-    // No pushState — pose correction is deferred to the smoothing tick.
+
+    pushState(stamp, state_);
 }
 
 void FineNavLocalizer::onTwist(const TwistMsg& msg) {
@@ -170,12 +193,10 @@ void FineNavLocalizer::onTwist(const TwistMsg& msg) {
     {
         std::lock_guard<std::mutex> lk(state_mutex_);
 
-        // Integration: integrate body-frame velocity
         if (routing_.integration == Routing::IntegSrc::Twist) {
             integrator_.acceptTwist(v, omega, stamp, state_);
         }
 
-        // Velocity: set directly from twist
         if (routing_.velocity == Routing::VelSrc::Twist) {
             velocity_.setFromTwist(v, omega, state_);
         }
@@ -190,14 +211,25 @@ void FineNavLocalizer::onTwist(const TwistMsg& msg) {
 }
 
 void FineNavLocalizer::onOdometry(const OdomMsg& msg) {
+    const auto& pose = msg.pose.pose;
+    const Eigen::Quaterniond q(pose.orientation.w, pose.orientation.x,
+                                pose.orientation.y, pose.orientation.z);
+    const Eigen::Vector3d p(pose.position.x, pose.position.y, pose.position.z);
+
     std::lock_guard<std::mutex> lk(state_mutex_);
 
-    bool position_touched = false;
+    // Always cache the latest odometry
+    odom_cache_.apply(p, q);
 
-    // ── Integration: RelPose frame-to-frame ──────────────────────────────
-    if (routing_.integration == Routing::IntegSrc::RelPose) {
-        integrator_.acceptRelPose(msg, state_);
-        position_touched = true;
+    // Compose state = anchor ⊕ odometry
+    if (world_anchor_.isReady()) {
+        composeState(world_anchor_.position(), world_anchor_.orientation(),
+                     odom_cache_.position(), odom_cache_.orientation(),
+                     state_.position, state_.orientation);
+    } else {
+        // Bootstrap: no anchor yet — output odometry as-is
+        state_.position    = p;
+        state_.orientation = q;
     }
 
     // ── Velocity: odom.twist as explicit velocity ───────────────────────
@@ -210,12 +242,10 @@ void FineNavLocalizer::onOdometry(const OdomMsg& msg) {
 
     initialized_ = true;
 
-    if (position_touched) {
-        if (params_.force_2d_mode) {
-            force2D();
-        }
-        pushState(rclcpp::Time(msg.header.stamp), state_);
+    if (params_.force_2d_mode) {
+        force2D();
     }
+    pushState(rclcpp::Time(msg.header.stamp), state_);
 }
 
 void FineNavLocalizer::timerCallback() {
@@ -224,40 +254,40 @@ void FineNavLocalizer::timerCallback() {
         const auto old_smoothing = params_.pose_smoothing_time;
         params_ = param_listener_->get_params();
         if (params_.pose_smoothing_time != old_smoothing) {
-            pose_anchor_.configure(params_.pose_smoothing_time, kInternalTickRateHz);
+            world_anchor_.configure(params_.pose_smoothing_time, kInternalTickRateHz);
         }
     }
 
     const rclcpp::Time now = pnode_->now();
 
-    // if (!initialized_) {
-    //     FINENAV_LOG_INFO_THROTTLE(pnode_->get_logger(), 2000,
-    //         "FineNavLocalizer: waiting for first observation...");
-    //     return;
-    // }
-
     {
         std::lock_guard<std::mutex> lk(state_mutex_);
 
-        // ── Pose smoothing tick ──────────────────────────────────────────
-        if (auto correction = pose_anchor_.tick(state_)) {
-            state_.position += correction->position_delta;
-            state_.orientation =
-                state_.orientation * correction->orientation_delta;
-
-            if (params_.force_2d_mode) {
-                force2D();
+        // ── EMA smoothing tick ──────────────────────────────────────────
+        // When smoothing is enabled the WorldAnchor gradually converges
+        // the anchor toward each new target.  After each EMA step we
+        // recompose the state from the updated anchor + latest odometry.
+        if (world_anchor_.isReady()) {
+            auto anchor_pos = world_anchor_.position();
+            auto anchor_ori = world_anchor_.orientation();
+            if (params_.pose_smoothing_time > 0.0 &&
+                world_anchor_.tick(anchor_pos, anchor_ori)) {
+                if (odom_cache_.hasData()) {
+                    composeState(anchor_pos, anchor_ori,
+                                 odom_cache_.position(), odom_cache_.orientation(),
+                                 state_.position, state_.orientation);
+                }
+                if (params_.force_2d_mode) {
+                    force2D();
+                }
+                pushState(now, state_);
             }
-
-            integrator_.resetAnchor(state_);
-
-            pushState(now, state_);
         }
 
         publishOutput(now);
 
         // ── Warning: no absolute pose data ───────────────────────────────
-        if (!pose_anchor_.hasAbsolutePoseData()) {
+        if (!world_anchor_.hasPoseData()) {
             FINENAV_LOG_WARN_THROTTLE(pnode_->get_logger(), 5000,
                 "FineNavLocalizer: no absolute pose source configured or no pose "
                 "data received — position will drift without absolute reference.");
