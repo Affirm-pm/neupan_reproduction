@@ -148,30 +148,47 @@ void FineNavLocalizer::onPose(const PoseMsg& msg) {
 
         if (routing_.pose != Routing::PoseSrc::Pose) return;
 
-        // Back out the anchor:  obs = anchor ⊕ odom
-        //   →  anchor.orientation = obs.orientation * odom.orientation⁻¹
-        //   →  anchor.position    = obs.position − anchor.orientation * odom.position
-        if (odom_cache_.hasData()) {
-            const Eigen::Quaterniond anchor_ori = obs_q * odom_cache_.orientation().conjugate();
-            const Eigen::Vector3d    anchor_pos = obs_p - anchor_ori * odom_cache_.position();
+        // ── Resolve odometry at the observation timestamp ────────────────
+        // A delayed pose observation must anchor against the odometry that
+        // was current *at the observation instant*, not the latest one.
+        // We recover that odometry from the state history:
+        //     odom_at_obs = anchor⁻¹ ⊕ state_at_obs
+        Eigen::Vector3d    odom_p_at_obs = odom_cache_.position();
+        Eigen::Quaterniond odom_q_at_obs = odom_cache_.orientation();
+        bool               fallback      = false;
 
-            if (params_.pose_smoothing_time <= 0.0) {
-                world_anchor_.set(anchor_pos, anchor_ori);
+        if (world_anchor_.isReady()) {
+            auto state_at_obs = getRobotState(stamp);
+            if (!state_at_obs.has_value()) {
+                FINENAV_LOG_WARN_THROTTLE(pnode_->get_logger(), 5000,
+                    "FineNavLocalizer: pose stamp %.3f s is outside the "
+                    "retained state history — falling back to latest odometry.",
+                    stamp.seconds());
+                fallback = true;
             } else {
-                world_anchor_.setTarget(anchor_pos, anchor_ori);
+                // Back out odometry at T_obs from the stored state
+                odom_q_at_obs = world_anchor_.orientation().conjugate()
+                                * state_at_obs->orientation;
+                odom_p_at_obs = world_anchor_.orientation().conjugate()
+                                * (state_at_obs->position - world_anchor_.position());
             }
         }
 
-        // Compose state from the (possibly updated) anchor
-        if (world_anchor_.isReady()) {
-            composeState(world_anchor_.position(), world_anchor_.orientation(),
-                         odom_cache_.position(), odom_cache_.orientation(),
-                         state_.position, state_.orientation);
-        } else if (odom_cache_.hasData()) {
-            // Bootstrap: no anchor yet — output odometry as-is
-            state_.position    = odom_cache_.position();
-            state_.orientation = odom_cache_.orientation();
+        // ── Compute the new anchor ───────────────────────────────────────
+        //     anchor = obs ⊖ odom_at_obs
+        const Eigen::Quaterniond anchor_ori = obs_q * odom_q_at_obs.conjugate();
+        const Eigen::Vector3d    anchor_pos = obs_p - anchor_ori * odom_p_at_obs;
+
+        if (params_.pose_smoothing_time <= 0.0) {
+            world_anchor_.set(anchor_pos, anchor_ori);
+        } else {
+            world_anchor_.setTarget(anchor_pos, anchor_ori);
         }
+
+        // ── Compose state from the updated anchor ────────────────────────
+        composeState(world_anchor_.position(), world_anchor_.orientation(),
+                     odom_cache_.position(), odom_cache_.orientation(),
+                     state_.position, state_.orientation);
 
         // Velocity: auto-diff from consecutive poses
         if (routing_.velocity == Routing::VelSrc::AutoDiff) {
