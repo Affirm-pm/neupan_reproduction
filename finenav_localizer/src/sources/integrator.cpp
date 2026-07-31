@@ -63,6 +63,16 @@ void Integrator::acceptRelPose(const nav_msgs::msg::Odometry& msg,
         ref_odom_p_ = p_curr;
         ref_odom_q_ = q_curr;
         ref_ready_  = true;
+
+        // On the very first odometry frame (before any external anchor),
+        // bootstrap ref_map to match so that the subsequent formula
+        //   state = ref_map ∘ (ref_odom⁻¹ ∘ odom_curr)
+        // reproduces the absolute odometry pose.
+        if (!odom_anchored_) {
+            ref_map_p_ = p_curr;
+            ref_map_q_ = q_curr;
+            odom_anchored_ = true;
+        }
         return;
     }
 

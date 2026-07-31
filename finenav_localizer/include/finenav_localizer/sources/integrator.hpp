@@ -56,7 +56,8 @@ private:
     Eigen::Quaterniond ref_map_q_{1, 0, 0, 0};
     Eigen::Vector3d    ref_odom_p_{0, 0, 0};
     Eigen::Quaterniond ref_odom_q_{1, 0, 0, 0};
-    bool ref_ready_{false};  ///< true once ref_odom has been captured
+    bool ref_ready_{false};   ///< true once ref_odom has been captured
+    bool odom_anchored_{false}; ///< true once ref_map has been bootstrapped from odometry
     rclcpp::Time prev_stamp_; ///< reject out-of-order
 };
 
