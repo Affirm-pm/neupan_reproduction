@@ -24,6 +24,12 @@ def plot_csv(csv_path, do_anim=True):
     has_gt = not df["gt_x"].isna().all()
     name = os.path.basename(csv_path)
 
+    # ── Load pose observations if available ──────────────────────────────
+    pose_path = csv_path.replace(".csv", "_pose.csv")
+    pose_df = pd.read_csv(pose_path) if os.path.exists(pose_path) else None
+    if pose_df is not None:
+        pose_df["t"] -= df["t"].iloc[0]
+
     # ── Static figure ───────────────────────────────────────────────────
     fig = plt.figure(figsize=(20, 12))
     fig.suptitle(f"FineNavLocalizer  ▸  {name}", fontsize=13, fontweight="bold")
@@ -34,25 +40,38 @@ def plot_csv(csv_path, do_anim=True):
     for i, (col, label) in enumerate([("est_x", "x [m]"), ("est_y", "y [m]")]):
         ax = fig.add_subplot(gs[0, i])
         if has_gt: ax.plot(t, df["gt_" + col[4:]], "k-", lw=2.0, label="GT")
-        ax.plot(t, df[col], "b-", lw=1.0, label="Est")
+        ax.plot(t, df["odom_" + col[4:]], "C1-", lw=3.0, alpha=0.25, label="Odom")
+        ax.plot(t, df[col], "b-", lw=1.2, label="Est")
+        if pose_df is not None:
+            ax.scatter(pose_df["t"], pose_df[col[4:]], c="C2", s=8, alpha=0.6, label="Pose obs")
         ax.set_ylabel(label); ax.legend(fontsize=7); ax.grid(True, alpha=0.3)
 
     for i, (col, label) in enumerate([("est_yaw", "yaw [rad]"), ("est_wz", "ωz [rad/s]")]):
         ax = fig.add_subplot(gs[1, i])
         if col == "est_yaw" and has_gt: ax.plot(t, _wrap(df["gt_yaw"]), "k-", lw=2.0, label="GT")
+        if col == "est_yaw":
+            ax.plot(t, _wrap(df["odom_yaw"]), "C1-", lw=3.0, alpha=0.25, label="Odom")
+        else:
+            ax.plot(t, df["odom_wz"], "C1-", lw=3.0, alpha=0.25, label="Odom")
         vals = df[col] if col != "est_yaw" else _wrap(df[col])
-        ax.plot(t, vals, "b-", lw=1.0, label="Est")
+        ax.plot(t, vals, "b-", lw=1.2, label="Est")
+        if col == "est_yaw" and pose_df is not None:
+            ax.scatter(pose_df["t"], pose_df["yaw"].apply(lambda a: (a + math.pi) % (2*math.pi) - math.pi),
+                       c="C2", s=8, alpha=0.6, label="Pose obs")
         ax.set_ylabel(label); ax.legend(fontsize=7); ax.grid(True, alpha=0.3)
 
     for i, (col, label) in enumerate([("est_vx", "vx [m/s]"), ("est_vy", "vy [m/s]")]):
         ax = fig.add_subplot(gs[2, i])
-        ax.plot(t, df[col], "b-", lw=1.0)
+        ax.plot(t, df["odom_" + col[4:]], "C1-", lw=3.0, alpha=0.25, label="Odom")
+        ax.plot(t, df[col], "b-", lw=1.2, label="Est")
         ax.set_ylabel(label); ax.grid(True, alpha=0.3)
 
     ax_traj = fig.add_subplot(gs[3, 0])
     ax_traj.set_aspect("equal")
     if has_gt: ax_traj.plot(df["gt_x"], df["gt_y"], "k-", lw=2.0, label="GT")
     ax_traj.plot(df["est_x"], df["est_y"], "b-", lw=1.2, label="Est")
+    if pose_df is not None:
+        ax_traj.scatter(pose_df["x"], pose_df["y"], c="C2", s=10, alpha=0.6, label="Pose obs")
     ax_traj.set_xlabel("X [m]"); ax_traj.set_ylabel("Y [m]")
     ax_traj.legend(fontsize=7); ax_traj.grid(True, alpha=0.3); ax_traj.set_title("Trajectory", fontsize=10)
 

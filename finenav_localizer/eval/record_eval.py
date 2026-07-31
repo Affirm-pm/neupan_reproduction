@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
-"""Subscribe /finenav_localizer/nav_state + /tf → CSV."""
+"""Subscribe /finenav_localizer/nav_state + /tf + /Odometry → CSV."""
 
 import csv, math, sys
 import rclpy
 from rclpy.node import Node
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseWithCovarianceStamped
 from tf2_msgs.msg import TFMessage
 
 
@@ -36,11 +36,22 @@ class Recorder(Node):
         self._w = csv.writer(self._f)
         self._w.writerow(["t", "gt_x", "gt_y", "gt_yaw",
                           "est_x", "est_y", "est_z", "est_yaw",
-                          "est_vx", "est_vy", "est_vz", "est_wz"])
+                          "est_vx", "est_vy", "est_vz", "est_wz",
+                          "odom_x", "odom_y", "odom_z", "odom_yaw",
+                          "odom_vx", "odom_vy", "odom_vz", "odom_wz"])
         nav_topic = self.declare_parameter("nav_topic", "~/nav_state").value
         self.create_subscription(Odometry, nav_topic, self._cb, 10)
         self.create_subscription(TFMessage, "/tf", self._on_tf, 10)
+        self.create_subscription(Odometry, "/Odometry", self._on_odom, 10)
+
+        pose_topic = self.declare_parameter("pose_topic", "localization_pose").value
+        if pose_topic:
+            self.create_subscription(PoseWithCovarianceStamped,
+                                     pose_topic, self._on_pose, 10)
+
         self._gt = None
+        self._odom = None  # (x, y, z, yaw, vx, vy, vz, wz)
+        self._pose_obs = []  # (t, x, y, z, yaw)
 
     def _on_tf(self, msg):
         for tx in msg.transforms:
@@ -56,8 +67,24 @@ class Recorder(Node):
             v = q_rot(qA, (B.translation.x, B.translation.y, B.translation.z))
             self._gt = (A.translation.x + v[0], A.translation.y + v[1], yaw(q))
 
+    def _on_odom(self, msg):
+        p = msg.pose.pose.position
+        q = msg.pose.pose.orientation
+        t = msg.twist.twist
+        self._odom = (p.x, p.y, p.z,
+                      yaw((q.x, q.y, q.z, q.w)),
+                      t.linear.x, t.linear.y, t.linear.z,
+                      t.angular.z)
+
+    def _on_pose(self, msg):
+        p, q = msg.pose.pose.position, msg.pose.pose.orientation
+        t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
+        self._pose_obs.append((t, p.x, p.y, p.z,
+                               yaw((q.x, q.y, q.z, q.w))))
+
     def _cb(self, msg):
         gt = (math.nan, math.nan, math.nan) if self._gt is None else self._gt
+        odom = (math.nan,) * 8 if self._odom is None else self._odom
         p, t = msg.pose.pose, msg.twist.twist
         self._w.writerow([
             msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
@@ -65,6 +92,7 @@ class Recorder(Node):
             p.position.x, p.position.y, p.position.z,
             yaw((p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w)),
             t.linear.x, t.linear.y, t.linear.z, t.angular.z,
+            *odom,
         ])
 
 
@@ -76,6 +104,16 @@ def main():
     except KeyboardInterrupt:
         pass
     node._f.close()
+
+    # Write accumulated pose observations to a companion CSV
+    if node._pose_obs:
+        pose_path = node._f.name.replace(".csv", "_pose.csv")
+        with open(pose_path, "w") as fp:
+            w = csv.writer(fp)
+            w.writerow(["t", "x", "y", "z", "yaw"])
+            w.writerows(node._pose_obs)
+        print(f"[record] {len(node._pose_obs)} pose obs → {pose_path}")
+
     node.destroy_node()
     try:
         rclpy.shutdown()
