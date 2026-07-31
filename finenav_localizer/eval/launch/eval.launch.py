@@ -61,7 +61,7 @@ def generate_launch_description():
 
     # ── 3. Bag playback ─────────────────────────────────────────────────────
     bag_play = ExecuteProcess(
-        cmd=["ros2", "bag", "play", bag_path, "--clock", "-r", "1.0"],
+        cmd=["ros2", "bag", "play", bag_path, "--clock", "1000", "-r", "1.0"],
         output="screen",
     )
 
