@@ -29,15 +29,15 @@ temporal_voxel_map:
   min_angle:
     type: double
     default_value: 0.0
-    description: "Minimum polar angle from sensor axis [rad]"
+    description: "Start azimuth angle from +X in XY plane [rad]. -π/2 = right, 0 = forward, +π/2 = left"
     validation:
-      bounds<>: [0.0, 3.1416]
+      bounds<>: [-3.1416, 3.1416]
   max_angle:
     type: double
     default_value: 1.047
-    description: "Maximum polar angle from sensor axis [rad] (default: π/3 ≈ 60°)"
+    description: "End azimuth angle from +X in XY plane [rad] (default: π/3 ≈ 60°). Supports wraparound across ±π"
     validation:
-      bounds<>: [0.0, 3.1416]
+      bounds<>: [-3.1416, 3.1416]
 
   # ── Decay (voxel lifetime) ──
   decay_time_sec:

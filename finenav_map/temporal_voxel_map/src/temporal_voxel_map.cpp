@@ -37,8 +37,8 @@ void TemporalVoxelMap::configure(const ConfigType& cfg) {
 
     RCLCPP_INFO(logger_,
         "TemporalVoxelMap configured: "
-        "res=%.2f m, length=%.1f m, FOV=%.0f°-%.0f°, range=%.1f-%.1f m, "
-        "decay=%.1f/%.1f s",
+        "res=%.2f m, length=%.1f m, FOV azimuth=%.0f°→%.0f° (XY plane, +X=0°), "
+        "range=%.1f-%.1f m, decay=%.1f/%.1f s",
         cfg.resolution, cfg.map_length,
         cfg.min_angle * 180.0 / M_PI, cfg.max_angle * 180.0 / M_PI,
         cfg.min_range, cfg.max_range,
@@ -46,7 +46,7 @@ void TemporalVoxelMap::configure(const ConfigType& cfg) {
 }
 
 // ==============================================================================
-// FOV check (single cone, axis = body +Z)
+// FOV check (azimuth sector in XY plane, +X = forward)
 // ==============================================================================
 
 bool TemporalVoxelMap::isInFrustum(const Position& p_world,
@@ -60,16 +60,20 @@ bool TemporalVoxelMap::isInFrustum(const Position& p_world,
         return false;
     }
 
-    // Transform to body frame; +Z is sensor axis
-    const Eigen::Vector3d v_sensor = T_map_body.linear().transpose() * v_world;
-    const double norm = v_sensor.norm();
-    if (norm <= 0.0) {
-        return false;
-    }
+    // Rotate to body frame, compute azimuth in XY plane.
+    // 0 = +X (forward), +π/2 = +Y (left), -π/2 = -Y (right).
+    const Eigen::Vector3d v_body = T_map_body.linear().transpose() * v_world;
+    const double azi = std::atan2(v_body.y(), v_body.x());
 
-    const double cos_theta = std::clamp(v_sensor.z() / norm, -1.0, 1.0);
-    const double theta = std::acos(cos_theta);
-    return theta >= min_angle_rad_ && theta <= max_angle_rad_;
+    // Normalise and compare to [min, max] with wraparound support.
+    double a   = normalizeAngle(azi);
+    double s   = normalizeAngle(min_angle_rad_);
+    double e   = normalizeAngle(max_angle_rad_);
+    double mid = normalizeAngle(s + normalizeAngle(e - s) * 0.5);
+
+    double dev   = normalizeAngle(a - mid);
+    double width = normalizeAngle(e - s);
+    return std::abs(dev) <= std::abs(width) * 0.5 + 1e-9;
 }
 
 // ==============================================================================

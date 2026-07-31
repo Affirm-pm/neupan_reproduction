@@ -30,7 +30,7 @@ using finenav::core::Region3D;
  * @brief TemporalVoxelMap — 3D voxel grid with time-based dynamic obstacle filtering.
  *
  * Wraps GridMap<Voxel> internally and adds:
- *   - Point-cloud insertion with single-cone FOV filtering
+ *   - Point-cloud insertion with azimuth FOV filtering (XY plane, +X forward)
  *   - Time-based pruning of expired dynamic voxels
  *
  * Satisfies SpatialContainer and ShiftableMap — usable with MapServer.
@@ -65,7 +65,7 @@ public:
     /**
      * @brief Transform and insert a point cloud into the voxel grid.
      *
-     * Points outside the single-cone FOV or outside the map bounds are skipped.
+     * Points outside the azimuth FOV (XY plane, +X forward) or outside the map bounds are skipped.
      * Each inserted voxel's timestamp is set to steady_clock::now() and its
      * position is added to the dynamic-cell set for later pruning.
      *
@@ -88,7 +88,7 @@ public:
     void pruneExpiredCells(const Eigen::Isometry3d& T_map_body);
 
 private:
-    /// Single-cone FOV: polar angle from body +Z axis.
+    /// Azimuth FOV in XY plane: +X=0° forward, sector [min_angle, max_angle].
     bool isInFrustum(const Position& p_world,
                      const Eigen::Isometry3d& T_map_body) const;
 
