@@ -40,7 +40,7 @@ private:
 
     // ── AutoDiff state ───────────────────────────────────────────────────
     bool has_prev_{false};
-    rclcpp::Time       prev_stamp_;
+    rclcpp::Time       prev_stamp_{0, 0, RCL_ROS_TIME};  // Explicitly use RCL_ROS_TIME to prevent time source mismatch
     Eigen::Vector3d    prev_p_{0, 0, 0};
     Eigen::Quaterniond prev_q_{1, 0, 0, 0};
 };

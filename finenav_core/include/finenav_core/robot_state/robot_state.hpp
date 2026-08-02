@@ -62,20 +62,22 @@ public:
      */
     [[nodiscard]] virtual std::optional<RobotState> getRobotState(const rclcpp::Time & t) const
     {
+        const rclcpp::Time t_ros(t.nanoseconds(), RCL_ROS_TIME);  // normalize to internal clock type
+
         std::lock_guard<std::mutex> lk(history_mutex_);
         if (history_.empty()) {
             return std::nullopt;
         }
-        if (t > history_.back().stamp || t < history_.front().stamp) {
+        if (t_ros > history_.back().stamp || t_ros < history_.front().stamp) {
             return std::nullopt;  // outside the retained window
         }
 
-        // First entry with stamp >= t.
+        // First entry with stamp >= t_ros.
         auto it = std::lower_bound(
-            history_.begin(), history_.end(), t,
+            history_.begin(), history_.end(), t_ros,
             [](const StampedState & s, const rclcpp::Time & q) { return s.stamp < q; });
 
-        if (it->stamp == t) {
+        if (it->stamp == t_ros) {
             return it->state;
         }
 
@@ -85,7 +87,7 @@ public:
         if (span <= 0.0) {
             return s1.state;  // degenerate: identical stamps
         }
-        const double alpha = (t - s1.stamp).seconds() / span;
+        const double alpha = (t_ros - s1.stamp).seconds() / span;
         return interpolate(s1.state, s2.state, alpha);
     }
 
@@ -96,12 +98,13 @@ protected:
      */
     void pushState(const rclcpp::Time & stamp, const RobotState & s)
     {
+        const rclcpp::Time stamp_ros(stamp.nanoseconds(), RCL_ROS_TIME);  // normalize to internal clock type
         std::lock_guard<std::mutex> lk(history_mutex_);
-        if (!history_.empty() && stamp < history_.back().stamp) {
+        if (!history_.empty() && stamp_ros < history_.back().stamp) {
             return;
         }
-        history_.push_back({stamp, s});
-        prune(stamp);
+        history_.push_back({stamp_ros, s});
+        prune(stamp_ros);
     }
 
     /**
@@ -123,8 +126,8 @@ protected:
     }
 
 private:
-    struct StampedState {
-        rclcpp::Time stamp;
+    struct StampedState { // Explicitly use RCL_ROS_TIME to prevent time source mismatch
+        rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
         RobotState   state;
     };
 

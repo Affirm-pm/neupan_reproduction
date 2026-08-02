@@ -17,8 +17,9 @@ void VelocityProvider::autoDiffFromPose(const Eigen::Vector3d& p,
                                          const Eigen::Quaterniond& q,
                                          const rclcpp::Time& stamp,
                                          finenav::core::RobotState& state) {
+    const rclcpp::Time stamp_ros(stamp.nanoseconds(), RCL_ROS_TIME);
     if (has_prev_) {
-        const double dt = (stamp - prev_stamp_).seconds();
+        const double dt = (stamp_ros - prev_stamp_).seconds();
         if (dt > 1e-6) {
             state.linear_velocity =
                 prev_q_.conjugate() * (p - prev_p_) / dt;
@@ -29,7 +30,7 @@ void VelocityProvider::autoDiffFromPose(const Eigen::Vector3d& p,
     }
     prev_p_      = p;
     prev_q_      = q;
-    prev_stamp_  = stamp;
+    prev_stamp_  = stamp_ros;
     has_prev_    = true;
 }
 

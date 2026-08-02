@@ -65,8 +65,8 @@ public:
 
 private:
 
-    struct BufferedMessage {
-        rclcpp::Time stamp;
+    struct BufferedMessage { // Explicitly use RCL_ROS_TIME to prevent time source mismatch
+        rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
         MsgT msg;
     };
 

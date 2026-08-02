@@ -182,7 +182,7 @@ void MapServer<MapT>::addObservationSource(
         topic_name, qos,
         [injector = std::move(injector), source_name,
          logger = node_->get_logger()](std::shared_ptr<MsgT> msg) {
-            rclcpp::Time stamp;
+            rclcpp::Time stamp{0, 0, RCL_ROS_TIME}; // Explicitly use RCL_ROS_TIME to prevent time source mismatch
             if constexpr (requires { msg->header.stamp; }) {
                 stamp = msg->header.stamp;
             } else {

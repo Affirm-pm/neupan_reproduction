@@ -30,7 +30,7 @@ private:
     struct TwistRef {
         Eigen::Vector3d v_body;
         Eigen::Vector3d omega_body;
-        rclcpp::Time    stamp;
+        rclcpp::Time    stamp{0, 0, RCL_ROS_TIME};  // Explicitly use RCL_ROS_TIME to prevent time source mismatch
     };
     std::optional<TwistRef> last_twist_;
 };

@@ -20,8 +20,9 @@ void Integrator::acceptTwist(const Eigen::Vector3d& v_body,
                               const Eigen::Vector3d& omega_body,
                               const rclcpp::Time& stamp,
                               finenav::core::RobotState& state) {
+    const rclcpp::Time stamp_ros(stamp.nanoseconds(), RCL_ROS_TIME);
     if (last_twist_.has_value()) {
-        const double dt = (stamp - last_twist_->stamp).seconds();
+        const double dt = (stamp_ros - last_twist_->stamp).seconds();
         if (dt > 0.0) {
             state.position +=
                 state.orientation * (last_twist_->v_body * dt);
@@ -31,9 +32,9 @@ void Integrator::acceptTwist(const Eigen::Vector3d& v_body,
     }
 
     // Reject out-of-order or duplicate
-    if (last_twist_.has_value() && stamp <= last_twist_->stamp) return;
+    if (last_twist_.has_value() && stamp_ros <= last_twist_->stamp) return;
 
-    last_twist_ = TwistRef{v_body, omega_body, stamp};
+    last_twist_ = TwistRef{v_body, omega_body, stamp_ros};
 }
 
 }  // namespace finenav::localizer
