@@ -7,6 +7,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_localizer/sources/integrator.hpp"
+#include "finenav_core/robot_state/eigen_conversions.hpp"
 
 namespace finenav::localizer {
 namespace {
@@ -21,10 +22,10 @@ rclcpp::Time t(int64_t sec) {
 
 RobotState makeState() {
     RobotState s;
-    s.position         = Eigen::Vector3d::Zero();
-    s.orientation      = Eigen::Quaterniond::Identity();
-    s.linear_velocity  = Eigen::Vector3d::Zero();
-    s.angular_velocity = Eigen::Vector3d::Zero();
+    toMsg(Eigen::Vector3d::Zero(), s);
+    toMsg(Eigen::Quaterniond::Identity(), s);
+    toMsgLinearVel(Eigen::Vector3d::Zero(), s);
+    toMsgAngularVel(Eigen::Vector3d::Zero(), s);
     return s;
 }
 
@@ -37,7 +38,10 @@ TEST(Integrator, TwistFirstMessageStoresOnly) {
     auto s = makeState();
 
     ig.acceptTwist(Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(0, 0, 0), t(0), s);
-    EXPECT_NEAR(s.position.x(), 0.0, kEps);
+
+    Eigen::Vector3d pos;
+    fromMsg(s, pos);
+    EXPECT_NEAR(pos.x(), 0.0, kEps);
 }
 
 TEST(Integrator, TwistIntegratesPosition) {
@@ -47,7 +51,9 @@ TEST(Integrator, TwistIntegratesPosition) {
     ig.acceptTwist(Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(0, 0, 0), t(0), s);
     ig.acceptTwist(Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(0, 0, 0), t(1), s);
 
-    EXPECT_NEAR(s.position.x(), 1.0, kEps);
+    Eigen::Vector3d pos;
+    fromMsg(s, pos);
+    EXPECT_NEAR(pos.x(), 1.0, kEps);
 }
 
 TEST(Integrator, TwistIntegratesOrientation) {
@@ -57,7 +63,9 @@ TEST(Integrator, TwistIntegratesOrientation) {
     ig.acceptTwist(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, M_PI_2), t(0), s);
     ig.acceptTwist(Eigen::Vector3d(0, 0, 0), Eigen::Vector3d(0, 0, M_PI_2), t(1), s);
 
-    const double yaw = Eigen::AngleAxisd(s.orientation).angle();
+    Eigen::Quaterniond ori;
+    fromMsg(s, ori);
+    const double yaw = Eigen::AngleAxisd(ori).angle();
     EXPECT_NEAR(yaw, M_PI_2, 1e-6);
 }
 
@@ -69,8 +77,9 @@ TEST(Integrator, TwistRejectsOutOfOrder) {
     ig.acceptTwist(Eigen::Vector3d(1, 0, 0), Eigen::Vector3d(0, 0, 0), t(1), s);  // older — ignored
     ig.acceptTwist(Eigen::Vector3d(2, 0, 0), Eigen::Vector3d(0, 0, 0), t(3), s);
 
-    // dt = 3-2 = 1s at 2m/s = 2m
-    EXPECT_NEAR(s.position.x(), 2.0, kEps);
+    Eigen::Vector3d pos;
+    fromMsg(s, pos);
+    EXPECT_NEAR(pos.x(), 2.0, kEps);
 }
 
 }  // namespace

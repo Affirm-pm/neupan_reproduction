@@ -4,13 +4,15 @@
 
 #include "finenav_localizer/sources/velocity_provider.hpp"
 
+#include "finenav_core/robot_state/eigen_conversions.hpp"
+
 namespace finenav::localizer {
 
 void VelocityProvider::setFromTwist(const Eigen::Vector3d& v_body,
                                      const Eigen::Vector3d& omega_body,
                                      finenav::core::RobotState& state) const {
-    state.linear_velocity  = v_body;
-    state.angular_velocity = omega_body;
+    core::toMsgLinearVel(v_body, state);
+    core::toMsgAngularVel(omega_body, state);
 }
 
 void VelocityProvider::autoDiffFromPose(const Eigen::Vector3d& p,
@@ -21,11 +23,13 @@ void VelocityProvider::autoDiffFromPose(const Eigen::Vector3d& p,
     if (has_prev_) {
         const double dt = (stamp_ros - prev_stamp_).seconds();
         if (dt > 1e-6) {
-            state.linear_velocity =
-                prev_q_.conjugate() * (p - prev_p_) / dt;
+            Eigen::Vector3d lin_vel = prev_q_.conjugate() * (p - prev_p_) / dt;
+            core::toMsgLinearVel(lin_vel, state);
+
             const Eigen::Quaterniond dq = prev_q_.conjugate() * q;
             const Eigen::AngleAxisd aa(dq);
-            state.angular_velocity = aa.axis() * aa.angle() / dt;
+            Eigen::Vector3d ang_vel = aa.axis() * aa.angle() / dt;
+            core::toMsgAngularVel(ang_vel, state);
         }
     }
     prev_p_      = p;

@@ -7,6 +7,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_localizer/sources/velocity_provider.hpp"
+#include "finenav_core/robot_state/eigen_conversions.hpp"
 
 namespace finenav::localizer {
 namespace {
@@ -21,10 +22,10 @@ rclcpp::Time t(int64_t sec) {
 
 RobotState makeState() {
     RobotState s;
-    s.position         = Eigen::Vector3d::Zero();
-    s.orientation      = Eigen::Quaterniond::Identity();
-    s.linear_velocity  = Eigen::Vector3d::Zero();
-    s.angular_velocity = Eigen::Vector3d::Zero();
+    toMsg(Eigen::Vector3d::Zero(), s);
+    toMsg(Eigen::Quaterniond::Identity(), s);
+    toMsgLinearVel(Eigen::Vector3d::Zero(), s);
+    toMsgAngularVel(Eigen::Vector3d::Zero(), s);
     return s;
 }
 
@@ -34,20 +35,22 @@ TEST(VelocityProvider, SetFromTwist) {
 
     vp.setFromTwist(Eigen::Vector3d(1, 2, 0), Eigen::Vector3d(0, 0, 0.5), s);
 
-    EXPECT_NEAR(s.linear_velocity.x(), 1.0, kEps);
-    EXPECT_NEAR(s.linear_velocity.y(), 2.0, kEps);
-    EXPECT_NEAR(s.angular_velocity.z(), 0.5, kEps);
+    EXPECT_NEAR(s.twist.linear.x, 1.0, kEps);
+    EXPECT_NEAR(s.twist.linear.y, 2.0, kEps);
+    EXPECT_NEAR(s.twist.angular.z, 0.5, kEps);
 }
 
 TEST(VelocityProvider, AutoDiffFirstCallNoOp) {
     VelocityProvider vp;
     auto s = makeState();
-    s.linear_velocity = Eigen::Vector3d(9, 9, 9);
+    s.twist.linear.x = 9.0;
+    s.twist.linear.y = 9.0;
+    s.twist.linear.z = 9.0;
 
     vp.autoDiffFromPose(Eigen::Vector3d(0, 0, 0), Eigen::Quaterniond::Identity(),
                         t(0), s);
 
-    EXPECT_NEAR(s.linear_velocity.x(), 9.0, kEps);
+    EXPECT_NEAR(s.twist.linear.x, 9.0, kEps);
 }
 
 TEST(VelocityProvider, AutoDiffComputesVelocity) {
@@ -59,7 +62,7 @@ TEST(VelocityProvider, AutoDiffComputesVelocity) {
     vp.autoDiffFromPose(Eigen::Vector3d(2, 0, 0), Eigen::Quaterniond::Identity(),
                         t(1), s);
 
-    EXPECT_NEAR(s.linear_velocity.x(), 2.0, kEps);
+    EXPECT_NEAR(s.twist.linear.x, 2.0, kEps);
 }
 
 }  // namespace

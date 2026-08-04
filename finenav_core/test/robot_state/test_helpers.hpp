@@ -10,6 +10,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_core/robot_state/robot_state.hpp"
+#include "finenav_core/robot_state/eigen_conversions.hpp"
 
 /// seconds → rclcpp::Time (ROS-clock integer-second stamp).
 inline rclcpp::Time ts(int32_t seconds) { return rclcpp::Time(seconds, 0, RCL_ROS_TIME); }
@@ -33,9 +34,9 @@ public:
 inline finenav::core::RobotState makeState(double x, double y, double yaw)
 {
     finenav::core::RobotState s;
-    s.position         = {x, y, 0.0};
-    s.orientation      = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
-    s.linear_velocity  = {0.1, 0.0, 0.0};
-    s.angular_velocity = {0.0, 0.0, 0.05};
+    finenav::core::toMsg(Eigen::Vector3d(x, y, 0.0), s);
+    finenav::core::toMsg(Eigen::Quaterniond(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ())), s);
+    finenav::core::toMsgLinearVel(Eigen::Vector3d(0.1, 0.0, 0.0), s);
+    finenav::core::toMsgAngularVel(Eigen::Vector3d(0.0, 0.0, 0.05), s);
     return s;
 }

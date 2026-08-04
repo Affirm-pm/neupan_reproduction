@@ -108,22 +108,22 @@ void BtNavigator::execute()
         if (state_provider_) {
             if (auto rs = state_provider_->getRobotState()) {
                 geometry_msgs::msg::Pose p;
-                p.position.x    = rs->position.x();
-                p.position.y    = rs->position.y();
-                p.position.z    = rs->position.z();
-                p.orientation.w = rs->orientation.w();
-                p.orientation.x = rs->orientation.x();
-                p.orientation.y = rs->orientation.y();
-                p.orientation.z = rs->orientation.z();
+                p.position.x    = rs->pose.position.x;
+                p.position.y    = rs->pose.position.y;
+                p.position.z    = rs->pose.position.z;
+                p.orientation.w = rs->pose.orientation.w;
+                p.orientation.x = rs->pose.orientation.x;
+                p.orientation.y = rs->pose.orientation.y;
+                p.orientation.z = rs->pose.orientation.z;
                 blackboard->set<geometry_msgs::msg::Pose>("robot_pose", p);
 
                 geometry_msgs::msg::Twist t;
-                t.linear.x  = rs->linear_velocity.x();
-                t.linear.y  = rs->linear_velocity.y();
-                t.linear.z  = rs->linear_velocity.z();
-                t.angular.x = rs->angular_velocity.x();
-                t.angular.y = rs->angular_velocity.y();
-                t.angular.z = rs->angular_velocity.z();
+                t.linear.x  = rs->twist.linear.x;
+                t.linear.y  = rs->twist.linear.y;
+                t.linear.z  = rs->twist.linear.z;
+                t.angular.x = rs->twist.angular.x;
+                t.angular.y = rs->twist.angular.y;
+                t.angular.z = rs->twist.angular.z;
                 blackboard->set<geometry_msgs::msg::Twist>("robot_twist", t);
             }
         }
@@ -164,12 +164,12 @@ void BtNavigator::execute()
             if (state_provider_) {
                 if (auto rs = state_provider_->getRobotState()) {
                     auto& g = goal->pose.pose;
-                    result->position_error.x = rs->position.x() - g.position.x;
-                    result->position_error.y = rs->position.y() - g.position.y;
-                    result->position_error.z = rs->position.z() - g.position.z;
+                    result->position_error.x = rs->pose.position.x - g.position.x;
+                    result->position_error.y = rs->pose.position.y - g.position.y;
+                    result->position_error.z = rs->pose.position.z - g.position.z;
 
-                    Eigen::Quaterniond q_cur(rs->orientation.w(), rs->orientation.x(),
-                                             rs->orientation.y(), rs->orientation.z());
+                    Eigen::Quaterniond q_cur(rs->pose.orientation.w, rs->pose.orientation.x,
+                                             rs->pose.orientation.y, rs->pose.orientation.z);
                     Eigen::Quaterniond q_goal(g.orientation.w, g.orientation.x,
                                               g.orientation.y, g.orientation.z);
                     auto euler = (q_goal.inverse() * q_cur).toRotationMatrix()
@@ -196,20 +196,20 @@ void BtNavigator::execute()
                 auto fb = std::make_shared<typename ActionT::Feedback>();
                 fb->current_pose.header.stamp = pnode_->now();
                 fb->current_pose.header.frame_id = "map"; // TODO： 弄个宏定义define
-                fb->current_pose.pose.position.x    = rs->position.x();
-                fb->current_pose.pose.position.y    = rs->position.y();
-                fb->current_pose.pose.position.z    = rs->position.z();
-                fb->current_pose.pose.orientation.w = rs->orientation.w();
-                fb->current_pose.pose.orientation.x = rs->orientation.x();
-                fb->current_pose.pose.orientation.y = rs->orientation.y();
-                fb->current_pose.pose.orientation.z = rs->orientation.z();
+                fb->current_pose.pose.position.x    = rs->pose.position.x;
+                fb->current_pose.pose.position.y    = rs->pose.position.y;
+                fb->current_pose.pose.position.z    = rs->pose.position.z;
+                fb->current_pose.pose.orientation.w = rs->pose.orientation.w;
+                fb->current_pose.pose.orientation.x = rs->pose.orientation.x;
+                fb->current_pose.pose.orientation.y = rs->pose.orientation.y;
+                fb->current_pose.pose.orientation.z = rs->pose.orientation.z;
                 fb->navigation_time = rclcpp::Duration(pnode_->now() - episode_start);
-                fb->current_speed.linear.x  = rs->linear_velocity.x();
-                fb->current_speed.linear.y  = rs->linear_velocity.y();
-                fb->current_speed.linear.z  = rs->linear_velocity.z();
-                fb->current_speed.angular.x = rs->angular_velocity.x();
-                fb->current_speed.angular.y = rs->angular_velocity.y();
-                fb->current_speed.angular.z = rs->angular_velocity.z();
+                fb->current_speed.linear.x  = rs->twist.linear.x;
+                fb->current_speed.linear.y  = rs->twist.linear.y;
+                fb->current_speed.linear.z  = rs->twist.linear.z;
+                fb->current_speed.angular.x = rs->twist.angular.x;
+                fb->current_speed.angular.y = rs->twist.angular.y;
+                fb->current_speed.angular.z = rs->twist.angular.z;
                 action_server_->publish_feedback(fb);
             }
             last_feedback_time_ = pnode_->now();

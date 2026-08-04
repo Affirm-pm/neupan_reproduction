@@ -5,26 +5,19 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <deque>
 #include <mutex>
 #include <optional>
 
-#include <Eigen/Core>
-#include <Eigen/Geometry>
 #include <rclcpp/time.hpp>
 #include <rclcpp/duration.hpp>
 
+#include "finenav_interfaces/msg/robot_state.hpp"
+
 namespace finenav::core {
 
-/**
- *  @brief RobotState — the canonical robot state representation in FineNav-Engine.
- */
-struct RobotState {
-    Eigen::Vector3d    position{0, 0, 0};                ///< world-frame position (m)
-    Eigen::Quaterniond orientation{1, 0, 0, 0};          ///< world ← body rotation
-    Eigen::Vector3d    linear_velocity{0, 0, 0};         ///< body-frame linear velocity (m/s)
-    Eigen::Vector3d    angular_velocity{0, 0, 0};        ///< body-frame angular velocity (rad/s)
-};
+using RobotState = finenav_interfaces::msg::RobotState;
 
 /**
  * @brief RobotStateProvider — pull-based robot-state source with a rolling history.
@@ -52,7 +45,7 @@ public:
         if (history_.empty()) {
             return std::nullopt;
         }
-        return history_.back().state;
+        return history_.back();
     }
 
     /**
@@ -68,43 +61,44 @@ public:
         if (history_.empty()) {
             return std::nullopt;
         }
-        if (t_ros > history_.back().stamp || t_ros < history_.front().stamp) {
+        if (t_ros > stampOf(history_.back()) || t_ros < stampOf(history_.front())) {
             return std::nullopt;  // outside the retained window
         }
 
         // First entry with stamp >= t_ros.
         auto it = std::lower_bound(
             history_.begin(), history_.end(), t_ros,
-            [](const StampedState & s, const rclcpp::Time & q) { return s.stamp < q; });
+            [](const RobotState & s, const rclcpp::Time & q) { return stampOf(s) < q; });
 
-        if (it->stamp == t_ros) {
-            return it->state;
+        if (stampOf(*it) == t_ros) {
+            return *it;
         }
 
-        const StampedState & s2 = *it;
-        const StampedState & s1 = *(it - 1);
-        const double span = (s2.stamp - s1.stamp).seconds();
+        const RobotState & s2 = *it;
+        const RobotState & s1 = *(it - 1);
+        const double span = (stampOf(s2) - stampOf(s1)).seconds();
         if (span <= 0.0) {
-            return s1.state;  // degenerate: identical stamps
+            return s1;  // degenerate: identical stamps
         }
-        const double alpha = (t_ros - s1.stamp).seconds() / span;
-        return interpolate(s1.state, s2.state, alpha);
+        const double alpha = (t_ros - stampOf(s1)).seconds() / span;
+        return interpolate(s1, s2, alpha);
     }
 
 protected:
     /**
-     * @brief Append the latest state; prunes samples older than the window.
-     * @note Out-of-order pushes (stamp < newest) are silently ignored.
+     * @brief Append a robot state; prunes samples older than the window.
+     * @note The timestamp is read from @p s.header.stamp.
+     *       Out-of-order pushes (stamp < newest) are silently ignored.
      */
-    void pushState(const rclcpp::Time & stamp, const RobotState & s)
+    void pushState(const RobotState & s)
     {
-        const rclcpp::Time stamp_ros(stamp.nanoseconds(), RCL_ROS_TIME);  // normalize to internal clock type
+        const rclcpp::Time stamp = stampOf(s);
         std::lock_guard<std::mutex> lk(history_mutex_);
-        if (!history_.empty() && stamp_ros < history_.back().stamp) {
+        if (!history_.empty() && stamp < stampOf(history_.back())) {
             return;
         }
-        history_.push_back({stamp_ros, s});
-        prune(stamp_ros);
+        history_.push_back(s);
+        prune(stamp);
     }
 
     /**
@@ -121,16 +115,11 @@ protected:
         std::lock_guard<std::mutex> lk(history_mutex_);
         history_duration_sec_ = sec;
         if (!history_.empty()) {
-            prune(history_.back().stamp);
+            prune(stampOf(history_.back()));
         }
     }
 
 private:
-    struct StampedState { // Explicitly use RCL_ROS_TIME to prevent time source mismatch
-        rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
-        RobotState   state;
-    };
-
     /// Prune entries older than (newest − window).  Must hold history_mutex_.
     void prune(const rclcpp::Time & newest)
     {
@@ -139,24 +128,48 @@ private:
             return;
         }
         const rclcpp::Time cutoff = newest - rclcpp::Duration::from_seconds(history_duration_sec_);
-        while (history_.size() > 1 && history_.front().stamp < cutoff) {
+        while (history_.size() > 1 && stampOf(history_.front()) < cutoff) {
             history_.pop_front();
         }
+    }
+
+    static rclcpp::Time stampOf(const RobotState & s)
+    {
+        return rclcpp::Time(s.header.stamp.sec, s.header.stamp.nanosec, RCL_ROS_TIME);
     }
 
     static RobotState interpolate(const RobotState & a, const RobotState & b, double alpha)
     {
         RobotState out;
-        out.position         = a.position         + alpha * (b.position         - a.position);
-        out.linear_velocity  = a.linear_velocity  + alpha * (b.linear_velocity  - a.linear_velocity);
-        out.angular_velocity = a.angular_velocity + alpha * (b.angular_velocity - a.angular_velocity);
-        out.orientation      = a.orientation.slerp(alpha, b.orientation);
+        out.header = a.header;
+
+        out.pose.position.x = a.pose.position.x + alpha * (b.pose.position.x - a.pose.position.x);
+        out.pose.position.y = a.pose.position.y + alpha * (b.pose.position.y - a.pose.position.y);
+        out.pose.position.z = a.pose.position.z + alpha * (b.pose.position.z - a.pose.position.z);
+
+        out.twist.linear.x = a.twist.linear.x + alpha * (b.twist.linear.x - a.twist.linear.x);
+        out.twist.linear.y = a.twist.linear.y + alpha * (b.twist.linear.y - a.twist.linear.y);
+        out.twist.linear.z = a.twist.linear.z + alpha * (b.twist.linear.z - a.twist.linear.z);
+        out.twist.angular.x = a.twist.angular.x + alpha * (b.twist.angular.x - a.twist.angular.x);
+        out.twist.angular.y = a.twist.angular.y + alpha * (b.twist.angular.y - a.twist.angular.y);
+        out.twist.angular.z = a.twist.angular.z + alpha * (b.twist.angular.z - a.twist.angular.z);
+
+        double qx = a.pose.orientation.x + alpha * (b.pose.orientation.x - a.pose.orientation.x);
+        double qy = a.pose.orientation.y + alpha * (b.pose.orientation.y - a.pose.orientation.y);
+        double qz = a.pose.orientation.z + alpha * (b.pose.orientation.z - a.pose.orientation.z);
+        double qw = a.pose.orientation.w + alpha * (b.pose.orientation.w - a.pose.orientation.w);
+        double norm = std::sqrt(qx * qx + qy * qy + qz * qz + qw * qw);
+        out.pose.orientation.x = qx / norm;
+        out.pose.orientation.y = qy / norm;
+        out.pose.orientation.z = qz / norm;
+        out.pose.orientation.w = qw / norm;
+
         return out;
     }
 
     double                   history_duration_sec_;
     mutable std::mutex       history_mutex_;
-    std::deque<StampedState> history_;
+    std::deque<RobotState>   history_;
 };
 
 }  // namespace finenav::core

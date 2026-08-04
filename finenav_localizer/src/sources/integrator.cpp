@@ -4,6 +4,8 @@
 
 #include "finenav_localizer/sources/integrator.hpp"
 
+#include "finenav_core/robot_state/eigen_conversions.hpp"
+
 namespace finenav::localizer {
 
 namespace {
@@ -24,10 +26,16 @@ void Integrator::acceptTwist(const Eigen::Vector3d& v_body,
     if (last_twist_.has_value()) {
         const double dt = (stamp_ros - last_twist_->stamp).seconds();
         if (dt > 0.0) {
-            state.position +=
-                state.orientation * (last_twist_->v_body * dt);
-            state.orientation =
-                state.orientation * expOmegaDt(last_twist_->omega_body, dt);
+            Eigen::Vector3d    pos;
+            Eigen::Quaterniond ori;
+            core::fromMsg(state, pos);
+            core::fromMsg(state, ori);
+
+            pos += ori * (last_twist_->v_body * dt);
+            ori = ori * expOmegaDt(last_twist_->omega_body, dt);
+
+            core::toMsg(pos, state);
+            core::toMsg(ori, state);
         }
     }
 

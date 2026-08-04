@@ -245,7 +245,8 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
             // Cannot get robot state, silent return.
             return;
         }
-        const auto& robot_pose = maybe_state->position;
+        const auto& pt = maybe_state->pose.position;
+        const Position3D robot_pose(pt.x, pt.y, pt.z);
         if (!map_instance_->isInside(robot_pose)) {
             const auto bounds = map_instance_->getWindowBounds();
             const auto center = map_instance_->getWindowCenter();
@@ -280,7 +281,8 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
         const auto maybe_state = state_provider_->getRobotState();
         if (!maybe_state) return;
 
-        const auto& robot_pose = maybe_state->position;
+        const auto& pt = maybe_state->pose.position;
+        const Position3D robot_pose(pt.x, pt.y, pt.z);
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
         // If the robot is not even inside the current window, shift.
