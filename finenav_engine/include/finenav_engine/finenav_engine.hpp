@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <any>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -100,7 +99,7 @@ private:
 
     std::shared_ptr<rclcpp::Node> node_;
 
-    std::unordered_map<std::string, std::any> maps_;
+    std::unordered_map<std::string, std::shared_ptr<finenav::core::IMapResource>> maps_;
     std::unordered_map<std::string, std::shared_ptr<finenav::core::IControlLayer>> layers_;
 
     std::unique_ptr<finenav::localizer::FineNavLocalizer> localizer_;
@@ -120,7 +119,7 @@ std::shared_ptr<finenav::core::MapServer<MapT>>
 FineNavEngine::createMapServer(const std::string& name) {
     auto server = std::make_shared<finenav::core::MapServer<MapT>>(
         node_, name, localizer_.get());
-    maps_[name] = std::any(server);
+    maps_[name] = server;
     return server;
 }
 
@@ -128,13 +127,13 @@ template <typename MapT>
 std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(const std::string& name) {
     auto it = maps_.find(name);
     if (it == maps_.end()) return nullptr;
-    try {
-        return std::any_cast<std::shared_ptr<finenav::core::MapServer<MapT>>>(it->second);
-    } catch (const std::bad_any_cast&) {
+    auto casted = std::dynamic_pointer_cast<finenav::core::MapServer<MapT>>(it->second);
+    if (!casted) {
         FINENAV_LOG_ERROR(node_->get_logger(),
             "getMapServer('{}'): type mismatch.", name);
         return nullptr;
     }
+    return casted;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
