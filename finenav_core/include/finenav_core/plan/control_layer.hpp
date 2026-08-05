@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <any>
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -13,18 +12,17 @@
 #include "rclcpp/rclcpp.hpp"
 #include "finenav_interfaces/msg/trajectory.hpp"
 #include "finenav_core/map/map_concept.hpp"
-#include "finenav_core/map/map_server.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/generate_map_views_variant.hpp"
-#include "finenav_core/plan/ros_conversions.hpp"
-#include "finenav_core/algo_configurator.hpp"
 #include "finenav_core/param_handle_keeper.hpp"
 #include "finenav_core/plan/i_control_layer.hpp"
 #include "finenav_util/ros/task_channel.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 
 namespace finenav::core {
+
+template <SpatialContainer MapT> class MapServer;
 
 /**
  * @brief ControlLayer — binds a set of planners to a MapServer under an execution policy.

@@ -8,7 +8,10 @@
 
 #pragma once
 
+#include "finenav_core/algo_configurator.hpp"
 #include "finenav_core/detail/control_layer_infra.hpp"
+#include "finenav_core/map/map_server.hpp"
+#include "finenav_core/plan/ros_conversions.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::core {
