@@ -34,7 +34,6 @@ target_include_directories(${PROJECT_NAME} PUBLIC
         $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
-target_compile_definitions(${PROJECT_NAME} PUBLIC EIGEN_MAX_STATIC_ALIGN_BYTES=16)
 target_link_libraries(${PROJECT_NAME} PUBLIC
         fmt::fmt
         Eigen3::Eigen
