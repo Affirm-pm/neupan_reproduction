@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "finenav_core/detail/control_layer_infra.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::core {
@@ -26,18 +27,10 @@ ControlLayer<Planners...>::ControlLayer(
       node_(node), layer_name_(layer_name), policy_(std::move(policy)),
       state_provider_(state_provider)
 {
-    rclcpp::NodeOptions pnode_opts;
-    pnode_opts.append_parameter_override(
-        "use_sim_time",
-        node_->get_parameter("use_sim_time").as_bool());
-    pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts);
-    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
-
-    std::visit([this](auto& p) {
-        if constexpr (requires { p.declare_parameters(*pnode_); }) {
-            p.declare_parameters(*pnode_);
-        }
-    }, policy_);
+    auto infra = detail::buildControlLayerInfra(node, layer_name, policy_);
+    pnode_        = std::move(infra.pnode);
+    pnode_thread_ = std::move(infra.pnode_thread);
+    worker_       = std::move(infra.worker);
 
     std::apply([this](auto&... planners) {
         ([this](auto& p) {
@@ -46,8 +39,6 @@ ControlLayer<Planners...>::ControlLayer(
             param_keeper_.keep_alive(AlgoConfigurator<T>::load(pnode_, p));
         }(planners), ...);
     }, planners_instance_);
-
-    worker_ = std::make_unique<finenav::util::TaskWorker>(pnode_, layer_name_);
 
     worker_thread_ = std::thread([this]() {
         while (rclcpp::ok() && !stop_execution_) {

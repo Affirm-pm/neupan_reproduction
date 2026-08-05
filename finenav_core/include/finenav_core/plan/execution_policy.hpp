@@ -4,7 +4,11 @@
 
 #pragma once
 
+#include <variant>
+
 #include <rclcpp/rclcpp.hpp>
+
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::core {
 
@@ -46,5 +50,7 @@ struct ContinuousPolicy {
         }
     }
 };
+
+using ExecutionPolicyVariant = std::variant<SingleShotPolicy, ContinuousPolicy>;
 
 } // namespace finenav::core

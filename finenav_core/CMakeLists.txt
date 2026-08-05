@@ -25,6 +25,8 @@ set(ros_dependencies
 
 add_library(${PROJECT_NAME} SHARED
         src/robot_state_provider.cpp
+        src/map_server_helpers.cpp
+        src/control_layer_helpers.cpp
 )
 target_include_directories(${PROJECT_NAME} PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

@@ -43,7 +43,6 @@ public:
     using MapViewsVariant = GenerateMapViewsVariant<Planners...>;
     using PrePlanCallback = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback = std::function<bool(PostPlanContext&)>;
-    using ExecutionPolicyVariant = std::variant<SingleShotPolicy, ContinuousPolicy>;
 
     // ── Construction ───────────────────────────────────────────────────────
 

@@ -5,67 +5,11 @@
 #pragma once
 
 #include "finenav_core/algo_configurator.hpp"
+#include "finenav_core/detail/map_server_infra.hpp"
 #include "finenav_util/common/log_macros.hpp"
 #include "finenav_util/common/stopwatch.hpp"
 
 namespace finenav::core {
-
-// --- MapServer::declare_parameters --------------------------------------------
-template <SpatialContainer MapT>
-void MapServer<MapT>::declare_parameters() {
-    // update_rate_hz (manual validation — no ROS range to avoid to_value=0.0 bug)
-    {
-        auto desc = rcl_interfaces::msg::ParameterDescriptor{};
-        desc.description = "Sensor fusion update rate (Hz). Must be > 0.0.";
-        pnode_->declare_parameter<double>("update_rate_hz", update_rate_hz_, desc);
-        update_rate_hz_ = pnode_->get_parameter("update_rate_hz").as_double();
-        if (update_rate_hz_ <= 0.0) {
-            FINENAV_LOG_WARN(pnode_->get_logger(),
-                "update_rate_hz must be > 0.0 (got {:.1f}). Falling back to 10.0.",
-                update_rate_hz_);
-            update_rate_hz_ = 10.0;
-        }
-    }
-    // shift_rate_hz
-    {
-        auto desc = rcl_interfaces::msg::ParameterDescriptor{};
-        desc.description = "Map window shift check rate (Hz). Must be > 0.0.";
-        pnode_->declare_parameter<double>("shift_rate_hz", shift_rate_hz_, desc);
-        shift_rate_hz_ = pnode_->get_parameter("shift_rate_hz").as_double();
-        if (shift_rate_hz_ <= 0.0) {
-            FINENAV_LOG_WARN(pnode_->get_logger(),
-                "shift_rate_hz must be > 0.0 (got {:.1f}). Falling back to 50.0.",
-                shift_rate_hz_);
-            shift_rate_hz_ = 50.0;
-        }
-    }
-    // shift_margin_ratio
-    {
-        auto desc = rcl_interfaces::msg::ParameterDescriptor{};
-        desc.description =
-            "Distance-from-centre ratio triggering a window shift "
-            "(0 = centre only, 1 = at edge). Must be in [0.0, 1.0].";
-        rcl_interfaces::msg::FloatingPointRange range;
-        range.from_value = 0.0;
-        range.to_value   = 1.0;
-        range.step       = 0.0;
-        desc.floating_point_range = {range};
-        pnode_->declare_parameter<double>("shift_margin_ratio", shift_margin_ratio_, desc);
-        shift_margin_ratio_ = pnode_->get_parameter("shift_margin_ratio").as_double();
-        if (shift_margin_ratio_ < 0.0) {
-            FINENAV_LOG_WARN(pnode_->get_logger(),
-                "shift_margin_ratio must be >= 0.0 (got {:.2f}). Falling back to 0.0.",
-                shift_margin_ratio_);
-            shift_margin_ratio_ = 0.0;
-        }
-        if (shift_margin_ratio_ > 1.0) {
-            FINENAV_LOG_WARN(pnode_->get_logger(),
-                "shift_margin_ratio must be <= 1.0 (got {:.2f}). Falling back to 1.0.",
-                shift_margin_ratio_);
-            shift_margin_ratio_ = 1.0;
-        }
-    }
-}
 
 // --- MapServer::MapServer  (see map_server.hpp) --------------------------------
 template <SpatialContainer MapT>
@@ -76,12 +20,17 @@ MapServer<MapT>::MapServer(
     : IMapResource(server_name),
       node_(node), server_name_(server_name), state_provider_(state_provider) {
 
-    rclcpp::NodeOptions pnode_opts;
-    pnode_opts.append_parameter_override(
-        "use_sim_time",
-        node_->get_parameter("use_sim_time").as_bool());
-    pnode_ = rclcpp::Node::make_shared(server_name_, node_->get_name(), pnode_opts);
-    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
+    auto infra = detail::buildMapServerInfra(
+        node, server_name, update_rate_hz_, shift_rate_hz_, shift_margin_ratio_);
+    pnode_              = std::move(infra.pnode);
+    pnode_thread_       = std::move(infra.pnode_thread);
+    update_timer_       = std::move(infra.update_timer);
+    shift_timer_        = std::move(infra.shift_timer);
+    param_keeper_       = std::move(infra.param_keeper);
+    update_rate_hz_     = infra.update_rate_hz;
+    shift_rate_hz_      = infra.shift_rate_hz;
+    shift_margin_ratio_ = infra.shift_margin_ratio;
+
     map_instance_ = std::make_unique<MapT>();
     param_keeper_.keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
 
@@ -93,9 +42,7 @@ MapServer<MapT>::MapServer(
         return;
     }
 
-    declare_parameters();
-
-    // Sensor fusion update timer.
+    // Re-bind the update timer to the actual runUpdateCycle method.
     auto update_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::duration<double>(1.0 / update_rate_hz_));
     update_timer_ = rclcpp::create_timer(
@@ -106,7 +53,6 @@ MapServer<MapT>::MapServer(
         "MapServer '{}': update timer started at {:.1f} Hz.",
         server_name_, update_rate_hz_);
 
-    // Map window shift timer — only when the map is shiftable.
     if constexpr (ShiftableMap<MapT>) {
         auto shift_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::duration<double>(1.0 / shift_rate_hz_));
@@ -182,7 +128,7 @@ void MapServer<MapT>::addObservationSource(
         topic_name, qos,
         [injector = std::move(injector), source_name,
          logger = node_->get_logger()](std::shared_ptr<MsgT> msg) {
-            rclcpp::Time stamp{0, 0, RCL_ROS_TIME}; // Explicitly use RCL_ROS_TIME to prevent time source mismatch
+            rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
             if constexpr (requires { msg->header.stamp; }) {
                 stamp = msg->header.stamp;
             } else {
@@ -205,13 +151,12 @@ void MapServer<MapT>::addObservationSource(
 // --- MapServer::runUpdateCycle  (private, see map_server.hpp) ------------------
 template <SpatialContainer MapT>
 void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
-    param_keeper_.pollAll(); // Apply pending dynamic parameter updates
+    param_keeper_.pollAll();
 
     finenav::util::Stopwatch sw(node_->get_logger(), "runUpdateCycle");
 
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
-    // Pre-Update
     if (pre_update_hook_) {
         if (auto maybe_rs = state_provider_->getRobotState()) {
             pre_update_hook_(*maybe_rs, *map_instance_);
@@ -222,12 +167,10 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
         }
     }
 
-    // Update
     for (auto& src : observation_sources_) {
         src->applyBuffered(*map_instance_, now, state_provider_);
     }
 
-    // Post-Update
     if (post_update_hook_) {
         if (auto maybe_rs = state_provider_->getRobotState()) {
             post_update_hook_(*maybe_rs, *map_instance_);
@@ -238,11 +181,9 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
         }
     }
 
-    // ── Window health check ────────────────────────────────────────────────
     {
         const auto maybe_state = state_provider_->getRobotState();
         if (!maybe_state) {
-            // Cannot get robot state, silent return.
             return;
         }
         const auto& pt = maybe_state->pose.position;
@@ -276,7 +217,6 @@ template <SpatialContainer MapT>
 void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     finenav::util::Stopwatch sw(pnode_->get_logger(), "runShiftCycle");
 
-    // Compile-time guard: this method body is only valid for ShiftableMap.
     if constexpr (ShiftableMap<MapT>) {
         const auto maybe_state = state_provider_->getRobotState();
         if (!maybe_state) return;
@@ -285,7 +225,6 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
         const Position3D robot_pose(pt.x, pt.y, pt.z);
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
-        // If the robot is not even inside the current window, shift.
         if (!map_instance_->isInside(robot_pose)) {
             FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 1000,
                 "MapServer '{}': robot escaped window — forcing immediate shift.",
@@ -294,7 +233,6 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
             return;
         }
 
-        // If the robot near enough to the edge, shift.
         const auto center      = map_instance_->getWindowCenter();
         const auto bounds      = map_instance_->getWindowBounds();
         const auto half_extent = (bounds.max() - bounds.min()) * 0.5;
@@ -306,10 +244,9 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
                 (offset.y() / half_extent.y() > shift_margin_ratio_) ||
                 (offset.z() / half_extent.z() > shift_margin_ratio_);
 
-            if (!near_edge) return;  // well within window, nothing to do
+            if (!near_edge) return;
         }
 
-        // ── Perform the shift ──────────────────────────────────────────────
         map_instance_->shiftWindowTo(robot_pose);
 
         FINENAV_LOG_DEBUG(pnode_->get_logger(),
