@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(finenav_core) # Header-only
+project(finenav_core)
 
 find_package(ament_cmake REQUIRED)
 find_package(fmt REQUIRED)
@@ -23,32 +23,36 @@ set(ros_dependencies
         finenav_visualizer
 )
 
-install(DIRECTORY include/
-        DESTINATION include/${PROJECT_NAME}
+add_library(${PROJECT_NAME} SHARED
+        src/robot_state_provider.cpp
 )
-
-add_library(${PROJECT_NAME} INTERFACE)
-target_include_directories(${PROJECT_NAME} INTERFACE
+target_include_directories(${PROJECT_NAME} PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
         $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
 )
-target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_20)
-target_compile_definitions(${PROJECT_NAME} INTERFACE EIGEN_MAX_STATIC_ALIGN_BYTES=16)
-target_link_libraries(${PROJECT_NAME} INTERFACE
+target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_20)
+target_compile_definitions(${PROJECT_NAME} PUBLIC EIGEN_MAX_STATIC_ALIGN_BYTES=16)
+target_link_libraries(${PROJECT_NAME} PUBLIC
         fmt::fmt
         Eigen3::Eigen
 )
-ament_target_dependencies(${PROJECT_NAME} INTERFACE
+ament_target_dependencies(${PROJECT_NAME} PUBLIC
         ${ros_dependencies}
+)
+
+install(DIRECTORY include/
+        DESTINATION include/${PROJECT_NAME}
+)
+install(TARGETS ${PROJECT_NAME}
+        EXPORT ${PROJECT_NAME}Targets
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
 )
 
 ament_export_include_directories(include/${PROJECT_NAME})
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
-install(TARGETS ${PROJECT_NAME}
-        EXPORT ${PROJECT_NAME}Targets
-        INCLUDES DESTINATION include/${PROJECT_NAME}
-)
 ament_export_dependencies(
         fmt
         Eigen3
