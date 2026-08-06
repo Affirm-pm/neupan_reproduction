@@ -60,6 +60,8 @@ public:
 
     void shiftWindowTo(const Position3D& pos) { grid_.shiftWindowTo(pos); }
 
+    void selfManage(finenav::core::MapRuntime&) {}
+
     // ── Sensor data injection ─────────────────────────────────────
 
     /**
