@@ -12,7 +12,7 @@
 namespace finenav::core {
 
 // --- MapServer::MapServer  (see map_server.hpp) --------------------------------
-template <SpatialContainer MapT>
+template <Map MapT>
 MapServer<MapT>::MapServer(
     rclcpp::Node::SharedPtr node,
     const std::string& server_name,
@@ -33,6 +33,10 @@ MapServer<MapT>::MapServer(
 
     map_instance_ = std::make_unique<MapT>();
     param_keeper_.keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
+
+    if constexpr (SelfManagingMap<MapT>) {
+        map_instance_->selfManage(*this);
+    }
 
     if (state_provider == nullptr) {
         FINENAV_LOG_ERROR(node_->get_logger(),
@@ -66,31 +70,31 @@ MapServer<MapT>::MapServer(
 }
 
 // --- MapServer::registerPreUpdateHook  (see map_server.hpp) --------------------
-template <SpatialContainer MapT>
+template <Map MapT>
 void MapServer<MapT>::registerPreUpdateHook(PreUpdateHook hook) {
     pre_update_hook_ = std::move(hook);
 }
 
 // --- MapServer::registerPostUpdateHook  (see map_server.hpp) -------------------
-template <SpatialContainer MapT>
+template <Map MapT>
 void MapServer<MapT>::registerPostUpdateHook(PostUpdateHook hook) {
     post_update_hook_ = std::move(hook);
 }
 
 // --- MapServer::getLockedReadView  (see map_server.hpp) ------------------------
-template <SpatialContainer MapT>
+template <Map MapT>
 LockedMapRO<MapT> MapServer<MapT>::getLockedReadView() {
     return LockedMapRO<MapT>(*map_instance_, rw_mutex_);
 }
 
 // --- MapServer::getLockedWriteView  (see map_server.hpp) -----------------------
-template <SpatialContainer MapT>
+template <Map MapT>
 LockedMapRW<MapT> MapServer<MapT>::getLockedWriteView() {
     return LockedMapRW<MapT>(*map_instance_, rw_mutex_);
 }
 
 // --- MapServer::addObservationSource (manual injector)  (see map_server.hpp) ---
-template <SpatialContainer MapT>
+template <Map MapT>
 template <typename MsgT>
 std::function<void(MsgT&&, const rclcpp::Time&)>
 MapServer<MapT>::addObservationSource(
@@ -113,7 +117,7 @@ MapServer<MapT>::addObservationSource(
 }
 
 // --- MapServer::addObservationSource (topic-based)  (see map_server.hpp) -------
-template <SpatialContainer MapT>
+template <Map MapT>
 template <typename MsgT>
 void MapServer<MapT>::addObservationSource(
     const std::string& source_name,
@@ -149,7 +153,7 @@ void MapServer<MapT>::addObservationSource(
 }
 
 // --- MapServer::runUpdateCycle  (private, see map_server.hpp) ------------------
-template <SpatialContainer MapT>
+template <Map MapT>
 void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
     param_keeper_.pollAll();
 
@@ -213,7 +217,7 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
 }
 
 // --- MapServer::runShiftCycle  (private, see map_server.hpp) -------------------
-template <SpatialContainer MapT>
+template <Map MapT>
 void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
     finenav::util::Stopwatch sw(pnode_->get_logger(), "runShiftCycle");
 

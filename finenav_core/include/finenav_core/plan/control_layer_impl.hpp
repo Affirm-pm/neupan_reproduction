@@ -20,7 +20,7 @@ namespace finenav::core {
 // Constructor
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 ControlLayer<Planners...>::ControlLayer(
     rclcpp::Node::SharedPtr node,
     const std::string& layer_name,
@@ -53,7 +53,7 @@ ControlLayer<Planners...>::ControlLayer(
     });
 }
 
-template <typename... Planners>
+template <Planner... Planners>
 ControlLayer<Planners...>::~ControlLayer() {
     stop_execution_ = true;
     if (worker_thread_.joinable()) worker_thread_.join();
@@ -63,7 +63,7 @@ ControlLayer<Planners...>::~ControlLayer() {
 // IControlLayer
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 void ControlLayer<Planners...>::connectFrom(const std::string& parent_topic) {
     setInputTopic(parent_topic);
     setupDataPorts();
@@ -73,12 +73,12 @@ void ControlLayer<Planners...>::connectFrom(const std::string& parent_topic) {
 // Topic / Port Setup
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 void ControlLayer<Planners...>::setInputTopic(const std::string& topic) {
     input_topic_ = topic;
 }
 
-template <typename... Planners>
+template <Planner... Planners>
 void ControlLayer<Planners...>::setupDataPorts() {
     if (!input_topic_.empty()) {
         plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::TaskFeedback>(
@@ -93,7 +93,7 @@ void ControlLayer<Planners...>::setupDataPorts() {
 // Utilities
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 void ControlLayer<Planners...>::PlanRefCallback(
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg)
 {
@@ -105,7 +105,7 @@ void ControlLayer<Planners...>::PlanRefCallback(
 // Shared Helpers
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 void ControlLayer<Planners...>::resetActivePlanner() {
     std::apply([&](auto&... planners) {
         ([&](auto& p) {
@@ -121,7 +121,7 @@ void ControlLayer<Planners...>::resetActivePlanner() {
     }, planners_instance_);
 }
 
-template <typename... Planners>
+template <Planner... Planners>
 bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     if (!map_view_factory_) {
         FINENAV_LOG_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
@@ -233,7 +233,7 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
 // execute() — Episode Entry-Point
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 void ControlLayer<Planners...>::execute() {
     auto goal = worker_->latestGoal();
     if (!goal) return;
@@ -261,7 +261,7 @@ void ControlLayer<Planners...>::execute() {
 // executeImpl — SingleShotPolicy
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 void ControlLayer<Planners...>::executeImpl(SingleShotPolicy&) {
     auto goal = worker_->latestGoal();
     if (!goal) return;
@@ -286,7 +286,7 @@ void ControlLayer<Planners...>::executeImpl(SingleShotPolicy&) {
 // executeImpl — ContinuousPolicy
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 void ControlLayer<Planners...>::executeImpl(ContinuousPolicy& policy) {
     auto goal = worker_->latestGoal();
     if (!goal) return;
@@ -333,14 +333,14 @@ void ControlLayer<Planners...>::executeImpl(ContinuousPolicy& policy) {
 // bind_map_view
 // ==============================================================================
 
-template <typename... Planners>
+template <Planner... Planners>
 template <typename MapT, typename BuilderFn>
 void ControlLayer<Planners...>::bind_map_view(
     std::shared_ptr<MapServer<MapT>> server,
     BuilderFn&& builder)
 {
-    static_assert(SpatialContainer<MapT>, // Use `static_assert` instead of `requires` to prevent clangd error.
-        "MapT must satisfy SpatialContainer.");
+    static_assert(Map<MapT>, // Use `static_assert` instead of `requires` to prevent clangd error.
+        "MapT must satisfy Map.");
     static_assert(std::is_invocable_v<BuilderFn, const MapT&, const std::string&>,
         "BuilderFn must be callable with (const MapT&, const std::string& active_planner_id).");
     static_assert(std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&, const std::string&>,

@@ -22,7 +22,7 @@
 
 namespace finenav::core {
 
-template <SpatialContainer MapT> class MapServer;
+template <Map MapT> class MapServer;  // full definition in map_server.hpp
 
 /**
  * @brief ControlLayer — binds a set of planners to a MapServer under an execution policy.
@@ -33,7 +33,7 @@ template <SpatialContainer MapT> class MapServer;
  *
  * @tparam Planners  The planner types supported by this layer (one or more).
  */
-template <typename... Planners>
+template <Planner... Planners>
 class ControlLayer : public IControlLayer {
 public:
     // ── Types ──────────────────────────────────────────────────────────────
@@ -70,7 +70,7 @@ public:
      * BoundMapView::lock_guard.
      *
      * @param builder  (const MapT&, const std::string& active_planner_id) → MapViewsVariant
-     * @tparam MapT      Must satisfy SpatialContainer.
+     * @tparam MapT      Must satisfy Map.
      */
     template <typename MapT, typename BuilderFn>
     void bind_map_view(std::shared_ptr<MapServer<MapT>> server, BuilderFn&& builder);

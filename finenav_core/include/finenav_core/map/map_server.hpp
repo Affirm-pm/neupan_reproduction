@@ -22,20 +22,26 @@
 namespace finenav::core {
 
 /**
- * @brief MapServer — runtime orchestrator for a single SpatialContainer instance.
+ * @brief MapServer — runtime host for a Map.
  *
  * MapServer owns the map, runs the sensor-fusion update loop, provides
- * thread-safe RAII access for planner threads
+ * thread-safe RAII access for planner threads, and tracks the robot window
+ * (if the map is shiftable).
+ *
+ * If MapT satisfies SelfManagingMap, the map's selfManage() is called during
+ * construction so it can wire its own data sources and hooks.  Otherwise the
+ * user wires everything manually via addObservationSource() and the hook
+ * registrations.
  *
  * Sensor data is NOT fused synchronously on arrival.  It is moved into a
  * per-source buffer and deferred until the next update cycle.  The update
  * timer drains all buffers and fuses each observation into the map.
  *
- * @tparam MapT  Map type; must satisfy SpatialContainer at minimum.  If MapT
- *               also satisfies ShiftableMap and a state provider is given, the
- *               optional window-tracking feature is enabled at compile time.
+ * @tparam MapT  Map type; must satisfy Map.  If MapT also satisfies
+ *               ShiftableMap and a state provider is given, the optional
+ *               window-tracking feature is enabled at compile time.
  */
-template <SpatialContainer MapT>
+template <Map MapT>
 class MapServer : public IMapResource {
 public:
 

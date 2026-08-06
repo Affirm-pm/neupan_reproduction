@@ -15,7 +15,7 @@
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_core/algo_configurator.hpp"
 
-// ── Minimal SpatialContainer for testing ────────────────────────────────────
+// ── Minimal self-managing Map for testing ───────────────────────────────────
 
 struct SmokeCell { double value = 0.0; };
 
@@ -36,13 +36,19 @@ struct SmokeMap {
         bounds_ = finenav::core::Region3D(center - half, center + half);
     }
 
+    // selfManage — minimal no-op for tests that don't need data sources
+    void selfManage(finenav::core::MapServer<SmokeMap>&) {}
+
 private:
     finenav::core::Region3D bounds_{
         finenav::core::Position3D(-50, -50, -5),
         finenav::core::Position3D( 50,  50,  5)};
 };
 
-static_assert(finenav::core::SpatialContainer<SmokeMap>);
+static_assert(finenav::core::Map<SmokeMap>);
+// SelfManagingMap<SmokeMap> is verified inside MapServer's constructor via
+// if constexpr — a static_assert here would require MapServer to be a
+// complete type (via the MapServer<T>& parameter in the concept).
 static_assert(finenav::core::ShiftableMap<SmokeMap>);
 
 // ── AlgoConfigurator specialisation ────────────────────────────────────────

@@ -53,21 +53,21 @@ public:
 
     // ── Factory: map ──────────────────────────────────────────────────────
 
-    template <typename MapT>
+    template <finenav::core::Map MapT>
     std::shared_ptr<finenav::core::MapServer<MapT>> createMapServer(const std::string& name);
 
-    template <typename MapT>
+    template <finenav::core::Map MapT>
     [[nodiscard]] std::shared_ptr<finenav::core::MapServer<MapT>> getMapServer(const std::string& name);
 
     bool removeMapServer(const std::string& name);
 
     // ── Factory: layer ────────────────────────────────────────────────────
 
-    template <typename... Planners, typename PolicyT = finenav::core::SingleShotPolicy>
+    template <finenav::core::Planner... Planners, typename PolicyT = finenav::core::SingleShotPolicy>
     std::shared_ptr<finenav::core::ControlLayer<Planners...>>
     createLayer(const std::string& name, PolicyT policy = {});
 
-    template <typename... Planners>
+    template <finenav::core::Planner... Planners>
     [[nodiscard]] std::shared_ptr<finenav::core::ControlLayer<Planners...>>
     getControlLayer(const std::string& name);
 
@@ -114,7 +114,7 @@ private:
 //  Factory: map
 // ══════════════════════════════════════════════════════════════════════════════
 
-template <typename MapT>
+template <finenav::core::Map MapT>
 std::shared_ptr<finenav::core::MapServer<MapT>>
 FineNavEngine::createMapServer(const std::string& name) {
     auto server = std::make_shared<finenav::core::MapServer<MapT>>(
@@ -123,7 +123,7 @@ FineNavEngine::createMapServer(const std::string& name) {
     return server;
 }
 
-template <typename MapT>
+template <finenav::core::Map MapT>
 std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(const std::string& name) {
     auto it = maps_.find(name);
     if (it == maps_.end()) return nullptr;
@@ -140,7 +140,7 @@ std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(cons
 //  Factory: layer
 // ══════════════════════════════════════════════════════════════════════════════
 
-template <typename... Planners, typename PolicyT>
+template <finenav::core::Planner... Planners, typename PolicyT>
 std::shared_ptr<finenav::core::ControlLayer<Planners...>>
 FineNavEngine::createLayer(const std::string& name, PolicyT policy) {
     navigator_->master().manageLayer(name);
@@ -150,7 +150,7 @@ FineNavEngine::createLayer(const std::string& name, PolicyT policy) {
     return layer;
 }
 
-template <typename... Planners>
+template <finenav::core::Planner... Planners>
 std::shared_ptr<finenav::core::ControlLayer<Planners...>>
 FineNavEngine::getControlLayer(const std::string& name) {
     auto it = layers_.find(name);

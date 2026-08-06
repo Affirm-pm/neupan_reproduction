@@ -15,9 +15,8 @@
 
 namespace finenav::core {
 
-// Forward declaration — ObservationSource is owned by MapServer.
-template <SpatialContainer MapT>
-class MapServer;
+// MapServer is forward-declared in map_concept.hpp; ObservationSource is
+// owned by MapServer which provides the concrete implementation.
 
 /**
  * @brief ObservationBufferPolicy — buffer and timeout parameters for one sensor stream.
@@ -30,7 +29,7 @@ struct ObservationBufferPolicy {
 };
 
 
-template <SpatialContainer MapT>
+template <Map MapT>
 class IObservationSource {
 public:
     virtual ~IObservationSource() = default;
@@ -45,7 +44,7 @@ public:
  * @tparam MapT  Map type.
  * @tparam MsgT  Sensor message type.
  */
-template <SpatialContainer MapT, typename MsgT>
+template <Map MapT, typename MsgT>
 class ObservationSource final : public IObservationSource<MapT> {
 public:
 
@@ -86,20 +85,20 @@ private:
 // ==============================================================================
 // ObservationSource Implementation
 // ==============================================================================
-template <SpatialContainer MapT, typename MsgT>
+template <Map MapT, typename MsgT>
 ObservationSource<MapT, MsgT>::ObservationSource(
     const std::string& source_name, ObservationBufferPolicy policy,
     Fuser fuser, rclcpp::Logger logger)
     : source_name_(source_name), policy_(policy), fuser_(std::move(fuser)),
       logger_(std::move(logger)) {}
 
-template <SpatialContainer MapT, typename MsgT>
+template <Map MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp) {
     std::lock_guard<std::mutex> lock(mutex_);
     enqueue(std::move(msg), stamp);
 }
 
-template <SpatialContainer MapT, typename MsgT>
+template <Map MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::applyBuffered(
     MapT& map, const rclcpp::Time& now, RobotStateProvider* state_provider) {
 
@@ -161,7 +160,7 @@ void ObservationSource<MapT, MsgT>::applyBuffered(
     }
 }
 
-template <SpatialContainer MapT, typename MsgT>
+template <Map MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
     if (policy_.max_buffer_size > 0 && buffer_.size() >= policy_.max_buffer_size) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
@@ -175,7 +174,7 @@ void ObservationSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stam
     has_seen_message_ = true;
 }
 
-template <SpatialContainer MapT, typename MsgT>
+template <Map MapT, typename MsgT>
 void ObservationSource<MapT, MsgT>::pruneExpired(const rclcpp::Time& now) {
     if (policy_.observation_keep_time_sec <= 0.0) return;
     size_t n = 0;
