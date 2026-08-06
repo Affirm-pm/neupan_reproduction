@@ -37,7 +37,7 @@ struct SmokeMap {
     }
 
     // selfManage — minimal no-op for tests that don't need data sources
-    void selfManage(finenav::core::MapServer<SmokeMap>&) {}
+    void selfManage(finenav::core::MapRuntime&) {}
 
 private:
     finenav::core::Region3D bounds_{
@@ -46,9 +46,6 @@ private:
 };
 
 static_assert(finenav::core::Map<SmokeMap>);
-// SelfManagingMap<SmokeMap> is verified inside MapServer's constructor via
-// if constexpr — a static_assert here would require MapServer to be a
-// complete type (via the MapServer<T>& parameter in the concept).
 static_assert(finenav::core::ShiftableMap<SmokeMap>);
 
 // ── AlgoConfigurator specialisation ────────────────────────────────────────

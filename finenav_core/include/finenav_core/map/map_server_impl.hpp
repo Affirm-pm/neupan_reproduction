@@ -18,7 +18,8 @@ MapServer<MapT>::MapServer(
     const std::string& server_name,
     RobotStateProvider* state_provider)
     : IMapResource(server_name),
-      node_(node), server_name_(server_name), state_provider_(state_provider) {
+      node_(node), server_name_(server_name), state_provider_(state_provider),
+      runtime_(node, node->get_logger()) {
 
     auto infra = detail::buildMapServerInfra(
         node, server_name, update_rate_hz_, shift_rate_hz_, shift_margin_ratio_);
@@ -34,9 +35,7 @@ MapServer<MapT>::MapServer(
     map_instance_ = std::make_unique<MapT>();
     param_keeper_.keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
 
-    if constexpr (SelfManagingMap<MapT>) {
-        map_instance_->selfManage(*this);
-    }
+    map_instance_->selfManage(runtime_);
 
     if (state_provider == nullptr) {
         FINENAV_LOG_ERROR(node_->get_logger(),
@@ -102,18 +101,14 @@ MapServer<MapT>::addObservationSource(
     ObservationBufferPolicy policy,
     Fuser<MsgT> fuser)
 {
-    using Source = ObservationSource<MapT, MsgT>;
-    auto source = std::make_shared<Source>(source_name, policy, std::move(fuser),
-                                            node_->get_logger());
-    observation_sources_.push_back(source);
-    FINENAV_LOG_DEBUG(node_->get_logger(),
-        "MapServer added observation source: {}", source_name);
-    std::weak_ptr<Source> weak_source = source;
-    return [weak_source](MsgT&& msg, const rclcpp::Time& stamp) {
-        if (auto src = weak_source.lock()) {
-            src->enqueueThreadSafe(std::move(msg), stamp);
-        }
-    };
+    // Wrap the user-facing Fuser (MsgT, Time, State, MapT&) → MapRuntime Fuser
+    // (MsgT, Time, State) by capturing `this` to provide MapT&.
+    return runtime_.addObservationSource<MsgT>(
+        source_name, policy,
+        [this, fuser = std::move(fuser)](
+            const MsgT& msg, const rclcpp::Time& stamp, const RobotState& state) {
+            fuser(msg, stamp, state, *map_instance_);
+        });
 }
 
 // --- MapServer::addObservationSource (topic-based)  (see map_server.hpp) -------
@@ -126,26 +121,12 @@ void MapServer<MapT>::addObservationSource(
     ObservationBufferPolicy policy,
     Fuser<MsgT> fuser)
 {
-    auto injector = addObservationSource(source_name, policy, std::move(fuser));
-
-    auto sub = node_->create_subscription<MsgT>(
-        topic_name, qos,
-        [injector = std::move(injector), source_name,
-         logger = node_->get_logger()](std::shared_ptr<MsgT> msg) {
-            rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
-            if constexpr (requires { msg->header.stamp; }) {
-                stamp = msg->header.stamp;
-            } else {
-                FINENAV_LOG_WARN_ONCE(logger,
-                    "ObservationSource '{}': message type has no header.stamp — "
-                    "using arrival time as stamp.  Sensor fusion accuracy may be "
-                    "degraded by time-skew.", source_name);
-                stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
-            }
-
-            injector(std::move(*msg), stamp);
+    runtime_.addObservationSource<MsgT>(
+        source_name, topic_name, qos, policy,
+        [this, fuser = std::move(fuser)](
+            const MsgT& msg, const rclcpp::Time& stamp, const RobotState& state) {
+            fuser(msg, stamp, state, *map_instance_);
         });
-    held_subscriptions_.push_back(sub);
 
     FINENAV_LOG_INFO(node_->get_logger(),
         "MapServer '{}': subscribed to '{}' for observation source '{}'.",
@@ -161,30 +142,50 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
 
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
+    // ── Map-developer pre-update hooks (via MapRuntime) ──────────────────
+    if (auto maybe_rs = state_provider_->getRobotState()) {
+        runtime_.applyPreHooks(*maybe_rs);
+    } else {
+        FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
+            "MapServer '{}': robot state unavailable — skipping pre-update hooks.",
+            server_name_);
+    }
+
+    // ── User-facing pre-update hook (with MapT&) ─────────────────────────
     if (pre_update_hook_) {
         if (auto maybe_rs = state_provider_->getRobotState()) {
             pre_update_hook_(*maybe_rs, *map_instance_);
         } else {
             FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
-                "MapServer '{}': robot state unavailable — skipping pre-update hook.",
+                "MapServer '{}': robot state unavailable — skipping user pre-update hook.",
                 server_name_);
         }
     }
 
-    for (auto& src : observation_sources_) {
-        src->applyBuffered(*map_instance_, now, state_provider_);
+    // ── All observation sources (both dev and user) ──────────────────────
+    runtime_.applyObservationSources(now, state_provider_);
+
+    // ── Map-developer post-update hooks (via MapRuntime) ─────────────────
+    if (auto maybe_rs = state_provider_->getRobotState()) {
+        runtime_.applyPostHooks(*maybe_rs);
+    } else {
+        FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
+            "MapServer '{}': robot state unavailable — skipping post-update hooks.",
+            server_name_);
     }
 
+    // ── User-facing post-update hook (with MapT&) ────────────────────────
     if (post_update_hook_) {
         if (auto maybe_rs = state_provider_->getRobotState()) {
             post_update_hook_(*maybe_rs, *map_instance_);
         } else {
             FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
-                "MapServer '{}': robot state unavailable — skipping post-update hook.",
+                "MapServer '{}': robot state unavailable — skipping user post-update hook.",
                 server_name_);
         }
     }
 
+    // ── Robot-inside-window check ────────────────────────────────────────
     {
         const auto maybe_state = state_provider_->getRobotState();
         if (!maybe_state) {

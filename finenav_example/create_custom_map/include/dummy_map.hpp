@@ -5,6 +5,7 @@
 #pragma once
 
 #include "finenav_core/algo_configurator.hpp"
+#include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/math_def.hpp"
 
 #include "finenav_example/dummy_map_params.hpp"
@@ -47,6 +48,8 @@ public:
     finenav::core::Position3D getWindowCenter()  const;
 
     bool isOccupied(const finenav::core::Position3D& p) const;
+
+    void selfManage(finenav::core::MapRuntime&) {}
 
 private:
     double window_size_ = 50.0;

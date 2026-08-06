@@ -44,6 +44,8 @@ public:
 
     Position3D getWindowCenter() const;
 
+    void selfManage(finenav::core::MapRuntime&) {}
+
     // ── 数据注入（MapServer ObservationSource fuser 回调中调用）──
 
     void update(const nav_msgs::msg::OccupancyGrid& msg);
