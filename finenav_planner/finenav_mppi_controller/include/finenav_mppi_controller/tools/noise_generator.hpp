@@ -48,12 +48,12 @@ public:
    * @brief Initialize noise generator with settings and model types
    * @param settings Settings of controller
    * @param is_holonomic If base is holonomic
-   * @param name Namespace for configs
-   * @param param_handler Get parameters util
+   * @param regenerate_noises Whether to generate the next noise distribution asynchronously
    */
   void initialize(
     mppi::models::OptimizerSettings & settings,
-    bool is_holonomic);
+    bool is_holonomic,
+    bool regenerate_noises);
 
   /**
    * @brief Shutdown noise generator thread

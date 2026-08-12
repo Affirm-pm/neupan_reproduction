@@ -88,7 +88,7 @@ public:
   	    getParams(params);
 
   		critic_manager_.on_configure(critics_, params);
-  	    noise_generator_.initialize(settings_, isHolonomic());
+        noise_generator_.initialize(settings_, isHolonomic(), regenerate_noises_);
 
   	    reset();
 
@@ -119,9 +119,10 @@ public:
   	    s.base_constraints.vy     = p.vy_max;
   	    s.base_constraints.wz     = p.wz_max;
 
-  	    s.sampling_std.vx = p.vx_std;
-  	    s.sampling_std.vy = p.vy_std;
-  	    s.sampling_std.wz = p.wz_std;
+        s.sampling_std.vx = p.vx_std;
+        s.sampling_std.vy = p.vy_std;
+        s.sampling_std.wz = p.wz_std;
+        regenerate_noises_ = p.regenerate_noises;
 
   	    s.retry_attempt_limit = 1;
 
@@ -624,6 +625,7 @@ protected:
   std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
 
   models::OptimizerSettings settings_;
+  bool regenerate_noises_{true};
 
   models::State state_;
   models::ControlSequence control_sequence_;

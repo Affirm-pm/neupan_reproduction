@@ -24,26 +24,35 @@ namespace mppi
 {
 
 void NoiseGenerator::initialize(
-  mppi::models::OptimizerSettings & settings, bool is_holonomic)
+  mppi::models::OptimizerSettings & settings, bool is_holonomic, bool regenerate_noises)
 {
-  settings_ = settings;
-  is_holonomic_ = is_holonomic;
-  active_ = true;
+  shutdown();
 
-//  auto getParam = param_handler->getParamGetter(name);
-//  getParam(regenerate_noises_, "regenerate_noises", false);
+  {
+    std::lock_guard<std::mutex> guard(noise_lock_);
+    settings_ = settings;
+    is_holonomic_ = is_holonomic;
+    regenerate_noises_ = regenerate_noises;
+    active_ = true;
+    ready_ = false;
+
+    if (!regenerate_noises_) {
+      generateNoisedControls();
+    }
+  }
 
   if (regenerate_noises_) {
     noise_thread_ = std::thread(std::bind(&NoiseGenerator::noiseThread, this));
-  } else {
-    generateNoisedControls();
   }
 }
 
 void NoiseGenerator::shutdown()
 {
-  active_ = false;
-  ready_ = true;
+  {
+    std::lock_guard<std::mutex> guard(noise_lock_);
+    active_ = false;
+    ready_ = true;
+  }
   noise_cond_.notify_all();
   if (noise_thread_.joinable()) {
     noise_thread_.join();
@@ -55,10 +64,13 @@ void NoiseGenerator::generateNextNoises()
   // Trigger the thread to run in parallel to this iteration
   // to generate the next iteration's noises (if applicable).
   {
-    std::unique_lock<std::mutex> guard(noise_lock_);
+    std::lock_guard<std::mutex> guard(noise_lock_);
+    if (!active_ || !regenerate_noises_) {
+      return;
+    }
     ready_ = true;
   }
-  noise_cond_.notify_all();
+  noise_cond_.notify_one();
 }
 
 void NoiseGenerator::setNoisedControls(
@@ -74,33 +86,41 @@ void NoiseGenerator::setNoisedControls(
 
 void NoiseGenerator::reset(mppi::models::OptimizerSettings & settings, bool is_holonomic)
 {
-  settings_ = settings;
-  is_holonomic_ = is_holonomic;
-
-  // Recompute the noises on reset, initialization, and fallback
+  bool notify_worker = false;
   {
-    std::unique_lock<std::mutex> guard(noise_lock_);
+    std::lock_guard<std::mutex> guard(noise_lock_);
+    settings_ = settings;
+    is_holonomic_ = is_holonomic;
+
+    // Recompute the noises on reset, initialization, and fallback.
     xt::noalias(noises_vx_) = xt::zeros<float>({settings_.batch_size, settings_.time_steps});
     xt::noalias(noises_vy_) = xt::zeros<float>({settings_.batch_size, settings_.time_steps});
     xt::noalias(noises_wz_) = xt::zeros<float>({settings_.batch_size, settings_.time_steps});
-    ready_ = true;
+
+    if (regenerate_noises_) {
+      ready_ = true;
+      notify_worker = true;
+    } else {
+      generateNoisedControls();
+    }
   }
 
-  if (regenerate_noises_) {
-    noise_cond_.notify_all();
-  } else {
-    generateNoisedControls();
+  if (notify_worker) {
+    noise_cond_.notify_one();
   }
 }
 
 void NoiseGenerator::noiseThread()
 {
-  do {
+  while (true) {
     std::unique_lock<std::mutex> guard(noise_lock_);
-    noise_cond_.wait(guard, [this]() {return ready_;});
+    noise_cond_.wait(guard, [this]() {return ready_ || !active_;});
+    if (!active_) {
+      return;
+    }
     ready_ = false;
     generateNoisedControls();
-  } while (active_);
+  }
 }
 
 void NoiseGenerator::generateNoisedControls()

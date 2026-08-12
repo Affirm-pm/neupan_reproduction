@@ -78,6 +78,10 @@ finenav_mppi_controller:
     description: "Sampling standard deviation for angular velocity"
     validation:
       gt<>: [0.0]
+  regenerate_noises:
+    type: bool
+    default_value: true
+    description: "Regenerate sampling noise asynchronously for each optimization iteration"
 
   # ── Critics ────────────────────────────────────────────────────────────────
   ConstraintCritic:

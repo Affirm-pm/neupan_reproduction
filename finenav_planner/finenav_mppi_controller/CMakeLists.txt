@@ -151,6 +151,13 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   set(ament_cmake_copyright_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+  ament_add_gtest(noise_generator_test
+    test/noise_generator_test.cpp
+    src/noise_generator.cpp
+  )
+  ament_target_dependencies(noise_generator_test geometry_msgs)
+  target_include_directories(noise_generator_test PRIVATE include)
+  target_link_libraries(noise_generator_test xtensor)
 #  add_subdirectory(test)
   # add_subdirectory(benchmark)
 endif()
