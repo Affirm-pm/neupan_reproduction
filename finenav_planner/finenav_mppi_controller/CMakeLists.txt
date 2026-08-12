@@ -90,12 +90,10 @@ add_library(mppi_controller SHARED
 )
 
 add_library(mppi_critics SHARED
-  src/critics/obstacles_critic.cpp
   src/critics/cost_critic.cpp
   src/critics/goal_critic.cpp
   src/critics/goal_angle_critic.cpp
   src/critics/path_align_critic.cpp
-  src/critics/path_align_legacy_critic.cpp
   src/critics/path_follow_critic.cpp
   src/critics/path_angle_critic.cpp
   src/critics/prefer_forward_critic.cpp

@@ -74,9 +74,7 @@ public:
         registerCritic(std::make_unique<critics::CostCritic>());
         registerCritic(std::make_unique<critics::GoalAngleCritic>());
         registerCritic(std::make_unique<critics::GoalCritic>());
-        // registerCritic(std::make_unique<critics::ObstaclesCritic>());
         registerCritic(std::make_unique<critics::PathAlignCritic>());
-        registerCritic(std::make_unique<critics::PathAlignLegacyCritic>());
         registerCritic(std::make_unique<critics::PathAngleCritic>());
         registerCritic(std::make_unique<critics::PathFollowCritic>());
         registerCritic(std::make_unique<critics::PreferForwardCritic>());
