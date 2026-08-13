@@ -37,8 +37,6 @@
   <test_depend>ament_cmake_gtest</test_depend>
   <export>
     <build_type>ament_cmake</build_type>
-<!--    <nav2_core plugin="${prefix}/mppic.xml" />-->
-<!--    <nav2_mppi_controller plugin="${prefix}/critics.xml" />-->
   </export>
 
 </package>
