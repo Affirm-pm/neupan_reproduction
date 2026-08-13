@@ -181,13 +181,6 @@ public:
   void setPlan(const nav_msgs::msg::Path & path);
 
   /**
-    * @brief Set new speed limit from callback
-    * @param speed_limit Speed limit to use
-    * @param percentage Bool if the speed limit is absolute or relative
-    */
-  void setSpeedLimit(const double & speed_limit, const bool & percentage);
-
-  /**
    * @brief Reset optimizer state at Episode boundary (new goal).
    *        Called by ControlLayer whenever a new Action Goal arrives.
    *        Clears control_sequence_ so the next plan() call starts from

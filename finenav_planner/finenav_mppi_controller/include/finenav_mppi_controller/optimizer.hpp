@@ -211,47 +211,6 @@ public:
         return std::move(trajectories);
     }
 
-
-  /**
-   * @brief Set the maximum speed based on the speed limits callback
-   * @param speed_limit Limit of the speed for use
-   * @param percentage Whether the speed limit is absolute or relative
-   */
-    void setSpeedLimit(double speed_limit, bool percentage)
-    {
-        auto & s = settings_;
-
-        // 使用局部哨兵值表示 "no speed limit"
-        // 说明：nav2_costmap_2d::NO_SPEED_LIMIT 在 nav2 的实现中是用于表示“无速度限制”的常量。
-        // 为了避免直接依赖外部宏/命名空间，这里使用本地常量 NO_SPEED_LIMIT_LOCAL 作为替代。
-        // 可替代策略还包括使用负值（例如 -1）或 std::optional<double> 来表示未设置限制。
-        constexpr double NO_SPEED_LIMIT_LOCAL = -1;
-
-        if (speed_limit == NO_SPEED_LIMIT_LOCAL) {
-            s.constraints.vx_max = s.base_constraints.vx_max;
-            s.constraints.vx_min = s.base_constraints.vx_min;
-            s.constraints.vy = s.base_constraints.vy;
-            s.constraints.wz = s.base_constraints.wz;
-        } else {
-            if (percentage) {
-                // Speed limit is expressed in % from maximum speed of robot
-                double ratio = speed_limit / 100.0;
-                s.constraints.vx_max = s.base_constraints.vx_max * ratio;
-                s.constraints.vx_min = s.base_constraints.vx_min * ratio;
-                s.constraints.vy = s.base_constraints.vy * ratio;
-                s.constraints.wz = s.base_constraints.wz * ratio;
-            } else {
-                // Speed limit is expressed in absolute value
-                double ratio = speed_limit / s.base_constraints.vx_max;
-                s.constraints.vx_max = s.base_constraints.vx_max * ratio;
-                s.constraints.vx_min = s.base_constraints.vx_min * ratio;
-                s.constraints.vy = s.base_constraints.vy * ratio;
-                s.constraints.wz = s.base_constraints.wz * ratio;
-            }
-        }
-    }
-
-
   /**
    * @brief Reset the optimization problem to initial conditions
    */

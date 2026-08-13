@@ -39,11 +39,6 @@ void MPPIController::setPlan(const nav_msgs::msg::Path & path)
     path_ = path;
 }
 
-void MPPIController::setSpeedLimit(const double & speed_limit, const bool & percentage)
-{
-  optimizer_.setSpeedLimit(speed_limit, percentage);
-}
-
 //FINENAV_REGISTER_ALGO_CONFIG(nav2_mppi_controller::MPPIController, finenav_mppi_controller)
 //FINENAV_REGISTER_PLANNER_TRAITS(nav2_mppi_controller::MPPIController,
 //    finenav::TraitMask::NONE,
