@@ -20,6 +20,7 @@ using namespace nav2_mppi_controller;
 
 void TwirlingCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("TwirlingCritic");
   const auto & c = p.TwirlingCritic;
   enabled_ = c.enabled;
   power_   = static_cast<unsigned int>(c.cost_power);
@@ -41,4 +42,3 @@ void TwirlingCritic::score(CriticData & data, const IMapView& map_view)
 }
 
 }  // namespace mppi::critics
-

@@ -16,6 +16,7 @@
 #define NAV2_MPPI_CONTROLLER__CRITIC_DATA_HPP_
 
 #include <memory>
+#include <optional>
 #include <vector>
 #include <xtensor/xtensor.hpp>
 

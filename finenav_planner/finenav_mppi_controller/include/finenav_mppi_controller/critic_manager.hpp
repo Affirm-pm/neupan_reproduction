@@ -16,14 +16,11 @@
 #define NAV2_MPPI_CONTROLLER__CRITIC_MANAGER_HPP_
 
 #include <memory>
-#include <string>
 #include <vector>
 #include <xtensor/xtensor.hpp>
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
-
-#include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 //#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
@@ -81,23 +78,7 @@ public:
   void evalTrajectoriesScores(CriticData & data ,const nav2_mppi_controller::IMapView& map_view) const;
 
 protected:
-  /**
-    * @brief Get parameters (critics to load)
-    */
-  void getParams();
-
-
-  /**
-    * @brief Get full-name namespaced critic IDs
-    */
-  std::string getFullName(const std::string & name);
-
-protected:
-  rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
-  std::string name_;
   std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
-
-  rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
 };
 
 }  // namespace mppi

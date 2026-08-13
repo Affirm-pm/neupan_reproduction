@@ -23,6 +23,7 @@ using xt::evaluation_strategy::immediate;
 
 void GoalCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("GoalCritic");
   const auto & c = p.GoalCritic;
   enabled_               = c.enabled;
   power_                 = static_cast<unsigned int>(c.cost_power);
@@ -60,4 +61,3 @@ void GoalCritic::score(CriticData & data, const IMapView& map_view)
 }
 
 }  // namespace mppi::critics
-

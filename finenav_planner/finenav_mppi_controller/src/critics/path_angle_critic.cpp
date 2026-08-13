@@ -23,6 +23,7 @@ using namespace nav2_mppi_controller;
 
 void PathAngleCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("PathAngleCritic");
   const auto & c = p.PathAngleCritic;
   enabled_               = c.enabled;
   power_                 = static_cast<unsigned int>(c.cost_power);
@@ -83,4 +84,3 @@ void PathAngleCritic::score(CriticData & data, const IMapView& map_view)
 }
 
 }  // namespace mppi::critics
-

@@ -20,6 +20,7 @@ using namespace nav2_mppi_controller;
 
 void ConstraintCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("ConstraintCritic");
   const auto & c = p.ConstraintCritic;
   enabled_ = c.enabled;
   power_   = static_cast<unsigned int>(c.cost_power);
@@ -75,4 +76,3 @@ void ConstraintCritic::score(CriticData & data, const IMapView& map_view)
 }
 
 }  // namespace mppi::critics
-

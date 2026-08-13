@@ -20,6 +20,7 @@ using namespace nav2_mppi_controller;
 
 void VelocityDeadbandCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("VelocityDeadbandCritic");
   const auto & c = p.VelocityDeadbandCritic;
   enabled_ = c.enabled;
   power_   = static_cast<unsigned int>(c.cost_power);
@@ -99,4 +100,3 @@ void VelocityDeadbandCritic::score(CriticData & data, const IMapView& map_view)
 }
 
 }  // namespace mppi::critics
-

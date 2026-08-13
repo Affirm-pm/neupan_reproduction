@@ -23,6 +23,7 @@ using namespace nav2_mppi_controller;
 
 void PathFollowCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("PathFollowCritic");
   const auto & c = p.PathFollowCritic;
   enabled_               = c.enabled;
   power_                 = static_cast<unsigned int>(c.cost_power);
@@ -69,4 +70,3 @@ void PathFollowCritic::score(CriticData & data, const IMapView& map_view)
 }
 
 }  // namespace mppi::critics
-

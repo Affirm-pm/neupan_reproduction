@@ -15,10 +15,7 @@
 #ifndef NAV2_MPPI_CONTROLLER__CRITIC_FUNCTION_HPP_
 #define NAV2_MPPI_CONTROLLER__CRITIC_FUNCTION_HPP_
 
-#include <string>
-#include <memory>
-
-#include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "rclcpp/logger.hpp"
 
 //#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 #include "finenav_mppi_controller/critic_data.hpp"
@@ -57,27 +54,6 @@ public:
   virtual ~CriticFunction() = default;
 
   /**
-    * @brief Configure critic on bringup
-    * @param parent WeakPtr to node
-    * @param parent_name name of the controller
-    * @param name Name of plugin
-    * @param costmap_ros Costmap2DROS object of environment
-    * @param dynamic_parameter_handler Parameter handler object
-    */
-  void on_configure(
-    rclcpp_lifecycle::LifecycleNode::WeakPtr parent,
-    const std::string & parent_name,
-    const std::string & name,
-    const finenav_mppi_controller::Params & params)
-  {
-    parent_ = parent;
-    name_ = name;
-    parent_name_ = parent_name;
-
-    initialize(params);
-  }
-
-  /**
     * @brief Main function to score trajectory
     * @param data Critic data to use in scoring
     */
@@ -88,18 +64,8 @@ public:
     */
   virtual void initialize(const finenav_mppi_controller::Params & params) = 0;
 
-  /**
-    * @brief Get name of critic#include "finenav_control_layers/local_layer.hpp"
-    */
-  std::string getName()
-  {
-    return name_;
-  }
-
 protected:
-  bool enabled_;
-  std::string name_, parent_name_;
-  rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
+  bool enabled_{false};
   rclcpp::Logger logger_{rclcpp::get_logger("CriticFunction")};
 
 };

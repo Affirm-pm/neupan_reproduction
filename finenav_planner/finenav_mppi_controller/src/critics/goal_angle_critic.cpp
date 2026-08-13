@@ -20,6 +20,7 @@ using namespace nav2_mppi_controller;
 
 void GoalAngleCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("GoalAngleCritic");
   const auto & c = p.GoalAngleCritic;
   enabled_               = c.enabled;
   power_                 = static_cast<unsigned int>(c.cost_power);
@@ -50,4 +51,3 @@ void GoalAngleCritic::score(CriticData & data, const IMapView& map_view)
 }
 
 }  // namespace mppi::critics
-

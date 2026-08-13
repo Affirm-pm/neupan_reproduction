@@ -158,6 +158,16 @@ if(BUILD_TESTING)
   ament_target_dependencies(noise_generator_test geometry_msgs)
   target_include_directories(noise_generator_test PRIVATE include)
   target_link_libraries(noise_generator_test xtensor)
+  ament_add_gtest(critic_function_test
+    test/critic_function_test.cpp
+  )
+  ament_target_dependencies(critic_function_test ${dependencies_pkgs})
+  target_include_directories(critic_function_test PRIVATE include)
+  target_link_libraries(
+    critic_function_test
+    mppi_critics
+    finenav_mppi_controller_params
+  )
 #  add_subdirectory(test)
   # add_subdirectory(benchmark)
 endif()

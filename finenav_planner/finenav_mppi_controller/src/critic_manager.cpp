@@ -30,19 +30,6 @@ void CriticManager::on_configure(
     }
 }
 
-//void CriticManager::getParams()
-//{
-//  auto node = parent_.lock();
-//  auto getParam = parameters_handler_->getParamGetter(name_);
-//  getParam(critic_names_, "critics", std::vector<std::string>{}, ParameterType::Static);
-//}
-
-
-std::string CriticManager::getFullName(const std::string & name)
-{
-  return "mppi::critics::" + name;
-}
-
 void CriticManager::evalTrajectoriesScores(
   CriticData & data, const IMapView& map_view) const
 {
