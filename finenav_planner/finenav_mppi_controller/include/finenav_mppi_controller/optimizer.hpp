@@ -28,7 +28,6 @@
 
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
-#include "geometry_msgs/msg/twist_stamped.hpp"
 #include "nav_msgs/msg/path.hpp"
 
 #include "finenav_mppi_controller/models/optimizer_settings.hpp"
@@ -50,6 +49,13 @@ namespace mppi
 
 using namespace xt::placeholders;  // NOLINT
 using xt::evaluation_strategy::immediate;
+
+struct OptimizationResult
+{
+  xt::xtensor<float, 2> controls;
+  xt::xtensor<float, 2> trajectory;
+};
+
 /**
  * @class mppi::Optimizer
  * @brief Main algorithm optimizer of the MPPI Controller
@@ -114,10 +120,10 @@ public:
   	    s.temperature     = static_cast<float>(p.temperature);
   	    s.gamma           = static_cast<float>(p.gamma);
 
-  	    s.base_constraints.vx_max = p.vx_max;
-  	    s.base_constraints.vx_min = p.vx_min;
-  	    s.base_constraints.vy     = p.vy_max;
-  	    s.base_constraints.wz     = p.wz_max;
+        s.constraints.vx_max = p.vx_max;
+        s.constraints.vx_min = p.vx_min;
+        s.constraints.vy     = p.vy_max;
+        s.constraints.wz     = p.wz_max;
 
         s.sampling_std.vx = p.vx_std;
         s.sampling_std.vy = p.vy_std;
@@ -126,12 +132,9 @@ public:
 
   	    s.retry_attempt_limit = 1;
 
-  	    s.constraints = s.base_constraints;
   	    setMotionModel(p.motion_model);
 
   		std::cout<<"[nav2_mppi_controller] Optimizing param prepared"<<std::endl;
-  	    double controller_frequency = 1.0 / static_cast<double>(s.model_dt);
-  	    setOffset(controller_frequency);
   	}
 
   /**
@@ -143,7 +146,7 @@ public:
    * @return TwistStamped of the MPPI control
    */
 	// geometry_msgs::msg::TwistStamped evalControl(
-	void evalControl(
+	OptimizationResult evalControl(
     	const geometry_msgs::msg::PoseStamped & robot_pose,
     	const geometry_msgs::msg::Twist & robot_speed,
     	const nav_msgs::msg::Path & plan,
@@ -156,11 +159,7 @@ public:
       optimize(map_view);
     } while (fallback(critics_data_.fail_flag));
     // utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
-    auto control = getControlFromSequenceAsTwist(plan.header.stamp, map_view);
-    if (settings_.shift_control_sequence) {
-      shiftControlSequence();
-    }
-    // return control;
+    return finalizeControlSequence();
 }
 
 
@@ -194,21 +193,12 @@ public:
         return seq;
     }
 
-    xt::xtensor<float, 2>getOptimizedTrajectory()
+    xt::xtensor<float, 2> getOptimizedTrajectory(
+      const xt::xtensor<float, 2> & sequence) const
     {
-        auto && sequence =
-          xt::xtensor<float, 2>::from_shape({settings_.time_steps, isHolonomic() ? 3u : 2u});
         auto && trajectories = xt::xtensor<float, 2>::from_shape({settings_.time_steps, 3});
-
-        xt::noalias(xt::view(sequence, xt::all(), 0)) = control_sequence_.vx;
-        xt::noalias(xt::view(sequence, xt::all(), 1)) = control_sequence_.wz;
-
-        if (isHolonomic()) {
-            xt::noalias(xt::view(sequence, xt::all(), 2)) = control_sequence_.vy;
-        }
-
         integrateStateVelocities(trajectories, sequence);
-        return std::move(trajectories);
+        return trajectories;
     }
 
   /**
@@ -223,8 +213,6 @@ public:
         control_history_[2] = {0.0, 0.0, 0.0};
         control_history_[3] = {0.0, 0.0, 0.0};
 
-        settings_.constraints = settings_.base_constraints;
-
         costs_ = xt::zeros<float>({settings_.batch_size});
         generated_trajectories_.reset(settings_.batch_size, settings_.time_steps);
 
@@ -234,6 +222,16 @@ public:
 
 
 protected:
+    OptimizationResult finalizeControlSequence()
+    {
+        shiftControlSequence();
+
+        auto controls = getControlSequence();
+        auto trajectory = getOptimizedTrajectory(controls);
+
+        return {std::move(controls), std::move(trajectory)};
+    }
+
   /**
    * @brief Main function to generate, score, and return trajectories
    */
@@ -498,56 +496,10 @@ protected:
     }
 
   /**
-   * @brief Convert control sequence to a twist commant
-   * @param stamp Timestamp to use
-   * @return TwistStamped of command to send to robot base
-   */
-    geometry_msgs::msg::TwistStamped getControlFromSequenceAsTwist(
-        const builtin_interfaces::msg::Time & stamp, const nav2_mppi_controller::IMapView& map_view)
-    {
-        unsigned int offset = settings_.shift_control_sequence ? 1 : 0;
-
-        auto vx = control_sequence_.vx(offset);
-        auto wz = control_sequence_.wz(offset);
-
-        if (isHolonomic()) {
-            auto vy = control_sequence_.vy(offset);
-            return utils::toTwistStamped(vx, vy, wz, stamp, map_view.getBaseFrameID());
-        }
-
-        return utils::toTwistStamped(vx, wz, stamp, map_view.getBaseFrameID());
-    }
-  /**
    * @brief Whether the motion model is holonomic
    * @return Bool if holonomic to populate `y` axis of state
    */
     bool isHolonomic() const {return motion_model_->isHolonomic();}
-
-  /**
-   * @brief Using control frequence and time step size, determine if trajectory
-   * offset should be used to populate initial state of the next cycle
-   */
-    void setOffset(double controller_frequency)
-    {
-        const double controller_period = 1.0 / controller_frequency;
-        constexpr double eps = 1e-6;
-
-        if ((controller_period + eps) < settings_.model_dt) {
-            RCLCPP_WARN(
-              logger_,
-              "Controller period is less then model dt, consider setting it equal");
-        } else if (abs(controller_period - settings_.model_dt) < eps) {
-            RCLCPP_INFO(
-              logger_,
-              "Controller period is equal to model dt. Control sequence "
-              "shifting is ON");
-            settings_.shift_control_sequence = true;
-        } else {
-            throw std::runtime_error(
-                    "Controller period more then model dt, set it equal to model dt");
-        }
-    }
-
 
   /**
    * @brief Perform fallback behavior to try to recover from a set of trajectories in collision

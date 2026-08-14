@@ -168,6 +168,17 @@ if(BUILD_TESTING)
     mppi_critics
     finenav_mppi_controller_params
   )
+  ament_add_gtest(optimizer_result_test
+    test/optimizer_result_test.cpp
+  )
+  ament_target_dependencies(optimizer_result_test ${dependencies_pkgs})
+  target_include_directories(optimizer_result_test PRIVATE include)
+  target_link_libraries(
+    optimizer_result_test
+    mppi_controller
+    mppi_critics
+    finenav_mppi_controller_params
+  )
 #  add_subdirectory(test)
   # add_subdirectory(benchmark)
 endif()

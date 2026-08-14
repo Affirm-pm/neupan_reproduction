@@ -615,7 +615,7 @@ inline void savitskyGolayFilter(
     control_history[1].wz, control_history[2].wz, control_history[3].wz);
 
   // Update control history
-  unsigned int offset = settings.shift_control_sequence ? 1 : 0;
+  constexpr unsigned int offset = 1;
   control_history[0] = control_history[1];
   control_history[1] = control_history[2];
   control_history[2] = control_history[3];
