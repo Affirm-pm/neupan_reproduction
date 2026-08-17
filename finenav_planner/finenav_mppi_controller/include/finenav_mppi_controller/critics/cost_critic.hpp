@@ -15,10 +15,6 @@
 #ifndef NAV2_MPPI_CONTROLLER__CRITICS__COST_CRITIC_HPP_
 #define NAV2_MPPI_CONTROLLER__CRITICS__COST_CRITIC_HPP_
 
-#include <memory>
-#include <string>
-
-
 #include "finenav_mppi_controller/critic_function.hpp"
 #include "finenav_mppi_controller/models/state.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
@@ -77,21 +73,8 @@ protected:
                                                     0.0});
     }
 
-  /**
-    * @brief Find the min cost of the inflation decay function for which the robot MAY be
-    * in collision in any orientation
-    * @param costmap Costmap2DROS to get minimum inscribed cost (e.g. 128 in inflation layer documentation)
-    * @return double circumscribed cost, any higher than this and need to do full footprint collision checking
-    * since some element of the robot could be in collision
-    */
-//  float findCircumscribedCost(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap);
-
 protected:
-  float possibly_inscribed_cost_;
-
 //  bool consider_footprint_{true};
-  float circumscribed_radius_{0};
-  float circumscribed_cost_{0};
   float collision_cost_{0};
   float critical_cost_{0};
   float weight_{0};

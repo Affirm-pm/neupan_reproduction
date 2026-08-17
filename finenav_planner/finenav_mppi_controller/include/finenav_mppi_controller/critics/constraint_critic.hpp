@@ -41,13 +41,6 @@ public:
    */
   void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
 
-  void GetWeight() {
-    RCLCPP_DEBUG(logger_, "Weight = %f", weight_);
-  }
-
-  float getMaxVelConstraint() {return max_vel_;}
-  float getMinVelConstraint() {return min_vel_;}
-
 protected:
   unsigned int power_{0};
   float weight_{0};
