@@ -24,7 +24,7 @@ namespace mppi::critics
 {
 
 /**
- * @class mppi::critics::ConstraintCritic
+ * @class mppi::critics::GoalCritic
  * @brief Critic objective function for driving towards goal
  */
 

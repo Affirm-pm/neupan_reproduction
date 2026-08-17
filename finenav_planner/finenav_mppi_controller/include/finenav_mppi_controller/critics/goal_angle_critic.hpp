@@ -23,7 +23,7 @@ namespace mppi::critics
 {
 
 /**
- * @class mppi::critics::ConstraintCritic
+ * @class mppi::critics::GoalAngleCritic
  * @brief Critic objective function for driving towards goal orientation
  */
 

@@ -22,7 +22,7 @@ namespace mppi::critics
 {
 
 /**
- * @class mppi::critics::ConstraintCritic
+ * @class mppi::critics::TwirlingCritic
  * @brief Critic objective function for penalizing wiggling/twirling
  */
 

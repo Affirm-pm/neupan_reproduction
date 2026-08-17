@@ -14,9 +14,7 @@
 
 #include "finenav_mppi_controller/tools/noise_generator.hpp"
 
-#include <memory>
 #include <mutex>
-#include <xtensor/xmath.hpp>
 #include <xtensor/xrandom.hpp>
 #include <xtensor/xnoalias.hpp>
 

@@ -23,7 +23,7 @@ namespace mppi::critics
 {
 
 /**
- * @class mppi::critics::ConstraintCritic
+ * @class mppi::critics::PathAlignCritic
  * @brief Critic objective function for aligning to the path. Note:
  * High settings of this will follow the path more precisely, but also makes it
  * difficult (or impossible) to deviate in the presence of dynamic obstacles.

@@ -15,7 +15,6 @@
 #include "finenav_mppi_controller/critics/path_follow_critic.hpp"
 
 #include <xtensor/xmath.hpp>
-#include <xtensor/xsort.hpp>
 
 namespace mppi::critics
 {

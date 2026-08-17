@@ -15,7 +15,7 @@
 
 #include "finenav_mppi_controller/critics/path_angle_critic.hpp"
 
-#include <math.h>
+#include <cmath>
 
 namespace mppi::critics
 {
