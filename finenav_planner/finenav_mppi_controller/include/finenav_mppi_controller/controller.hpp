@@ -98,6 +98,12 @@ public:
         const auto t_plan_start = Clock::now();
 
         finenav::core::Trajectory<OutputProfile> traj;
+        if (ctx.ref_traj.poses.empty()) {
+            return std::nullopt;
+        }
+
+        finenav::DataPacket<OutputProfile> traj;
+        // 从框架注入的 RobotState 中取出 pose 和 twist，无需 TF 查询
         const auto& robot_state = ctx.robot_state;
         auto goal_pose = ctx.goal_pose;
 

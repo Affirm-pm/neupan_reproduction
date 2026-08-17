@@ -83,6 +83,12 @@ endif()
 # If building one the same hardware to be deployed on, try `-march=native`!
 add_compile_options(-O3 -finline-limit=10000000 -ffp-contract=fast -ffast-math -mtune=generic)
 
+option(ENABLE_COVERAGE "Enable GCC/Clang coverage instrumentation" OFF)
+if(ENABLE_COVERAGE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_compile_options(--coverage -O0 -g)
+  add_link_options(--coverage)
+endif()
+
 add_library(mppi_controller SHARED
   src/controller.cpp
   src/critic_manager.cpp
@@ -153,11 +159,15 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
   ament_add_gtest(noise_generator_test
     test/noise_generator_test.cpp
-    src/noise_generator.cpp
   )
-  ament_target_dependencies(noise_generator_test geometry_msgs)
+  ament_target_dependencies(noise_generator_test ${dependencies_pkgs})
   target_include_directories(noise_generator_test PRIVATE include)
-  target_link_libraries(noise_generator_test xtensor)
+  target_link_libraries(
+    noise_generator_test
+    mppi_controller
+    mppi_critics
+    finenav_mppi_controller_params
+  )
   ament_add_gtest(critic_function_test
     test/critic_function_test.cpp
   )
@@ -176,6 +186,27 @@ if(BUILD_TESTING)
   target_link_libraries(
     optimizer_result_test
     mppi_controller
+    mppi_critics
+    finenav_mppi_controller_params
+  )
+  ament_add_gtest(controller_plan_test
+    test/controller_plan_test.cpp
+  )
+  ament_target_dependencies(controller_plan_test ${dependencies_pkgs})
+  target_include_directories(controller_plan_test PRIVATE include)
+  target_link_libraries(
+    controller_plan_test
+    mppi_controller
+    mppi_critics
+    finenav_mppi_controller_params
+  )
+  ament_add_gtest(critic_score_test
+    test/critic_score_test.cpp
+  )
+  ament_target_dependencies(critic_score_test ${dependencies_pkgs})
+  target_include_directories(critic_score_test PRIVATE include)
+  target_link_libraries(
+    critic_score_test
     mppi_critics
     finenav_mppi_controller_params
   )
