@@ -225,15 +225,6 @@ public:
 
 protected:
     /**
-    * @brief Visualize trajectories
-    * @param transformed_plan Transformed input plan
-    */
-//    void visualize(
-//        nav_msgs::msg::Path transformed_plan,
-//        const builtin_interfaces::msg::Time & cmd_stamp,
-//        double z_height);
-
-    /**
     * @brief Main method to compute velocities using the optimizer
     * @param robot_pose Robot pose
     * @param robot_speed Robot speed
@@ -245,10 +236,6 @@ protected:
   		const geometry_msgs::msg::Twist & robot_speed,
     	const IMapView& map_view)
 	{
-	#ifdef BENCHMARK_TESTING
-  	auto start = std::chrono::system_clock::now();
-	#endif
-
 	//  if (clock_->now() - last_time_called_ > rclcpp::Duration::from_seconds(reset_period_)) {
 	//    reset();
 	//  }
@@ -260,45 +247,13 @@ protected:
 	// geometry_msgs::msg::TwistStamped cmd =
     auto result = optimizer_.evalControl(robot_pose, robot_speed, path_ ,map_view);
 
-	#ifdef BENCHMARK_TESTING
-  	auto end = std::chrono::system_clock::now();
-  	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-  	RCLCPP_INFO(logger_, "Control loop execution time: %ld [ms]", duration);
-	#endif
-
-//  	if (visualize_) {
-//    	double z_height = 0.06;
-//    	const std::string base_frame = map_view->getBaseFrameID();
-//    	try {
-//      	auto tfst = tf_buffer_->lookupTransform(
-//        	map_view.getGlobalFrameID(), base_frame,  cmd.header.stamp);
-//      		z_height = tfst.transform.translation.z;
-//    	} catch (const tf2::TransformException & ex) {
-//      	RCLCPP_WARN(logger_, "Failed to get transform %s -> %s: %s",
-//                  map_view.getGlobalFrameID().c_str(), base_frame.c_str(), ex.what());
-//    	}
-//    	visualize(std::move(path_, cmd.header.stamp, z_height);
-//  	}
     return result;
 }
 
-//  std::string name_;
-//  rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
-//  rclcpp::Clock::SharedPtr clock_;
-//  rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
-//  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   nav_msgs::msg::Path path_;
 
-//  std::unique_ptr<ParametersHandler> parameters_handler_;
   Optimizer optimizer_;
-//  TrajectoryVisualizer trajectory_visualizer_;
   std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
-
-  bool visualize_;
-
-  double reset_period_;
-  // Last time computeVelocityCommands was called
-//  rclcpp::Time last_time_called_;
 };
 
 }  // namespace nav2_mppi_controller

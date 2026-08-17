@@ -89,11 +89,9 @@ public:
         const finenav_mppi_controller::Params & params)
   	{
   	    name_ = name;
-  	    critics_ = std::move(critics);
-
   	    getParams(params);
 
-  		critic_manager_.on_configure(critics_, params);
+		critic_manager_.on_configure(critics, params);
         noise_generator_.initialize(settings_, isHolonomic(), regenerate_noises_);
 
   	    reset();
@@ -158,7 +156,6 @@ public:
     do {
       optimize(map_view);
     } while (fallback(critics_data_.fail_flag));
-    // utils::savitskyGolayFilter(control_sequence_, control_history_, settings_);
     return finalizeControlSequence();
 }
 
@@ -208,11 +205,6 @@ public:
     {
         state_.reset(settings_.batch_size, settings_.time_steps);
         control_sequence_.reset(settings_.time_steps);
-        control_history_[0] = {0.0, 0.0, 0.0};
-        control_history_[1] = {0.0, 0.0, 0.0};
-        control_history_[2] = {0.0, 0.0, 0.0};
-        control_history_[3] = {0.0, 0.0, 0.0};
-
         costs_ = xt::zeros<float>({settings_.batch_size});
         generated_trajectories_.reset(settings_.batch_size, settings_.time_steps);
 
@@ -280,7 +272,7 @@ protected:
         } else if (model == "Omni") {
             motion_model_ = std::make_shared<OmniMotionModel>();
         } else if (model == "Ackermann") {
-            motion_model_ = std::make_shared<AckermannMotionModel>(name_);
+            motion_model_ = std::make_shared<AckermannMotionModel>();
         } else {
             throw std::runtime_error(
                     std::string(
@@ -533,14 +525,12 @@ protected:
 //  ParametersHandler * parameters_handler_;
   CriticManager critic_manager_;
   NoiseGenerator noise_generator_;
-  std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
 
   models::OptimizerSettings settings_;
   bool regenerate_noises_{true};
 
   models::State state_;
   models::ControlSequence control_sequence_;
-  std::array<mppi::models::Control, 4> control_history_;
   models::Trajectories generated_trajectories_;
   models::Path path_;
   xt::xtensor<float, 1> costs_;
