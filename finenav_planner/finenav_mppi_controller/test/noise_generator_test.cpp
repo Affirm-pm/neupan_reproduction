@@ -80,8 +80,8 @@ models::OptimizerSettings makeSettings()
 template<typename Tensor>
 void expectTwoDimensionalShape(const Tensor & tensor, std::size_t batch_size, std::size_t time_steps)
 {
-  ASSERT_EQ(tensor.shape()[0], batch_size);
-  ASSERT_EQ(tensor.shape()[1], time_steps);
+  ASSERT_EQ(tensor.rows(), batch_size);
+  ASSERT_EQ(tensor.cols(), time_steps);
 }
 
 TEST(NoiseGeneratorTest, SynchronousModeDoesNotStartWorker)
@@ -169,15 +169,9 @@ TEST(NoiseGeneratorTest, SynchronousModePopulatesFiniteNoiseTensors)
   expectTwoDimensionalShape(generator.noisesVx(), 2, 3);
   expectTwoDimensionalShape(generator.noisesVy(), 2, 3);
   expectTwoDimensionalShape(generator.noisesWz(), 2, 3);
-  for (const auto value : generator.noisesVx()) {
-    EXPECT_TRUE(std::isfinite(value));
-  }
-  for (const auto value : generator.noisesVy()) {
-    EXPECT_TRUE(std::isfinite(value));
-  }
-  for (const auto value : generator.noisesWz()) {
-    EXPECT_TRUE(std::isfinite(value));
-  }
+  EXPECT_TRUE(generator.noisesVx().allFinite());
+  EXPECT_TRUE(generator.noisesVy().allFinite());
+  EXPECT_TRUE(generator.noisesWz().allFinite());
 
   generator.shutdown();
 }
@@ -199,15 +193,9 @@ TEST(NoiseGeneratorTest, ResetResizesNoiseTensorsAndPopulatesState)
   expectTwoDimensionalShape(state.cvx, 3, 4);
   expectTwoDimensionalShape(state.cvy, 3, 4);
   expectTwoDimensionalShape(state.cwz, 3, 4);
-  for (const auto value : state.cvx) {
-    EXPECT_TRUE(std::isfinite(value));
-  }
-  for (const auto value : state.cvy) {
-    EXPECT_TRUE(std::isfinite(value));
-  }
-  for (const auto value : state.cwz) {
-    EXPECT_TRUE(std::isfinite(value));
-  }
+  EXPECT_TRUE(state.cvx.allFinite());
+  EXPECT_TRUE(state.cvy.allFinite());
+  EXPECT_TRUE(state.cwz.allFinite());
 
   generator.shutdown();
 }

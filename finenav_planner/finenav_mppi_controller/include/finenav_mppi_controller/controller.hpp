@@ -143,7 +143,7 @@ public:
     const auto & optimized_trajectory = optimization_result.trajectory;
     const auto & control_seq = optimization_result.controls;
     // 填充轨迹点 (pose + twist)
-    const size_t n = optimized_trajectory.shape(0);
+    const size_t n = optimized_trajectory.rows();
     traj.poses.reserve(n);
     traj.twists.reserve(n);
     for (size_t i = 0; i < n; ++i) {

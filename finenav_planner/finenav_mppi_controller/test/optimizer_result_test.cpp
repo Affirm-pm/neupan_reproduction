@@ -57,9 +57,66 @@ public:
     settings_.model_dt = 1.0f;
     motion_model_ = std::make_shared<DiffDriveMotionModel>();
     state_.pose.pose.orientation.w = 1.0;
-    control_sequence_.vx = {1.0f, 2.0f, 3.0f};
-    control_sequence_.vy = {0.0f, 0.0f, 0.0f};
-    control_sequence_.wz = {0.0f, 0.0f, 0.0f};
+    control_sequence_.vx.resize(3);
+    control_sequence_.vy.resize(3);
+    control_sequence_.wz.resize(3);
+    control_sequence_.vx << 1.0f, 2.0f, 3.0f;
+    control_sequence_.vy.setZero();
+    control_sequence_.wz.setZero();
+  }
+
+  void setTurningControlSequence()
+  {
+    settings_.time_steps = 1;
+    settings_.model_dt = 1.0f;
+    motion_model_ = std::make_shared<DiffDriveMotionModel>();
+    state_.pose.pose.orientation.w = 1.0;
+    control_sequence_.vx.resize(1);
+    control_sequence_.vy.resize(1);
+    control_sequence_.wz.resize(1);
+    control_sequence_.vx(0) = 1.0f;
+    control_sequence_.vy(0) = 0.0f;
+    control_sequence_.wz(0) = 1.0f;
+  }
+
+  void setBatchDiffDriveState()
+  {
+    settings_.batch_size = 2;
+    settings_.time_steps = 2;
+    settings_.model_dt = 1.0f;
+    motion_model_ = std::make_shared<DiffDriveMotionModel>();
+    state_.reset(settings_.batch_size, settings_.time_steps);
+    state_.pose.pose.position.x = 10.0;
+    state_.pose.pose.position.y = -2.0;
+    state_.pose.pose.orientation.w = 1.0;
+    state_.vx << 1.0f, 2.0f,
+      3.0f, 4.0f;
+    state_.wz << 1.0f, -0.5f,
+      0.0f, 0.5f;
+    state_.vy.setZero();
+    generated_trajectories_.reset(settings_.batch_size, settings_.time_steps);
+  }
+
+  void setBatchHolonomicState()
+  {
+    settings_.batch_size = 2;
+    settings_.time_steps = 2;
+    settings_.model_dt = 1.0f;
+    motion_model_ = std::make_shared<OmniMotionModel>();
+    state_.reset(settings_.batch_size, settings_.time_steps);
+    state_.pose.pose.orientation.w = 1.0;
+    state_.vx << 1.0f, 0.0f,
+      0.0f, 1.0f;
+    state_.vy << 1.0f, 1.0f,
+      2.0f, 0.0f;
+    state_.wz << 1.57079632679f, 0.0f,
+      0.0f, 0.0f;
+    generated_trajectories_.reset(settings_.batch_size, settings_.time_steps);
+  }
+
+  void integrateBatchState()
+  {
+    integrateBatchStateVelocities(generated_trajectories_, state_);
   }
 
   OptimizationResult finalize()
@@ -124,6 +181,64 @@ TEST(OptimizerResultTest, ReturnsShiftedResultAndPreservesWarmStart)
   EXPECT_FLOAT_EQ(warm_start.vx(0), 2.0f);
   EXPECT_FLOAT_EQ(warm_start.vx(1), 3.0f);
   EXPECT_FLOAT_EQ(warm_start.vx(2), 3.0f);
+}
+
+TEST(OptimizerResultTest, IntegratesPositionUsingYawBeforeCurrentTurn)
+{
+  TestOptimizer optimizer;
+  optimizer.setTurningControlSequence();
+
+  const auto result = optimizer.finalize();
+
+  EXPECT_FLOAT_EQ(result.trajectory(0, 0), 1.0f);
+  EXPECT_FLOAT_EQ(result.trajectory(0, 1), 0.0f);
+  EXPECT_FLOAT_EQ(result.trajectory(0, 2), 1.0f);
+}
+
+TEST(OptimizerResultTest, IntegratesBatchTrajectoriesIndependently)
+{
+  TestOptimizer optimizer;
+  optimizer.setBatchDiffDriveState();
+
+  optimizer.integrateBatchState();
+  const auto & trajectories = optimizer.getGeneratedTrajectories();
+
+  EXPECT_NEAR(trajectories.x(0, 0), 11.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.y(0, 0), -2.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.yaws(0, 0), 1.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.x(0, 1), 12.0806046f, 1e-5f);
+  EXPECT_NEAR(trajectories.y(0, 1), -0.3170580f, 1e-5f);
+  EXPECT_NEAR(trajectories.yaws(0, 1), 0.5f, 1e-5f);
+
+  EXPECT_NEAR(trajectories.x(1, 0), 13.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.y(1, 0), -2.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.yaws(1, 0), 0.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.x(1, 1), 17.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.y(1, 1), -2.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.yaws(1, 1), 0.5f, 1e-5f);
+}
+
+TEST(OptimizerResultTest, IntegratesBatchHolonomicLateralVelocity)
+{
+  TestOptimizer optimizer;
+  optimizer.setBatchHolonomicState();
+
+  optimizer.integrateBatchState();
+  const auto & trajectories = optimizer.getGeneratedTrajectories();
+
+  EXPECT_NEAR(trajectories.x(0, 0), 1.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.y(0, 0), 1.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.yaws(0, 0), 1.5707963f, 1e-5f);
+  EXPECT_NEAR(trajectories.x(0, 1), 0.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.y(0, 1), 1.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.yaws(0, 1), 1.5707963f, 1e-5f);
+
+  EXPECT_NEAR(trajectories.x(1, 0), 0.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.y(1, 0), 2.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.yaws(1, 0), 0.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.x(1, 1), 1.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.y(1, 1), 2.0f, 1e-5f);
+  EXPECT_NEAR(trajectories.yaws(1, 1), 0.0f, 1e-5f);
 }
 
 TEST(OptimizerResultTest, ResetPreservesActiveConstraints)

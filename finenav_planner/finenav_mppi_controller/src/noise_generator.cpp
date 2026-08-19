@@ -15,8 +15,10 @@
 #include "finenav_mppi_controller/tools/noise_generator.hpp"
 
 #include <mutex>
-#include <xtensor/xrandom.hpp>
-#include <xtensor/xnoalias.hpp>
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <functional>
 
 namespace mppi
 {
@@ -31,8 +33,17 @@ void NoiseGenerator::initialize(
     settings_ = settings;
     is_holonomic_ = is_holonomic;
     regenerate_noises_ = regenerate_noises;
+    deterministic_benchmark_noise_ =
+      std::getenv("FINENAV_MPPI_BENCHMARK_DETERMINISTIC_NOISE") != nullptr;
     active_ = true;
     ready_ = false;
+
+    noises_vx_.resize(settings_.batch_size, settings_.time_steps);
+    noises_vy_.resize(settings_.batch_size, settings_.time_steps);
+    noises_wz_.resize(settings_.batch_size, settings_.time_steps);
+    noises_vx_.setZero();
+    noises_vy_.setZero();
+    noises_wz_.setZero();
 
     if (!regenerate_noises_) {
       generateNoisedControls();
@@ -77,9 +88,12 @@ void NoiseGenerator::setNoisedControls(
 {
   std::unique_lock<std::mutex> guard(noise_lock_);
 
-  xt::noalias(state.cvx) = control_sequence.vx + noises_vx_;
-  xt::noalias(state.cvy) = control_sequence.vy + noises_vy_;
-  xt::noalias(state.cwz) = control_sequence.wz + noises_wz_;
+  state.cvx = noises_vx_;
+  state.cvy = noises_vy_;
+  state.cwz = noises_wz_;
+  state.cvx.rowwise() += control_sequence.vx.transpose();
+  state.cvy.rowwise() += control_sequence.vy.transpose();
+  state.cwz.rowwise() += control_sequence.wz.transpose();
 }
 
 void NoiseGenerator::reset(mppi::models::OptimizerSettings & settings, bool is_holonomic)
@@ -91,9 +105,12 @@ void NoiseGenerator::reset(mppi::models::OptimizerSettings & settings, bool is_h
     is_holonomic_ = is_holonomic;
 
     // Recompute the noises on reset, initialization, and fallback.
-    xt::noalias(noises_vx_) = xt::zeros<float>({settings_.batch_size, settings_.time_steps});
-    xt::noalias(noises_vy_) = xt::zeros<float>({settings_.batch_size, settings_.time_steps});
-    xt::noalias(noises_wz_) = xt::zeros<float>({settings_.batch_size, settings_.time_steps});
+    noises_vx_.resize(settings_.batch_size, settings_.time_steps);
+    noises_vy_.resize(settings_.batch_size, settings_.time_steps);
+    noises_wz_.resize(settings_.batch_size, settings_.time_steps);
+    noises_vx_.setZero();
+    noises_vy_.setZero();
+    noises_wz_.setZero();
 
     if (regenerate_noises_) {
       ready_ = true;
@@ -125,16 +142,34 @@ void NoiseGenerator::generateNoisedControls()
 {
   auto & s = settings_;
 
-  xt::noalias(noises_vx_) = xt::random::randn<float>(
-    {s.batch_size, s.time_steps}, 0.0f,
-    s.sampling_std.vx);
-  xt::noalias(noises_wz_) = xt::random::randn<float>(
-    {s.batch_size, s.time_steps}, 0.0f,
-    s.sampling_std.wz);
+  if (deterministic_benchmark_noise_) {
+    auto generate = [](models::BatchArray & target, float standard_deviation) {
+        for (Eigen::Index row = 0; row < target.rows(); ++row) {
+          for (Eigen::Index col = 0; col < target.cols(); ++col) {
+            const auto index = static_cast<unsigned int>(row * 37 + col * 17);
+            const float centered = static_cast<float>(index % 101u) / 50.0F - 1.0F;
+            target(row, col) = standard_deviation * centered;
+          }
+        }
+      };
+    generate(noises_vx_, s.sampling_std.vx);
+    generate(noises_wz_, s.sampling_std.wz);
+    if (is_holonomic_) {
+      generate(noises_vy_, s.sampling_std.vy);
+    }
+    return;
+  }
+
+  auto generate = [this](models::BatchArray & target, float standard_deviation) {
+      std::normal_distribution<float> distribution(0.0F, standard_deviation);
+      target = models::BatchArray::NullaryExpr(
+        target.rows(), target.cols(), [this, &distribution]() {return distribution(random_engine_);});
+    };
+
+  generate(noises_vx_, s.sampling_std.vx);
+  generate(noises_wz_, s.sampling_std.wz);
   if (is_holonomic_) {
-    xt::noalias(noises_vy_) = xt::random::randn<float>(
-      {s.batch_size, s.time_steps}, 0.0f,
-      s.sampling_std.vy);
+    generate(noises_vy_, s.sampling_std.vy);
   }
 }
 

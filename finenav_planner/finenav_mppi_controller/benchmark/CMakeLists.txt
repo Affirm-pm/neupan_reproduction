@@ -1,22 +1,21 @@
 find_package(benchmark REQUIRED)
 
-set(BENCHMARK_NAMES
-  optimizer_benchmark
-  controller_benchmark
+add_executable(eigen_mppi_benchmark eigen_mppi_benchmark.cpp)
+ament_target_dependencies(eigen_mppi_benchmark ${dependencies_pkgs})
+target_include_directories(eigen_mppi_benchmark PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(eigen_mppi_benchmark
+  mppi_controller
+  mppi_critics
+  benchmark::benchmark
+  Eigen3::Eigen
 )
 
-foreach(name IN LISTS BENCHMARK_NAMES)
-  add_executable(${name}
-    ${name}.cpp
-  )
-  ament_target_dependencies(${name}
-    ${dependencies_pkgs}
-  )
-  target_link_libraries(${name}
-    mppi_controller mppi_critics benchmark
-  )
-
-target_include_directories(${name} PRIVATE
-    ${PROJECT_SOURCE_DIR}/test/utils
+add_executable(mppi_practical_comparison practical_comparison_benchmark.cpp)
+ament_target_dependencies(mppi_practical_comparison ${dependencies_pkgs})
+target_include_directories(mppi_practical_comparison PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(mppi_practical_comparison
+  mppi_controller
+  mppi_critics
+  benchmark::benchmark
+  Eigen3::Eigen
 )
-endforeach()

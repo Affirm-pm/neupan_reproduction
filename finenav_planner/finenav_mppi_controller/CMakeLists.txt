@@ -1,19 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
 project(finenav_mppi_controller)
 
-add_definitions(-DXTENSOR_ENABLE_XSIMD)
-add_definitions(-DXTENSOR_USE_XSIMD)
-
-set(XTENSOR_USE_TBB 0)
-set(XTENSOR_USE_OPENMP 0)
-set(XTENSOR_USE_XSIMD 1)
-
-# set(XTENSOR_DEFAULT_LAYOUT column_major)  # row_major, column_major
-# set(XTENSOR_DEFAULT_TRAVERSAL row_major)  # row_major, column_major
-
 find_package(ament_cmake REQUIRED)
-find_package(xtensor REQUIRED)
-find_package(xsimd REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3 REQUIRED)
 include_directories(
   include
 )
@@ -112,6 +102,7 @@ set(libraries mppi_controller mppi_critics)
 
 foreach(lib IN LISTS libraries)
   target_compile_options(${lib} PUBLIC -fconcepts)
+  target_link_libraries(${lib} Eigen3::Eigen finenav_mppi_controller_params)
   target_include_directories(${lib} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
@@ -210,12 +201,26 @@ if(BUILD_TESTING)
     mppi_critics
     finenav_mppi_controller_params
   )
-#  add_subdirectory(test)
-  # add_subdirectory(benchmark)
+  ament_add_gtest(models_eigen_test
+    test/models_eigen_test.cpp
+  )
+  ament_target_dependencies(models_eigen_test ${dependencies_pkgs})
+  target_include_directories(models_eigen_test PRIVATE include)
+  ament_add_gtest(utils_test
+    test/utils_test.cpp
+  )
+  ament_target_dependencies(utils_test ${dependencies_pkgs})
+  target_include_directories(utils_test PRIVATE include)
 endif()
 
+option(BUILD_BENCHMARKS "Build Eigen MPPI benchmarks" OFF)
+if(BUILD_BENCHMARKS)
+  add_subdirectory(benchmark)
+endif()
 
 ament_export_libraries(${libraries})
+ament_export_dependencies(${dependencies_pkgs} eigen3_cmake_module Eigen3)
+ament_export_include_directories(include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(${dependencies_pkgs})
 ament_export_include_directories(include/${PROJECT_NAME})

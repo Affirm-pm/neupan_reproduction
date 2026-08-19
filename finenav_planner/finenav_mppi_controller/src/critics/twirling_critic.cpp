@@ -30,14 +30,13 @@ void TwirlingCritic::initialize(const finenav_mppi_controller::Params & p)
 
 void TwirlingCritic::score(CriticData & data, const IMapView& map_view)
 {
-  using xt::evaluation_strategy::immediate;
   if (!this->enabled_)
   {
     return;
   }
 
-  const auto wz = xt::abs(data.state.wz);
-  data.costs += xt::pow(xt::mean(wz, {1}, immediate) * weight_, power_);
+  const auto wz = data.state.wz.abs();
+  data.costs += (wz.rowwise().mean() * weight_).pow(power_);
     RCLCPP_DEBUG(logger_, "Scored");
 }
 

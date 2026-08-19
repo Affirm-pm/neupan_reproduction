@@ -20,10 +20,6 @@
 
 #include "finenav_mppi_controller/models/control_sequence.hpp"
 #include "finenav_mppi_controller/models/state.hpp"
-#include <xtensor/xmath.hpp>
-#include <xtensor/xmasked_view.hpp>
-#include <xtensor/xview.hpp>
-#include <xtensor/xnoalias.hpp>
 
 //#include "finenav_mppi_controller/tools/parameters_handler.hpp"
 
@@ -53,16 +49,13 @@ public:
    */
   virtual void predict(models::State & state)
   {
-    using namespace xt::placeholders;  // NOLINT
-    xt::noalias(xt::view(state.vx, xt::all(), xt::range(1, _))) =
-      xt::view(state.cvx, xt::all(), xt::range(0, -1));
+    if (state.vx.cols() > 1) {
+      state.vx.rightCols(state.vx.cols() - 1) = state.cvx.leftCols(state.cvx.cols() - 1);
+      state.wz.rightCols(state.wz.cols() - 1) = state.cwz.leftCols(state.cwz.cols() - 1);
 
-    xt::noalias(xt::view(state.wz, xt::all(), xt::range(1, _))) =
-      xt::view(state.cwz, xt::all(), xt::range(0, -1));
-
-    if (isHolonomic()) {
-      xt::noalias(xt::view(state.vy, xt::all(), xt::range(1, _))) =
-        xt::view(state.cvy, xt::all(), xt::range(0, -1));
+      if (isHolonomic()) {
+        state.vy.rightCols(state.vy.cols() - 1) = state.cvy.leftCols(state.cvy.cols() - 1);
+      }
     }
   }
 
@@ -112,8 +105,8 @@ public:
     auto & vx = control_sequence.vx;
     auto & wz = control_sequence.wz;
 
-    auto view = xt::masked_view(wz, (xt::fabs(vx) / xt::fabs(wz)) < min_turning_r_);
-    view = xt::sign(wz) * xt::fabs(vx) / min_turning_r_;
+    const auto mask = (vx.abs() / wz.abs()) < min_turning_r_;
+    wz = mask.select(wz.sign() * vx.abs() / min_turning_r_, wz);
   }
 
   /**

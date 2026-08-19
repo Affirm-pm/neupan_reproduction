@@ -55,7 +55,7 @@ struct CriticTestData {
     models::State state;
     models::Trajectories trajectories;
     models::Path path;
-    xt::xtensor<float, 1> costs{xt::zeros<float>({2})};
+    models::Vector costs{models::Vector::Zero(2)};
     float model_dt{0.1f};
     CriticData data{state,        trajectories, path, costs, model_dt, false, std::make_shared<DiffDriveMotionModel>(),
                     std::nullopt, std::nullopt};
@@ -73,8 +73,8 @@ struct CriticTestData {
     void setAllTrajectoryY(float value) { trajectories.y.fill(value); }
 
     void setTrajectoryX(float start, float step) {
-        for (std::size_t batch = 0; batch < trajectories.x.shape(0); ++batch) {
-            for (std::size_t time = 0; time < trajectories.x.shape(1); ++time) {
+        for (Eigen::Index batch = 0; batch < trajectories.x.rows(); ++batch) {
+            for (Eigen::Index time = 0; time < trajectories.x.cols(); ++time) {
                 trajectories.x(batch, time) = start + step * static_cast<float>(time);
             }
         }

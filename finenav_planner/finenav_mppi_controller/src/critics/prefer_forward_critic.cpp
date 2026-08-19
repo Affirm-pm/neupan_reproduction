@@ -30,7 +30,6 @@ void PreferForwardCritic::initialize(const finenav_mppi_controller::Params & p)
 
 void PreferForwardCritic::score(CriticData & data, const IMapView& map_view)
 {
-  using xt::evaluation_strategy::immediate;
   if (!this->enabled_ )
   {
     return;
@@ -42,11 +41,8 @@ void PreferForwardCritic::score(CriticData & data, const IMapView& map_view)
     return;
   }
 
-  auto backward_motion = xt::maximum(-data.state.vx, 0);
-  data.costs += xt::pow(
-    xt::sum(
-      std::move(
-        backward_motion) * data.model_dt, {1}, immediate) * weight_, power_);
+  const auto backward_motion = (-data.state.vx).max(0.0F);
+  data.costs += ((backward_motion * data.model_dt).rowwise().sum() * weight_).pow(power_);
     RCLCPP_DEBUG(logger_, "Scored");
 }
 

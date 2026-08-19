@@ -40,7 +40,6 @@ void PathAngleCritic::initialize(const finenav_mppi_controller::Params & p)
 
 void PathAngleCritic::score(CriticData & data, const IMapView& map_view)
 {
-  using xt::evaluation_strategy::immediate;
   if (!this->enabled_) {
     return;
   }
@@ -52,10 +51,11 @@ void PathAngleCritic::score(CriticData & data, const IMapView& map_view)
   utils::setPathFurthestPointIfNotSet(data);
 
   auto offseted_idx = std::min(
-    *data.furthest_reached_path_point + offset_from_furthest_, data.path.x.shape(0) - 1);
+    *data.furthest_reached_path_point + offset_from_furthest_,
+    static_cast<size_t>(data.path.x.size() - 1));
 
-  const float goal_x = xt::view(data.path.x, offseted_idx);
-  const float goal_y = xt::view(data.path.y, offseted_idx);
+  const float goal_x = data.path.x(offseted_idx);
+  const float goal_y = data.path.y(offseted_idx);
 
   if (utils::posePointAngle(
       data.state.pose.pose, goal_x, goal_y, forward_preference_) < max_angle_to_furthest_)
@@ -63,22 +63,22 @@ void PathAngleCritic::score(CriticData & data, const IMapView& map_view)
     return;
   }
 
-  auto yaws_between_points = xt::atan2(
-    goal_y - data.trajectories.y,
-    goal_x - data.trajectories.x);
+  const auto yaws_between_points = (goal_y - data.trajectories.y).binaryExpr(
+    goal_x - data.trajectories.x,
+    [](float y, float x) {return std::atan2(y, x);});
 
-  auto yaws =
-    xt::abs(utils::shortest_angular_distance(data.trajectories.yaws, yaws_between_points));
+  const auto yaws = utils::shortest_angular_distance(
+    data.trajectories.yaws, yaws_between_points).abs();
 
   if (reversing_allowed_ && !forward_preference_) {
-    const auto yaws_between_points_corrected = xt::where(
-      yaws < M_PI_2, yaws_between_points, utils::normalize_angles(yaws_between_points + M_PI));
-    const auto corrected_yaws = xt::abs(
-      utils::shortest_angular_distance(data.trajectories.yaws, yaws_between_points_corrected));
-    data.costs += xt::pow(xt::mean(corrected_yaws, {1}, immediate) * weight_, power_);
+    const auto yaws_between_points_corrected = (yaws < M_PI_2).select(
+      yaws_between_points, utils::normalize_angles(yaws_between_points.array() + M_PI));
+    const auto corrected_yaws = utils::shortest_angular_distance(
+      data.trajectories.yaws, yaws_between_points_corrected).abs();
+    data.costs += (corrected_yaws.rowwise().mean() * weight_).pow(power_);
       RCLCPP_DEBUG(logger_, "Scored");
   } else {
-    data.costs += xt::pow(xt::mean(yaws, {1}, immediate) * weight_, power_);
+    data.costs += (yaws.rowwise().mean() * weight_).pow(power_);
       RCLCPP_DEBUG(logger_, "Scored");
   }
 }

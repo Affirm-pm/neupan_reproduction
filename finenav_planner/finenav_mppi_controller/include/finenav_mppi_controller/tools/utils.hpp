@@ -18,15 +18,12 @@
 
 #include <algorithm>
 #include <chrono>
-#include <string>
+#include <cmath>
 #include <limits>
 #include <memory>
+#include <string>
+#include <type_traits>
 #include <vector>
-
-#include <xtensor/xarray.hpp>
-#include <xtensor/xnorm.hpp>
-#include <xtensor/xmath.hpp>
-#include <xtensor/xview.hpp>
 
 #include "angles/angles.h"
 
@@ -47,8 +44,6 @@
 
 namespace mppi::utils
 {
-using xt::evaluation_strategy::immediate;
-
 /**
  * @brief Convert data into TwistStamped
  * @param vx X velocity
@@ -117,7 +112,7 @@ inline bool withinPositionGoalTolerance(
   const geometry_msgs::msg::Pose & robot,
   const models::Path & path)
 {
-  const auto goal_idx = path.x.shape(0) - 1;
+  const auto goal_idx = path.x.size() - 1;
   const auto goal_x = path.x(goal_idx);
   const auto goal_y = path.y(goal_idx);
 
@@ -136,17 +131,33 @@ inline bool withinPositionGoalTolerance(
 }
 
 /**
+  * @brief Normalize a scalar angle to the -M_PI to +M_PI interval
+  * @param angle Angle to normalize in radians
+  * @return Normalized angle in radians
+  */
+template<typename T>
+std::enable_if_t<std::is_floating_point_v<T>, T> normalize_angles(T angle)
+{
+  constexpr T pi = static_cast<T>(M_PI);
+  const T theta = std::fmod(angle + pi, static_cast<T>(2.0) * pi);
+  return theta <= T{0} ? theta + pi : theta - pi;
+}
+
+/**
   * @brief normalize
   * Normalizes the angle to be -M_PI circle to +M_PI circle
   * It takes and returns radians.
   * @param angles Angles to normalize
   * @return normalized angles
   */
-template<typename T>
-auto normalize_angles(const T & angles)
+template<typename Derived>
+auto normalize_angles(const Eigen::ArrayBase<Derived> & angles)
 {
-  auto && theta = xt::eval(xt::fmod(angles + M_PI, 2.0 * M_PI));
-  return xt::eval(xt::where(theta <= 0.0, theta + M_PI, theta - M_PI));
+  const auto theta = (angles + static_cast<float>(M_PI)).unaryExpr(
+    [](float value) {return std::fmod(value, static_cast<float>(2.0 * M_PI));}).eval();
+  return (theta <= 0.0F).select(
+    theta + static_cast<float>(M_PI),
+    theta - static_cast<float>(M_PI)).eval();
 }
 
 /**
@@ -178,23 +189,17 @@ auto shortest_angular_distance(
  */
 inline size_t findPathFurthestReachedPoint(const CriticData & data)
 {
-  const auto traj_x = xt::view(data.trajectories.x, xt::all(), -1, xt::newaxis());
-  const auto traj_y = xt::view(data.trajectories.y, xt::all(), -1, xt::newaxis());
-
-  const auto dx = data.path.x - traj_x;
-  const auto dy = data.path.y - traj_y;
-
-  const auto dists = dx * dx + dy * dy;
-
   size_t max_id_by_trajectories = 0, min_id_by_path = 0;
   float min_distance_by_path = std::numeric_limits<float>::max();
   float cur_dist = 0.0f;
 
-  for (size_t i = 0; i < dists.shape(0); i++) {
+  for (Eigen::Index i = 0; i < data.trajectories.x.rows(); i++) {
     min_id_by_path = 0;
     min_distance_by_path = std::numeric_limits<float>::max();
-    for (size_t j = 0; j < dists.shape(1); j++) {
-      cur_dist = dists(i, j);
+    for (Eigen::Index j = 0; j < data.path.x.size(); j++) {
+      const auto dx = data.path.x(j) - data.trajectories.x(i, data.trajectories.x.cols() - 1);
+      const auto dy = data.path.y(j) - data.trajectories.y(i, data.trajectories.y.cols() - 1);
+      cur_dist = dx * dx + dy * dy;
       if (cur_dist < min_distance_by_path) {
         min_distance_by_path = cur_dist;
         min_id_by_path = j;
@@ -220,7 +225,7 @@ inline size_t findPathTrajectoryInitialPoint(const CriticData & data)
 
   float min_distance_by_path = std::numeric_limits<float>::max();
   size_t min_id = 0;
-  for (size_t j = 0; j < dists.shape(0); j++) {
+  for (Eigen::Index j = 0; j < dists.size(); j++) {
     if (dists(j) < min_distance_by_path) {
       min_distance_by_path = dists(j);
       min_id = j;
@@ -250,7 +255,7 @@ inline void findPathCosts(
   CriticData & data,
   const MapView& map_view)
 {
-  const size_t path_segments_count = data.path.x.shape(0) - 1;
+  const size_t path_segments_count = data.path.x.size() - 1;
   data.path_pts_valid = std::vector<bool>(path_segments_count, false);
   for (unsigned int idx = 0; idx < path_segments_count; idx++) {
     const auto path_x = data.path.x(idx);
