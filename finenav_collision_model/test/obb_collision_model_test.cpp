@@ -4,7 +4,10 @@
 
 #include <gtest/gtest.h>
 #include "finenav_collision_model/obb_collision_model.hpp"
+#include <array>
+#include <atomic>
 #include <cmath>
+#include <thread>
 
 using namespace finenav;
 
@@ -482,4 +485,87 @@ TEST(OBBCollisionModelTest, AsymmetricCheckCost) {
 
     int max_cost = model.checkCost(pose, x_cost);
     EXPECT_EQ(max_cost, 200);  // x 最大值 2.0 * 100 = 200
+}
+
+TEST(OBBCollisionModelTest, StatelessEdgeQueryAppliesRobotAndLocalPose) {
+    Pose local_pose = Pose::Identity();
+    local_pose.translation() = Vector3D(1.0, 0.0, 0.0);
+    OBBCollisionModel model({2.0, 1.0, 0.0}, local_pose, OBBCollisionPolicy{0.25});
+
+    Pose robot_pose = Pose::Identity();
+    robot_pose.linear() = Eigen::AngleAxisd(M_PI / 2.0, Vector3D::UnitZ()).toRotationMatrix();
+    robot_pose.translation() = Vector3D(4.0, 3.0, 0.0);
+
+    const auto at_transformed_front = [](const Position3D& point) {
+        return (point - Position3D(4.0, 5.0, 0.0)).norm() < 1e-9;
+    };
+    EXPECT_TRUE(model.checkCollisionEdgeStateless(robot_pose, at_transformed_front));
+}
+
+TEST(OBBCollisionModelTest, StatelessEdgeCollisionStopsAtFirstMatch) {
+    const OBBCollisionModel model({1.0, 1.0, 0.0});
+    std::size_t calls = 0;
+
+    EXPECT_TRUE(model.checkCollisionEdgeStateless(
+        Pose::Identity(), [&calls](const Position3D&) {
+            ++calls;
+            return true;
+        }));
+    EXPECT_EQ(calls, 1U);
+}
+
+TEST(OBBCollisionModelTest, StatelessEdgeCostReturnsMaximum) {
+    const OBBCollisionModel model(
+        Vector3D{-0.5, -0.5, 0.0}, Vector3D{2.0, 0.5, 0.0},
+        Pose::Identity(), OBBCollisionPolicy{0.25});
+    Pose pose = Pose::Identity();
+    pose.translation() = Vector3D(10.0, 0.0, 0.0);
+
+    const int cost = model.checkCostEdgeStateless(pose, [](const Position3D& point) {
+        return static_cast<int>(std::lround(point.x() * 100.0));
+    });
+
+    EXPECT_EQ(cost, 1200);
+}
+
+TEST(OBBCollisionModelTest, StatelessEdgeQueryDoesNotOverwriteLegacyCache) {
+    OBBCollisionModel model({1.0, 1.0, 0.0});
+    model.precomputeEdge(Pose::Identity());
+
+    Pose shifted_pose = Pose::Identity();
+    shifted_pose.translation() = Vector3D(10.0, 0.0, 0.0);
+    EXPECT_TRUE(model.checkCollisionEdgeStateless(
+        shifted_pose, [](const Position3D& point) { return point.x() > 10.4; }));
+
+    EXPECT_FALSE(model.checkCollisionEdge(
+        [](const Position3D& point) { return point.x() > 10.4; }));
+}
+
+TEST(OBBCollisionModelTest, StatelessEdgeQuerySupportsConcurrentConstCalls) {
+    const OBBCollisionModel model({1.0, 1.0, 0.0}, Pose::Identity(), OBBCollisionPolicy{0.1});
+    constexpr std::size_t thread_count = 8;
+    constexpr std::size_t repetitions = 200;
+    std::array<std::thread, thread_count> threads;
+    std::atomic<bool> consistent{true};
+
+    for (std::size_t worker = 0; worker < thread_count; ++worker) {
+        threads[worker] = std::thread([&model, &consistent, worker]() {
+            Pose pose = Pose::Identity();
+            pose.translation() = Vector3D(static_cast<double>(worker), 0.0, 0.0);
+            for (std::size_t repeat = 0; repeat < repetitions; ++repeat) {
+                const int cost = model.checkCostEdgeStateless(
+                    pose, [](const Position3D& point) {
+                        return static_cast<int>(std::lround(point.x() * 100.0));
+                    });
+                if (cost != static_cast<int>(worker * 100 + 50)) {
+                    consistent.store(false, std::memory_order_relaxed);
+                }
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    EXPECT_TRUE(consistent.load(std::memory_order_relaxed));
 }

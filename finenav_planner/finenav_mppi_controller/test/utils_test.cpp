@@ -57,5 +57,19 @@ TEST(UtilsTest, NormalizeAnglesPreservesEigenBatchBehavior)
   EXPECT_NEAR(normalized(2), degreesToRadians(180.0F), 1.0e-6F);
 }
 
+TEST(UtilsTest, FindClosestPathPointClampsDistanceBeyondPathEnd)
+{
+  const std::vector<float> integrated_distances{0.0F, 1.0F, 2.0F};
+
+  EXPECT_EQ(findClosestPathPt(integrated_distances, 3.0F), 2U);
+}
+
+TEST(UtilsTest, FindClosestPathPointPreservesNonzeroSearchStart)
+{
+  const std::vector<float> integrated_distances{0.0F, 1.0F, 2.0F, 3.0F};
+
+  EXPECT_EQ(findClosestPathPt(integrated_distances, 1.9F, 2U), 2U);
+}
+
 }  // namespace
 }  // namespace mppi::utils

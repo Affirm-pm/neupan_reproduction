@@ -5,9 +5,12 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <stdexcept>
 #include <string>
+#include <thread>
 
 #include "finenav_mppi_controller/controller.hpp"
 
@@ -37,6 +40,42 @@ class TestMapView final : public IMapView {
 
   private:
     mutable std::atomic<std::size_t> cost_queries_{0};
+};
+
+class ConcurrentMapView final : public IMapView {
+  public:
+    bool isTrackingUnknown() const override { return false; }
+
+    bool considerFootprint() const override { return false; }
+
+    bool isCollision(float, float, float) const override { return false; }
+
+    float getRadius() const override { return 0.2f; }
+
+    int getCost(const Position3D&) const override {
+        const int active = active_cost_queries_.fetch_add(1) + 1;
+        int observed = max_concurrent_cost_queries_.load();
+        while (active > observed &&
+               !max_concurrent_cost_queries_.compare_exchange_weak(observed, active)) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        active_cost_queries_.fetch_sub(1);
+        return 0;
+    }
+
+    float costAtPose(float x, float y, float) const override {
+        return static_cast<float>(getCost(Position3D{x, y, 0.0}));
+    }
+
+    std::string getBaseFrameID() const override { return "base_link"; }
+
+    int maxConcurrentCostQueries() const {
+        return max_concurrent_cost_queries_.load();
+    }
+
+  private:
+    mutable std::atomic<int> active_cost_queries_{0};
+    mutable std::atomic<int> max_concurrent_cost_queries_{0};
 };
 
 finenav_mppi_controller::Params makeControllerParams() {
@@ -136,6 +175,37 @@ TEST(ControllerPlanTest, PlanPreservesConfiguredHorizon) {
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->poses.size(), 5u);
     EXPECT_EQ(result->twists.size(), 5u);
+}
+
+TEST(ControllerPlanTest, PlanUsesConfiguredCostCriticWorkerCount) {
+    auto params = makeControllerParams();
+    params.CostCritic.num_threads = 4;
+    params.CostCritic.chunk_size = 1;
+    MPPIController controller;
+    controller.configure(params);
+    ConcurrentMapView map_view;
+
+    const auto result = controller.plan(makeContext(), map_view);
+
+    ASSERT_TRUE(result.has_value());
+    expectFiniteBoundedOutput(*result, params);
+    EXPECT_GT(map_view.maxConcurrentCostQueries(), 1);
+}
+
+TEST(ControllerPlanTest, RejectsNegativeCostCriticWorkerCount) {
+    auto params = makeControllerParams();
+    params.CostCritic.num_threads = -1;
+    MPPIController controller;
+
+    EXPECT_THROW(controller.configure(params), std::invalid_argument);
+}
+
+TEST(ControllerPlanTest, RejectsNegativeCostCriticChunkSize) {
+    auto params = makeControllerParams();
+    params.CostCritic.chunk_size = -1;
+    MPPIController controller;
+
+    EXPECT_THROW(controller.configure(params), std::invalid_argument);
 }
 
 TEST(ControllerPlanTest, EmptyReferencePathReturnsNoPlan) {

@@ -33,6 +33,37 @@ This process is then repeated a number of times and returns a converged solution
 
 ## Configuration
 
+### CostCritic 并行调度
+
+CostCritic 固定使用 OpenMP dynamic 调度评估轨迹。`num_threads: 1` 保持串行执行，
+用于确定性基线和低负载场景；大于 1 时使用
+`schedule(dynamic, chunk_size)`，将重负载轨迹继续分发给先完成的线程。所有模式共享
+同一评分逻辑；benchmark 会用串行执行结果校验成本向量和 `fail_flag`。
+
+可配置的调度参数只有：
+
+- `CostCritic.num_threads`：OpenMP worker 数；设为 `1` 时串行。
+- `CostCritic.chunk_size`：每次动态领取的轨迹数；不均匀碰撞负载建议保持 `1`。
+
+构建并运行 benchmark：
+
+```bash
+colcon build --packages-select finenav_collision_model finenav_mppi_controller \
+  --cmake-args -DBUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
+source install/finenav_collision_model/share/finenav_collision_model/package.bash
+source install/finenav_mppi_controller/share/finenav_mppi_controller/package.bash
+./build/finenav_mppi_controller/benchmark/cost_critic_benchmark \
+  --benchmark_filter='BM_CostCriticHeavy/' \
+  --benchmark_min_time=0.05 \
+  --benchmark_repetitions=10 \
+  --benchmark_report_aggregates_only=true
+```
+
+真实重负载使用连续代价栅格、OBB 棱线采样和连续排列的早/中/晚碰撞轨迹。当前主机
+的 `5000 x 56`、8 线程实验中，OpenMP dynamic 达到 `6.69x` 加速；动态调度避免了
+连续重轨迹在静态分块时造成的线程空闲。完整数据和环境记录保存在
+`/home/fins/Desktop/finenav_engine_design_docs/`，不属于仓库提交内容。
+
 ### Controller
  | Parameter                  | Type   | Definition                                                                                                                                                                                                                                                                                                           |
  | ---------------------      | ------ | -------------------------------------------------------------------------------------------------------- |
@@ -298,8 +329,8 @@ Once obstacle avoidance is tuned with an appropriate path-following penalty, tun
 
 This branch removes obsolete Nav2 migration residue while preserving controller behavior. The active
 collision critic is `CostCritic`; the legacy obstacle and path-align critic implementations are no
-longer part of the package. The benchmark sources remain in the repository for reference, but the
-benchmark subdirectory is not enabled by the top-level CMake file.
+longer part of the package. Benchmarks are disabled by default and can be enabled with
+`-DBUILD_BENCHMARKS=ON`.
 
 ### Local build environment
 
@@ -316,9 +347,10 @@ source /home/fins/Desktop/local_libs/BehaviorTreeCpp_v4.7.0/install/setup.bash
 ### Build and baseline tests
 
 ```bash
-cd /home/fins/Desktop/finenav_engine
-colcon build --packages-select finenav_mppi_controller --symlink-install
-source /home/fins/Desktop/finenav_engine/install/setup.bash
+cd /home/fins/Desktop/finenav_engine/FineNav-Engine
+colcon build --packages-select finenav_collision_model finenav_mppi_controller --symlink-install
+source install/finenav_collision_model/share/finenav_collision_model/package.bash
+source install/finenav_mppi_controller/share/finenav_mppi_controller/package.bash
 ctest --test-dir build/finenav_mppi_controller --output-on-failure \
   -R "^(optimizer_result_test|critic_function_test|noise_generator_test)$"
 ```

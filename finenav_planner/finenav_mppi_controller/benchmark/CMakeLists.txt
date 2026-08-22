@@ -19,3 +19,12 @@ target_link_libraries(mppi_practical_comparison
   benchmark::benchmark
   Eigen3::Eigen
 )
+
+add_executable(cost_critic_benchmark cost_critic_benchmark.cpp)
+ament_target_dependencies(cost_critic_benchmark ${dependencies_pkgs})
+target_include_directories(cost_critic_benchmark PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(cost_critic_benchmark
+  mppi_critics
+  benchmark::benchmark
+  Eigen3::Eigen
+)

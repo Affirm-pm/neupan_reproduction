@@ -337,14 +337,23 @@ inline float posePointAngle(
  */
 inline size_t findClosestPathPt(const std::vector<float> & vec, float dist, size_t init = 0)
 {
-  auto iter = std::lower_bound(vec.begin() + init, vec.end(), dist);
-  if (iter == vec.begin() + init) {
+  if (vec.empty()) {
     return 0;
   }
-  if (dist - *(iter - 1) < *iter - dist) {
-    return iter - 1 - vec.begin();
+
+  const size_t start_index = std::min(init, vec.size() - 1);
+  float previous_distance = start_index != 0 ? vec[start_index] : 0.0F;
+  for (size_t index = start_index + 1; index < vec.size(); ++index) {
+    const float current_distance = vec[index];
+    if (current_distance > dist) {
+      if (dist - previous_distance < current_distance - dist) {
+        return index - 1;
+      }
+      return index;
+    }
+    previous_distance = current_distance;
   }
-  return iter - vec.begin();
+  return vec.size() - 1;
 }
 
 }  // namespace mppi::utils

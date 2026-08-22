@@ -68,7 +68,7 @@ void PathAngleCritic::score(CriticData & data, const IMapView& map_view)
     [](float y, float x) {return std::atan2(y, x);});
 
   const auto yaws = utils::shortest_angular_distance(
-    data.trajectories.yaws, yaws_between_points).abs();
+    data.trajectories.yaws, yaws_between_points).abs().eval();
 
   if (reversing_allowed_ && !forward_preference_) {
     const auto yaws_between_points_corrected = (yaws < M_PI_2).select(
