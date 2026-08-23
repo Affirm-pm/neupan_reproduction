@@ -52,7 +52,7 @@ colcon test --packages-select finenav_mppi_controller \
 colcon test-result --verbose
 ```
 
-当前测试覆盖噪声生成、模型与 Eigen 数据形状、critic 评分、优化器轨迹积分以及 controller 规划流程。
+当前测试覆盖噪声生成、模型与 Eigen 数据形状、critic 评分、优化器轨迹积分、加速度约束以及 controller 规划流程。
 
 如需构建并运行 Eigen benchmark：
 

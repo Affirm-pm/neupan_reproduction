@@ -89,6 +89,11 @@ finenav_mppi_controller::Params makeControllerParams() {
     params.vx_min = -0.2;
     params.vy_max = 0.0;
     params.wz_max = 1.0;
+    params.ax_min = -0.2;
+    params.ax_max = 0.2;
+    params.ay_min = -0.3;
+    params.ay_max = 0.3;
+    params.az_max = 0.4;
     params.vx_std = 0.1;
     params.vy_std = 0.1;
     params.wz_std = 0.1;
@@ -219,6 +224,75 @@ TEST(ControllerPlanTest, EmptyReferencePathReturnsNoPlan) {
 
     EXPECT_FALSE(result.has_value());
     EXPECT_EQ(map_view.costQueries(), 0u);
+}
+
+TEST(ControllerPlanTest, FirstCommandRespectsFeedbackAccelerationBounds) {
+    auto params = makeControllerParams();
+    params.time_steps = 6;
+    params.model_dt = 0.1;
+    params.ax_min = -0.2;
+    params.ax_max = 0.2;
+    params.az_max = 0.4;
+
+    MPPIController controller;
+    controller.configure(params);
+    TestMapView map_view;
+    auto context = makeContext();
+    context.robot_state.twist.linear.x = 0.45;
+    context.robot_state.twist.angular.z = 0.6;
+
+    const auto result = controller.plan(context, map_view);
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_FALSE(result->twists.empty());
+    EXPECT_GE(result->twists.front().linear.x, 0.45 - 0.2 * 0.1 - 1e-5);
+    EXPECT_LE(result->twists.front().linear.x, 0.45 + 0.2 * 0.1 + 1e-5);
+    EXPECT_GE(result->twists.front().angular.z, 0.6 - 0.4 * 0.1 - 1e-5);
+    EXPECT_LE(result->twists.front().angular.z, 0.6 + 0.4 * 0.1 + 1e-5);
+}
+
+TEST(ControllerPlanTest, OutputSequenceRespectsAccelerationBetweenKnots) {
+    auto params = makeControllerParams();
+    params.time_steps = 8;
+    params.model_dt = 0.1;
+    params.ax_min = -0.2;
+    params.ax_max = 0.2;
+    params.az_max = 0.4;
+
+    MPPIController controller;
+    controller.configure(params);
+    TestMapView map_view;
+    auto context = makeContext();
+    context.robot_state.twist.linear.x = 0.0;
+    context.robot_state.twist.angular.z = 0.0;
+
+    const auto result = controller.plan(context, map_view);
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->twists.size(), static_cast<std::size_t>(params.time_steps));
+    for (std::size_t i = 1; i < result->twists.size(); ++i) {
+        EXPECT_LE(result->twists[i].linear.x - result->twists[i - 1].linear.x, 0.2 * 0.1 + 1e-5);
+        EXPECT_GE(result->twists[i].linear.x - result->twists[i - 1].linear.x, -0.2 * 0.1 - 1e-5);
+        EXPECT_LE(result->twists[i].angular.z - result->twists[i - 1].angular.z, 0.4 * 0.1 + 1e-5);
+        EXPECT_GE(result->twists[i].angular.z - result->twists[i - 1].angular.z, -0.4 * 0.1 - 1e-5);
+    }
+}
+
+TEST(ControllerPlanTest, RejectsInvalidAccelerationBounds) {
+    auto params = makeControllerParams();
+    params.ax_min = 0.1;
+    params.ax_max = 0.2;
+    MPPIController controller;
+    EXPECT_THROW(controller.configure(params), std::invalid_argument);
+
+    params = makeControllerParams();
+    params.ay_min = 0.2;
+    params.ay_max = -0.2;
+    EXPECT_THROW(controller.configure(params), std::invalid_argument);
+
+    params = makeControllerParams();
+    params.az_max = -0.1;
+    EXPECT_THROW(controller.configure(params), std::invalid_argument);
 }
 
 }  // namespace

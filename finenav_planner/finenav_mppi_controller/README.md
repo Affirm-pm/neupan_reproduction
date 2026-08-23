@@ -80,6 +80,11 @@ source install/finenav_mppi_controller/share/finenav_mppi_controller/package.bas
  | vy_max                     | double | Default 0.5. Max VY in either direction, if holonomic. (m/s)                                             |
  | vx_min                     | double | Default -0.35. Min VX (m/s)                                                                              |
  | wz_max                     | double | Default 1.9. Max WZ (rad/s)                                                                              |
+ | ax_min                     | double | Default -1.0. Minimum longitudinal acceleration (m/s^2), must be <= 0.                              |
+ | ax_max                     | double | Default 1.0. Maximum longitudinal acceleration (m/s^2), must be >= 0.                               |
+ | ay_min                     | double | Default -1.0. Minimum lateral acceleration (m/s^2), used by Omni.                                    |
+ | ay_max                     | double | Default 1.0. Maximum lateral acceleration (m/s^2), used by Omni.                                     |
+ | az_max                     | double | Default 3.0. Symmetric yaw acceleration limit (rad/s^2).                                             |
  | temperature                | double | Default: 0.3. Selectiveness of trajectories by their costs (The closer this value to 0, the "more" we take in consideration controls with less cost), 0 mean use control with best cost, huge value will lead to just taking mean of all trajectories without cost consideration                                                   |
  | gamma                      | double | Default: 0.015. A trade-off between smoothness (high) and low energy (low). This is a complex parameter that likely won't need to be changed from the default of `0.1` which works well for a broad range of cases. See Section 3D-2 in "Information Theoretic Model Predictive Control: Theory and Applications to Autonomous Driving" for detailed information.       |
  | visualize                  | bool   | Default: false. Publish visualization of trajectories, which can slow down the controller significantly. Use only for debugging.                                                                                                                                       |
@@ -297,7 +302,25 @@ controller_server:
 
 ### General Words of Wisdom
 
-The `model_dt` parameter generally should be set to the duration of your control frequency. So if your control frequency is 20hz, this should be `0.05`. However, you may also set it lower **but not larger**.
+The `model_dt` parameter is the duration between prediction knots and the
+feedback-to-first-command interval. Set it to the inverse of the execution
+frequency; in the demo, `TrackingPolicy{20.0}` requires `model_dt=0.05` s.
+
+The first rollout knot is the first sampled control projected from measured
+feedback, and `controls[0]` is the command for the current execution cycle.
+The optimizer shifts only its internal warm-start sequence after returning the
+result; it does not skip `controls[0]` with an output offset.
+
+If measured linear or angular velocity is already outside its configured
+absolute limit, the projection preserves the acceleration-reachable interval
+first when the two constraints do not overlap. This avoids an instantaneous
+velocity jump; the command returns to the absolute limit over subsequent
+cycles.
+
+Ackermann additionally intersects the yaw-acceleration interval with its
+minimum-turning-radius interval. If those intervals are temporarily disjoint,
+the kinematic turning-radius constraint takes priority and the closest feasible
+yaw rate to the previous command is selected.
 
 Visualization of the trajectories using `visualize` uses compute resources to back out trajectories for visualization and therefore slows compute time. It is not suggested that this parameter is set to `true` during a deployed use, but is a useful debug instrument while tuning the system, but use sparingly. Visualizing 2000 batches @ 56 points at 30 hz is _a lot_.
 

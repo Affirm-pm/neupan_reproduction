@@ -27,7 +27,7 @@ namespace mppi::models
  */
 struct OptimizerSettings
 {
-  models::ControlConstraints constraints{0, 0, 0, 0};
+  models::ControlConstraints constraints{};
   models::SamplingStd sampling_std{0, 0, 0};
   float model_dt{0};
   float temperature{0};

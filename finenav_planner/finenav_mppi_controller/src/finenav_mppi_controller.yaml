@@ -9,7 +9,7 @@ finenav_mppi_controller:
   model_dt:
     type: double
     default_value: 0.05
-    description: "Time step duration (s). controller_period = model_dt is required."
+    description: "Prediction and control-step duration (s). Set this to 1 / TrackingPolicy.frequency_hz."
     validation:
       gt<>: [0.0]
   batch_size:
@@ -58,6 +58,28 @@ finenav_mppi_controller:
     type: double
     default_value: 1.9
     description: "Maximum angular velocity (rad/s)"
+
+  # ── Acceleration constraints ───────────────────────────────────────────────
+  ax_min:
+    type: double
+    default_value: -1.0
+    description: "Minimum longitudinal acceleration (m/s^2)"
+  ax_max:
+    type: double
+    default_value: 1.0
+    description: "Maximum longitudinal acceleration (m/s^2)"
+  ay_min:
+    type: double
+    default_value: -1.0
+    description: "Minimum lateral acceleration (m/s^2)"
+  ay_max:
+    type: double
+    default_value: 1.0
+    description: "Maximum lateral acceleration (m/s^2)"
+  az_max:
+    type: double
+    default_value: 3.0
+    description: "Maximum yaw acceleration magnitude (rad/s^2)"
 
   # ── Sampling standard deviations ──────────────────────────────────────────
   vx_std:

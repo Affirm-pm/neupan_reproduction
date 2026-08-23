@@ -20,6 +20,7 @@
 #include <string>
 #include <memory>
 #include <cmath>
+#include <stdexcept>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
@@ -117,6 +118,11 @@ public:
         s.constraints.vx_min = p.vx_min;
         s.constraints.vy     = p.vy_max;
         s.constraints.wz     = p.wz_max;
+        s.constraints.ax_min = static_cast<float>(p.ax_min);
+        s.constraints.ax_max = static_cast<float>(p.ax_max);
+        s.constraints.ay_min = static_cast<float>(p.ay_min);
+        s.constraints.ay_max = static_cast<float>(p.ay_max);
+        s.constraints.az_max = static_cast<float>(p.az_max);
 
         s.sampling_std.vx = p.vx_std;
         s.sampling_std.vy = p.vy_std;
@@ -213,10 +219,10 @@ public:
 protected:
     OptimizationResult finalizeControlSequence()
     {
-        shiftControlSequence();
-
         auto controls = getControlSequence();
         auto trajectory = getOptimizedTrajectory(controls);
+
+        shiftControlSequence();
 
         return {std::move(controls), std::move(trajectory)};
     }
@@ -276,6 +282,8 @@ protected:
                       "Model " + model + " is not valid! Valid options are DiffDrive, Omni, "
                       "or Ackermann"));
         }
+
+        motion_model_->setConstraints(settings_.constraints, settings_.model_dt);
     }
 
   /**
@@ -315,14 +323,29 @@ protected:
    */
     void applyControlSequenceConstraints()
     {
-        auto & s = settings_;
+        float previous_vx = state_.speed.linear.x;
+        float previous_vy = state_.speed.linear.y;
+        float previous_wz = state_.speed.angular.z;
+        const float dt = settings_.model_dt;
+        for (Eigen::Index t = 0; t < control_sequence_.vx.size(); ++t) {
+            const float vx = MotionModel::projectVelocity(
+                control_sequence_.vx(t), previous_vx,
+                settings_.constraints.vx_min, settings_.constraints.vx_max,
+                settings_.constraints.ax_min, settings_.constraints.ax_max, dt);
+            const float vy = isHolonomic() ? MotionModel::projectVelocity(
+                control_sequence_.vy(t), previous_vy,
+                -settings_.constraints.vy, settings_.constraints.vy,
+                settings_.constraints.ay_min, settings_.constraints.ay_max, dt) : 0.0F;
+            const float wz = motion_model_->projectAngularVelocity(
+                control_sequence_.wz(t), previous_wz, vx, dt);
 
-        if (isHolonomic()) {
-            control_sequence_.vy = control_sequence_.vy.max(-s.constraints.vy).min(s.constraints.vy);
+            control_sequence_.vx(t) = vx;
+            control_sequence_.vy(t) = vy;
+            control_sequence_.wz(t) = wz;
+            previous_vx = vx;
+            previous_vy = vy;
+            previous_wz = wz;
         }
-
-        control_sequence_.vx = control_sequence_.vx.max(s.constraints.vx_min).min(s.constraints.vx_max);
-        control_sequence_.wz = control_sequence_.wz.max(-s.constraints.wz).min(s.constraints.wz);
 
         motion_model_->applyConstraints(control_sequence_);
     }
@@ -352,11 +375,16 @@ protected:
 
         if (isHolonomic()) {
             state.vy.col(0).setConstant(state.speed.linear.y);
+        } else {
+          state.vy.col(0).setZero();
         }
     }
   /**
-   * @brief predict velocities in state using model
-   * for time horizon equal to timesteps
+   * @brief Project each sampled control onto the reachable velocity interval.
+   *
+   * The measured velocity is the projection anchor before the horizon. It is
+   * not stored as an additional rollout knot: state.v(:, t) is the velocity
+   * driven by the sampled control at the same t.
    * @param state fill state
    */
     void propagateStateVelocitiesFromInitials(

@@ -15,8 +15,10 @@
 #ifndef NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_
 #define NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_
 
-#include <string>
+#include <cmath>
 #include <memory>
+#include <stdexcept>
+#include <string>
 
 //#include "finenav_mppi_controller/tools/path_handler.hpp"
 //#include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
@@ -70,8 +72,28 @@ public:
     using ConfigType = finenav_mppi_controller::Params;
     void configure(const ConfigType& params) {              //应该传入参数 因测试先去除
 
+        if (params.CostCritic.num_threads <= 0 || params.CostCritic.chunk_size <= 0) {
+            throw std::invalid_argument(
+                "CostCritic.num_threads and CostCritic.chunk_size must be greater than zero");
+        }
+
+        if (!std::isfinite(params.ax_min) || !std::isfinite(params.ax_max) ||
+            !std::isfinite(params.ay_min) || !std::isfinite(params.ay_max) ||
+            !std::isfinite(params.az_max) || params.ax_min > 0.0 ||
+            params.ax_max < 0.0 || params.ay_min > 0.0 || params.ay_max < 0.0 ||
+            params.az_max < 0.0) {
+            throw std::invalid_argument(
+                "Acceleration limits must satisfy ax_min <= 0 <= ax_max, "
+                "ay_min <= 0 <= ay_max, and az_max >= 0");
+        }
+
         registerCritic(std::make_unique<critics::ConstraintCritic>());
-        registerCritic(std::make_unique<critics::CostCritic>());
+        critics::CostCriticExecutionOptions cost_critic_options;
+        cost_critic_options.num_threads = static_cast<std::size_t>(
+          params.CostCritic.num_threads);
+        cost_critic_options.chunk_size = static_cast<std::size_t>(
+          params.CostCritic.chunk_size);
+        registerCritic(std::make_unique<critics::CostCritic>(cost_critic_options));
         registerCritic(std::make_unique<critics::GoalAngleCritic>());
         registerCritic(std::make_unique<critics::GoalCritic>());
         registerCritic(std::make_unique<critics::PathAlignCritic>());
