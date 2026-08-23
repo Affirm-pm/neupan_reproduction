@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <limits>
 #include <memory>
 #include <string>
 
@@ -62,7 +63,8 @@ class NeuPANPlanner {
     // False: the action is a nominal with no avoidance; act on it only briefly.
     bool solved = false;
     int solver_status = -1;
-    double min_distance = 0.0;
+    // inf when nothing was measured this cycle (no points, or arrived).
+    double min_distance = std::numeric_limits<double>::infinity();
     Mat3X opt_s;        // MPC trajectory
     Mat2X opt_u;        // full control sequence
     Mat3X ref_s;        // reference states

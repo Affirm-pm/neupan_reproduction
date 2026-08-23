@@ -19,6 +19,8 @@
 
 namespace neupan {
 
+struct TensorFile;
+
 // Sequential MLP equivalent to neupan ObsPointNet (obs_point_net.py).
 // Runs in float32 to match PyTorch numerics.
 class MLP {
@@ -37,6 +39,8 @@ class MLP {
   // Record names: "L<i>.linear.weight" / "L<i>.linear.bias" /
   // "L<i>.ln.gamma" / "L<i>.ln.beta" / "L<i>.tanh" / "L<i>.relu".
   static MLP load(const std::string& path);
+  // Same, from an already-parsed file (callers that also read other records).
+  static MLP fromTensors(const TensorFile& tf);
 
   // X: (in_dim, N) column-per-sample -> (out_dim, N)
   MatF forward(const MatF& X) const;

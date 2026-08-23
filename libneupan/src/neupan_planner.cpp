@@ -53,8 +53,9 @@ void NeuPANPlanner::validate(const Config& c) {
   // Shipped as d = 0 with eta = 15 for a whole season, silently.
   if (a.eta > 0.0 && a.d_max <= 0.0)
     fail("eta > 0 rewards clearance but d_max is " + std::to_string(a.d_max) +
-         "; the clearance variable is pinned to zero and avoidance has no "
-         "gradient (upstream uses d_min 0.1, d_max 1.0)");
+         "; that pins the clearance variable to zero, so eta buys nothing and "
+         "only the ro_obs contact penalty repels obstacles (upstream uses "
+         "d_min 0.1, d_max 1.0)");
 
   if (c.collision_threshold <= 0.0)
     fail("collision_threshold is " + std::to_string(c.collision_threshold) +

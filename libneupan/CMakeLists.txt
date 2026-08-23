@@ -63,6 +63,13 @@ target_compile_definitions(neupan_bench PRIVATE
 
 add_executable(neupan_ab_safety_margin tools/ab_safety_margin.cpp)
 target_link_libraries(neupan_ab_safety_margin PRIVATE neupan)
+if(NEUPAN_BUILD_TESTS)
+  # Asserting tool: config A must be rejected, config B must keep passing.
+  add_test(NAME ab_safety_margin COMMAND neupan_ab_safety_margin
+    ${CMAKE_CURRENT_SOURCE_DIR}/tools/ab_configs/season_d0.yaml
+    ${CMAKE_CURRENT_SOURCE_DIR}/tools/ab_configs/upstream_margins.yaml
+    ${CMAKE_CURRENT_SOURCE_DIR}/models/diff_sentry.bin)
+endif()
 
 install(TARGETS neupan EXPORT neupanTargets)
 install(DIRECTORY include/ DESTINATION include)

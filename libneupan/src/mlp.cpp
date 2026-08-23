@@ -18,9 +18,9 @@
 
 namespace neupan {
 
-MLP MLP::load(const std::string& path) {
-  const TensorFile tf = TensorFile::load(path);
+MLP MLP::load(const std::string& path) { return fromTensors(TensorFile::load(path)); }
 
+MLP MLP::fromTensors(const TensorFile& tf) {
   MLP mlp;
   Layer cur{};
   bool pending = false;
@@ -74,7 +74,8 @@ MLP MLP::load(const std::string& path) {
   }
   flush();
 
-  if (mlp.layers.empty()) throw std::runtime_error("mlp: empty model " + path);
+  if (mlp.layers.empty())
+    throw std::runtime_error("mlp: checkpoint has no layer records");
   return mlp;
 }
 

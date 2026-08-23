@@ -6,10 +6,7 @@ Usage (from the upstream NeuPAN repo root, with its venv):
     python export_dune_weights.py <checkpoint.pth> <out.bin> <length> <width>
                                   [wheelbase] [edge_dim]
 
-length/width are the footprint the checkpoint was TRAINED for, not whatever the
-robot happens to be now. They are stored in the file so libneupan refuses a
-checkpoint that does not match the configured robot: the network only produces
-valid distances for the footprint it saw.
+length/width: the trained footprint; libneupan refuses a mismatched robot.
 
 Part of neupan_cpp, a C++ port of NeuPAN (Copyright (c) 2025 Ruihua Han),
 distributed under the GNU General Public License v3 or later.
@@ -25,8 +22,7 @@ from nptf import write_nptf
 
 
 def rectangle_gh(length: float, width: float, wheelbase: float = 0.0):
-    """G, h of a rectangle footprint, mirroring Robot::diffRectangle and
-    genInequalFromVertex in libneupan. Keep the two in step."""
+    """G, h of a rectangle footprint; keep in step with Robot::diffRectangle."""
     sx = -(length - wheelbase) / 2.0
     sy = -width / 2.0
     v = np.array([[sx, sy],

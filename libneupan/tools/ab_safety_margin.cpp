@@ -10,20 +10,7 @@
  * (at your option) any later version. See <https://www.gnu.org/licenses/>.
  */
 
-// Regression check on the safety-margin triple (eta, d_max/d_min,
-// collision_threshold), in two halves.
-//
-// Config A is what the sentry ran on track in the 2026 season
-// (d_max = d_min = collision_threshold = 0). It no longer rolls out at all:
-// the planner rejects that combination while loading, and this tool asserts it
-// still does. The rollouts that established why are in the season's notes.
-//
-// Config B is the upstream-shaped combination and does roll out. A 0.5x0.5 diff
-// robot follows a straight reference to a goal 6 m ahead while a small obstacle
-// sweeps laterally across the line: blocking it outright at offset 0 (no local
-// planner escapes that without a global detour), clear of the swept corridor
-// past ~0.5 m, and in between the band where a few centimetres of give is all
-// it takes to pass. B must keep passing that band.
+// A (season d=0 config) must be rejected at load; B (upstream margins) must pass.
 
 #include <cmath>
 #include <cstdio>
@@ -44,8 +31,7 @@ constexpr double kObstacleHalf = 0.2;  // half width/depth of the point box
 constexpr double kGoalX = 6.0;
 constexpr int kMaxSteps = 300;  // 30 s at step_time 0.1
 
-// Static obstacle: outline of a square box centred at (kObstacleX, offset_y),
-// one point every 5 cm.
+// Square outline centred at (kObstacleX, offset_y), a point every 5 cm.
 Mat2X obstaclePoints(double offset_y) {
   std::vector<Vec2> pts;
   for (double t = -kObstacleHalf; t <= kObstacleHalf + 1e-9; t += 0.05) {
@@ -137,31 +123,39 @@ int main(int argc, char** argv) {
 
   bool a_rejected = false;
   try {
-    rollout(cfg_a, model, 0.4, false);
-  } catch (const std::exception& e) {
-    a_rejected = true;
-    std::printf("A rejected at load: %s\n\n", e.what());
-  }
-  if (!a_rejected)
+    NeuPANPlanner::fromYaml(cfg_a, model);
     std::printf("A loaded without complaint - the clearance guard is gone\n\n");
+  } catch (const std::exception& e) {
+    // Only the config guard counts; a typo'd path must not pass as rejection.
+    a_rejected = std::string(e.what()).find("neupan config") != std::string::npos;
+    std::printf("A %s: %s\n\n",
+                a_rejected ? "rejected by the config guard"
+                           : "failed for an unrelated reason",
+                e.what());
+  }
 
   const double offsets[] = {0.0, 0.3, 0.4, 0.5, 0.6, 0.8};
   int b_arrived = 0;
-  for (double off : offsets) {
-    std::printf("obstacle offset %.2f m:\n", off);
-    const Result b = rollout(cfg_b, model, off, false);
-    report("B (upstream margins)", b);
-    b_arrived += b.arrived;
-  }
+  try {
+    for (double off : offsets) {
+      std::printf("obstacle offset %.2f m:\n", off);
+      const Result b = rollout(cfg_b, model, off, false);
+      report("B (upstream margins)", b);
+      b_arrived += b.arrived;
+    }
 
-  std::printf("\nB reached the goal in %d/%zu runs; offsets 0.0 and 0.3 block "
-              "the reference line outright and need a global replan\n",
-              b_arrived, std::size(offsets));
+    std::printf("\nB reached the goal in %d/%zu runs; offsets 0.0 and 0.3 "
+                "block the reference line outright and need a global replan\n",
+                b_arrived, std::size(offsets));
 
-  if (argc > 4) {
-    const double off = std::atof(argv[4]);
-    std::printf("\ntrace at offset %.2f m, config B:\n", off);
-    rollout(cfg_b, model, off, true);
+    if (argc > 4) {
+      const double off = std::atof(argv[4]);
+      std::printf("\ntrace at offset %.2f m, config B:\n", off);
+      rollout(cfg_b, model, off, true);
+    }
+  } catch (const std::exception& e) {
+    std::printf("B failed to run: %s\n", e.what());
+    return 1;
   }
   // B must still slide past the obstacle it used to clear.
   return (a_rejected && b_arrived >= 4) ? 0 : 1;

@@ -14,9 +14,11 @@
 #include <tf2_ros/transform_listener.h>
 
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
@@ -154,6 +156,7 @@ class NeuPANNode : public rclcpp::Node {
   void halt(const char* why) {
     vel_pub_->publish(geometry_msgs::msg::Twist());
     publishArrive(false);
+    publishStatus(diagnostic_msgs::msg::DiagnosticStatus::WARN, why, {});
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000, "%s", why);
   }
 
@@ -247,7 +250,9 @@ class NeuPANNode : public rclcpp::Node {
   void updateStall(const geometry_msgs::msg::Twist& cmd, bool arrived) {
     const bool moving = std::abs(cmd.linear.x) > stall_speed_ ||
                         std::abs(cmd.angular.z) > stall_speed_;
-    if (moving || arrived) {
+    // First planned cycle starts the clock; the zero epoch would flag instantly.
+    const bool first = last_progress_time_.nanoseconds() == 0;
+    if (moving || arrived || first) {
       last_progress_time_ = now();
       stalled_ = false;
       return;
@@ -261,41 +266,51 @@ class NeuPANNode : public rclcpp::Node {
     }
   }
 
-  void publishDiagnostics(const neupan::NeuPANPlanner::Info& info,
-                          const geometry_msgs::msg::Twist& cmd) {
+  void publishStatus(
+      uint8_t level, const std::string& message,
+      const std::vector<std::pair<std::string, std::string>>& values) {
     diagnostic_msgs::msg::DiagnosticStatus st;
     st.name = "neupan";
     st.hardware_id = base_frame_;
-    if (stalled_ || consecutive_unsolved_ > solver_fail_grace_) {
-      st.level = diagnostic_msgs::msg::DiagnosticStatus::ERROR;
-      st.message = stalled_ ? "stalled" : "solver failing";
-    } else if (info.stop || !info.solved) {
-      st.level = diagnostic_msgs::msg::DiagnosticStatus::WARN;
-      st.message = info.stop ? "stopped at collision threshold" : "unsolved";
-    } else {
-      st.level = diagnostic_msgs::msg::DiagnosticStatus::OK;
-      st.message = info.arrive ? "arrived" : "tracking";
-    }
-
-    const auto kv = [&](const char* k, const std::string& v) {
+    st.level = level;
+    st.message = message;
+    for (const auto& [k, v] : values) {
       diagnostic_msgs::msg::KeyValue e;
       e.key = k;
       e.value = v;
       st.values.push_back(e);
-    };
-    kv("solved", info.solved ? "true" : "false");
-    kv("solver_status", std::to_string(info.solver_status));
-    kv("consecutive_unsolved", std::to_string(consecutive_unsolved_));
-    kv("min_distance", std::to_string(info.min_distance));
-    kv("obstacle_points", std::to_string(obstacle_points_.cols()));
-    kv("stalled", stalled_ ? "true" : "false");
-    kv("cmd_v", std::to_string(cmd.linear.x));
-    kv("cmd_w", std::to_string(cmd.angular.z));
-
+    }
     diagnostic_msgs::msg::DiagnosticArray arr;
     arr.header.stamp = now();
     arr.status.push_back(st);
     diag_pub_->publish(arr);
+  }
+
+  void publishDiagnostics(const neupan::NeuPANPlanner::Info& info,
+                          const geometry_msgs::msg::Twist& cmd) {
+    using diagnostic_msgs::msg::DiagnosticStatus;
+    uint8_t level = DiagnosticStatus::OK;
+    std::string message = "tracking";
+    if (info.arrive) {  // arrival skips the solve, so check it first
+      message = "arrived";
+    } else if (stalled_ || consecutive_unsolved_ > solver_fail_grace_) {
+      level = DiagnosticStatus::ERROR;
+      message = stalled_ ? "stalled" : "solver failing";
+    } else if (info.stop || !info.solved) {
+      level = DiagnosticStatus::WARN;
+      message = info.stop ? "stopped at collision threshold" : "unsolved";
+    }
+
+    publishStatus(
+        level, message,
+        {{"solved", info.solved ? "true" : "false"},
+         {"solver_status", std::to_string(info.solver_status)},
+         {"consecutive_unsolved", std::to_string(consecutive_unsolved_)},
+         {"min_distance", std::to_string(info.min_distance)},
+         {"obstacle_points", std::to_string(obstacle_points_.cols())},
+         {"stalled", stalled_ ? "true" : "false"},
+         {"cmd_v", std::to_string(cmd.linear.x)},
+         {"cmd_w", std::to_string(cmd.angular.z)}});
   }
 
   void scanCallback(const sensor_msgs::msg::LaserScan& msg) {
@@ -388,14 +403,29 @@ class NeuPANNode : public rclcpp::Node {
 
   void waypointsCallback(const nav_msgs::msg::Path& msg) {
     if (!have_state_ || msg.poses.empty()) return;
+
+    // Republished identical waypoints must not cold-reset the planner each tick.
+    const auto pts = pathMsgToPoints(msg);
+    if (samePoints(pts, last_waypoints_)) return;
+    last_waypoints_ = pts;
+
     std::vector<neupan::Vec3> wps{robot_state_};
-    for (const auto& pp : pathMsgToPoints(msg)) wps.emplace_back(pp.head<3>());
+    for (const auto& pp : pts) wps.emplace_back(pp.head<3>());
 
     RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000,
                          "initial path update from waypoints");
     planner_->setWaypoints(wps);
     planner_->reset();
     publishArrive(false);
+  }
+
+  static bool samePoints(
+      const std::vector<neupan::InitialPath::PathPoint>& a,
+      const std::vector<neupan::InitialPath::PathPoint>& b) {
+    if (a.size() != b.size()) return false;
+    for (size_t i = 0; i < a.size(); ++i)
+      if ((a[i] - b[i]).cwiseAbs().maxCoeff() > 1e-9) return false;
+    return true;
   }
 
   void goalCallback(const geometry_msgs::msg::PoseStamped& msg) {
@@ -492,12 +522,13 @@ class NeuPANNode : public rclcpp::Node {
   int scan_downsample_;
   bool flip_angle_, include_initial_path_direction_;
   double scan_timeout_, stall_speed_, stall_timeout_;
-  int solver_fail_grace_ = 5;
+  int solver_fail_grace_;
 
   int consecutive_unsolved_ = 0;
   bool scan_seen_ = false, stalled_ = false;
   rclcpp::Time last_scan_time_{0, 0, RCL_ROS_TIME};
   rclcpp::Time last_progress_time_{0, 0, RCL_ROS_TIME};
+  std::vector<neupan::InitialPath::PathPoint> last_waypoints_;
 
   neupan::Vec3 robot_state_ = neupan::Vec3::Zero();
   bool have_state_ = false;

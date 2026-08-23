@@ -25,9 +25,8 @@ namespace neupan {
 namespace {
 
 // mu is only a valid distance for the (G, h) the network was trained against.
-void checkCheckpointGeometry(const std::string& path, const Mat& G,
-                             const Vec& h) {
-  const TensorFile tf = TensorFile::load(path);
+void checkCheckpointGeometry(const std::string& path, const TensorFile& tf,
+                             const Mat& G, const Vec& h) {
   if (!tf.has("meta.G") || !tf.has("meta.h")) {
     std::fprintf(stderr,
                  "[neupan] WARNING: %s carries no footprint metadata, so it "
@@ -53,10 +52,12 @@ void checkCheckpointGeometry(const std::string& path, const Mat& G,
 }  // namespace
 
 DUNE::DUNE(const Robot& robot, const std::string& checkpoint_path)
-    : mlp_(MLP::load(checkpoint_path)), G_(robot.G), h_(robot.h), T_(robot.T) {
+    : G_(robot.G), h_(robot.h), T_(robot.T) {
+  const TensorFile tf = TensorFile::load(checkpoint_path);
+  mlp_ = MLP::fromTensors(tf);
   if (mlp_.outputDim() != G_.rows())
     throw std::runtime_error("dune: checkpoint edge_dim mismatch with robot G");
-  checkCheckpointGeometry(checkpoint_path, G_, h_);
+  checkCheckpointGeometry(checkpoint_path, tf, G_, h_);
 }
 
 DUNE::Output DUNE::forward(const std::vector<Mat2X>& point_flow,

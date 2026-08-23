@@ -161,7 +161,6 @@ class AStarGlobalNode : public rclcpp::Node {
 
     const std::vector<int> cells = astar(sy * w_ + sx, gy * w_ + gx);
     if (cells.empty()) {
-      // An empty path would stall the local planner without saying why.
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                            "A* found no path to goal, keeping the previous one");
       return;
@@ -173,8 +172,7 @@ class AStarGlobalNode : public rclcpp::Node {
       pts.push_back({ox_ + (c % w_ + 0.5) * res_, oy_ + (c / w_ + 0.5) * res_});
     pts = simplify(pts, simplify_tol_);
 
-    // A cell centre sits up to half a cell short of the goal; a snapped goal is
-    // not somewhere to drive to, so only the asked-for one replaces the end.
+    // Cell centres stop short of the goal; restore it only if it was not snapped.
     if (!goal_snapped && !pts.empty())
       pts.back() = {goal.pose.position.x, goal.pose.position.y};
 
