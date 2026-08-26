@@ -182,6 +182,10 @@ void CostCritic::score(CriticData & data, const IMapView & map_view)
     }
   }
 
+  if (data.critic_cost_breakdown) {
+    data.critic_cost_breakdown->collision_flags = collision_flags;
+  }
+
   data.costs += (weight_ * repulsive_cost / static_cast<float>(traj_len)).pow(power_);
   data.fail_flag = all_trajectories_collide;
   static rclcpp::Clock throttle_clock{RCL_STEADY_TIME};

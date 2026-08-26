@@ -168,6 +168,36 @@ TEST(ControllerPlanTest, ResetAllowsPlanningAgain) {
     expectFiniteBoundedOutput(*second, params);
 }
 
+TEST(ControllerPlanTest, VisualizedPlanResetStressWithPracticalDimensions) {
+    if (!rclcpp::ok()) {
+        int argc = 0;
+        char** argv = nullptr;
+        rclcpp::init(argc, argv);
+    }
+
+    auto params = makeControllerParams();
+    params.visualize = true;
+    params.batch_size = 3000;
+    params.time_steps = 30;
+    params.CostCritic.num_threads = 8;
+    params.CostCritic.chunk_size = 1;
+
+    {
+        MPPIController controller;
+        controller.configure(params);
+        TestMapView map_view;
+
+        for (int episode = 0; episode < 5; ++episode) {
+            for (int cycle = 0; cycle < 3; ++cycle) {
+                ASSERT_TRUE(controller.plan(makeContext(), map_view).has_value());
+            }
+            controller.reset();
+        }
+    }
+
+    rclcpp::shutdown();
+}
+
 TEST(ControllerPlanTest, PlanPreservesConfiguredHorizon) {
     auto params = makeControllerParams();
     params.time_steps = 5;

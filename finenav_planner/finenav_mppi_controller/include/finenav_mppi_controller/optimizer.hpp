@@ -21,6 +21,8 @@
 #include <memory>
 #include <cmath>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 
@@ -87,6 +89,8 @@ public:
   	    name_ = name;
   	    getParams(params);
 
+        critics_data_.critic_cost_breakdown = params.visualize ? &critic_cost_breakdown_ : nullptr;
+
 		critic_manager_.on_configure(critics, params);
         noise_generator_.initialize(settings_, isHolonomic(), regenerate_noises_);
 
@@ -146,13 +150,12 @@ public:
    */
 	// geometry_msgs::msg::TwistStamped evalControl(
 	OptimizationResult evalControl(
-    	const geometry_msgs::msg::PoseStamped & robot_pose,
-    	const geometry_msgs::msg::Twist & robot_speed,
-    	const nav_msgs::msg::Path & plan,
-    	const nav2_mppi_controller::IMapView& map_view)
-    {
+	    const geometry_msgs::msg::PoseStamped & robot_pose,
+	    const geometry_msgs::msg::Twist & robot_speed,
+	    const nav_msgs::msg::Path & plan,
+	    const nav2_mppi_controller::IMapView& map_view)
+	{
     prepare(robot_pose, robot_speed, plan);
-
 
     do {
       optimize(map_view);
@@ -169,6 +172,11 @@ public:
   	{
   	    return generated_trajectories_;
   	}
+
+    const CriticCostBreakdown & getCriticCostBreakdown() const
+    {
+        return critic_cost_breakdown_;
+    }
 
   /**
    * @brief Get the optimal trajectory for a cycle for visualization
@@ -201,7 +209,7 @@ public:
     }
 
   /**
-   * @brief Reset the optimization problem to initial conditions
+    * @brief Reset the optimization problem to initial conditions
    */
     void reset()
     {
@@ -210,9 +218,8 @@ public:
         costs_.resize(settings_.batch_size);
         costs_.setZero();
         generated_trajectories_.reset(settings_.batch_size, settings_.time_steps);
-
+        critic_cost_breakdown_.clear();
         noise_generator_.reset(settings_, isHolonomic());
-        RCLCPP_INFO(logger_, "Optimizer reset");
     }
 
 
@@ -233,11 +240,11 @@ protected:
 
 	void optimize(const nav2_mppi_controller::IMapView& map_view)
 	{
-  	for (size_t i = 0; i < settings_.iteration_count; ++i) {
-    	generateNoisedTrajectories();
-    	critic_manager_.evalTrajectoriesScores(critics_data_,map_view);
-    	updateControlSequence();
- 		}
+	  for (size_t i = 0; i < settings_.iteration_count; ++i) {
+        generateNoisedTrajectories();
+        critic_manager_.evalTrajectoriesScores(critics_data_, map_view);
+        updateControlSequence();
+	  }
 	}
   /**
    * @brief Prepare state information on new request for trajectory rollouts
@@ -586,12 +593,12 @@ protected:
   models::Trajectories generated_trajectories_;
   models::Path path_;
   models::Vector costs_;
+  CriticCostBreakdown critic_cost_breakdown_;
 
   CriticData critics_data_ =
   {state_, generated_trajectories_, path_, costs_, settings_.model_dt, false, nullptr,
-    std::nullopt, std::nullopt};  /// Caution, keep references
+    std::nullopt, std::nullopt, nullptr};  /// Caution, keep references
 
-  rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
 };
 
 }  // namespace mppi

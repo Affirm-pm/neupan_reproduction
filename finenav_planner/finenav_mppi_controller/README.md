@@ -64,6 +64,25 @@ source install/finenav_mppi_controller/share/finenav_mppi_controller/package.bas
 连续重轨迹在静态分块时造成的线程空闲。完整数据和环境记录保存在
 `/home/fins/Desktop/finenav_engine_design_docs/`，不属于仓库提交内容。
 
+### 可视化崩溃排查后的构建要求
+
+可视化诊断数据使用纯 STL `float` 容器保存 critic 贡献，避免 Eigen 动态数组在共享库
+版本不一致时参与释放。修改头文件后必须同时重编译 MPPI 库和 demo；工作区存在外层
+`/home/fins/Desktop/finenav_engine/{build,install}` 与源码目录下的
+`FineNav-Engine/{build,install}` 两套产物，运行日志中的可执行文件路径必须与重新编译的
+install 空间一致。推荐始终从外层工作区执行：
+
+```bash
+cd /home/fins/Desktop/finenav_engine
+source /opt/ros/humble/setup.bash
+source /home/fins/Desktop/generate_parameter_library/install/setup.bash
+colcon build --packages-select finenav_mppi_controller finenav_demo
+source install/setup.bash
+```
+
+不要只编译单个测试目标或混用两套 `install`；这会让新头文件与旧共享库的
+`CriticCostBreakdown` 布局不一致，表现为 reset 阶段的 `double free or corruption`。
+
 ### Controller
  | Parameter                  | Type   | Definition                                                                                                                                                                                                                                                                                                           |
  | ---------------------      | ------ | -------------------------------------------------------------------------------------------------------- |
@@ -93,10 +112,18 @@ source install/finenav_mppi_controller/share/finenav_mppi_controller/package.bas
  | regenerate_noises          | bool   | Default true. Whether to regenerate noises asynchronously for each optimization iteration or use a single noise distribution computed on initialization and reset. |
 
 #### Trajectory Visualizer
- | Parameter             | Type   | Definition                                                                                                  |
- | ---------------       | ------ | ----------------------------------------------------------------------------------------------------------- |
- | trajectory_step       | int    | Default: 5. The step between trajectories to visualize to downsample candidate trajectory pool.             |
- | time_step             | int    | Default: 3. The step between points on trajectories to visualize to downsample trajectory density.          |
+ | Parameter                       | Type   | Definition                                                                                                      |
+ | ------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
+ | visualize                      | bool   | Default: false. Enable the optional publisher-only MPPI visualizer.                                            |
+ | visualizer_node_name           | string | Default: finenav_mppi_visualizer. Private ROS node name owned by MPPI.                                         |
+ | visualizer_frame_id            | string | Default: map. Frame assigned to all visualization messages.                                                    |
+ | visualizer_trajectory_topic    | string | Default: /mppi_debug/trajectories. Candidate MarkerArray topic.                                                |
+ | visualizer_optimal_path_topic  | string | Default: /mppi_debug/optimal_trajectory. Optimized nav_msgs/Path topic.                                        |
+ | visualizer_reference_path_topic| string | Default: /mppi_debug/reference_path. Reference nav_msgs/Path topic.                                            |
+ | visualizer_trajectory_step     | int    | Default: 5. Batch stride used to downsample candidate trajectories.                                            |
+ | visualizer_time_step           | int    | Default: 3. Horizon stride used to downsample points in each candidate trajectory.                             |
+ | visualizer_max_trajectories    | int    | Default: 500. Maximum candidate trajectories retained in one visualization frame.                            |
+ | visualizer_publish_rate        | double | Default: 10.0. Maximum visualization frame publication rate in Hz.                                          |
 
 #### Path Handler
  | Parameter                  | Type   | Definition                                                                                                  |
@@ -295,8 +322,27 @@ controller_server:
 
 | Topic                     | Type                             | Description                                                           |
 |---------------------------|----------------------------------|-----------------------------------------------------------------------|
-| `trajectories`            | `visualization_msgs/MarkerArray` | Randomly generated trajectories, including resulting control sequence |
-| `transformed_global_plan` | `nav_msgs/Path`                  | Part of global plan considered by local planner                       |
+| `/mppi_debug/trajectories`       | `visualization_msgs/MarkerArray` | Downsampled candidate trajectories; the first marker is `DELETEALL` and the final marker is the orange optimal trajectory. |
+| `/mppi_debug/optimal_trajectory` | `nav_msgs/Path`                  | The optimized trajectory returned by MPPI.                             |
+| `/mppi_debug/reference_path`     | `nav_msgs/Path`                  | The current reference path in the configured visualization frame.      |
+| `/mppi_path`                     | `nav_msgs/Path`                  | Existing demo bridge output; retained separately from MPPI diagnostics. |
+
+### RViz manual check
+
+The demo configuration keeps `visualize: false` by default. For an RViz debugging run, set it
+to `true` in `finenav_demo/stvl_with_mppi/config/mppi_params.yaml`, then launch
+`stvl_with_mppi.launch.py` and add these RViz displays:
+
+1. `MarkerArray` on `/mppi_debug/trajectories`.
+2. `Path` on `/mppi_debug/optimal_trajectory`.
+3. `Path` on `/mppi_debug/reference_path`.
+
+Set RViz's fixed frame to `map`. Candidate markers are downsampled and colored by the dominant
+Critic contribution; the orange line is the optimal trajectory. MPPI builds an immutable
+downsampled frame and a capacity-one publisher queue keeps only the newest frame, so RViz
+publication never reads Optimizer-owned Eigen buffers. All three diagnostic streams use zero
+message timestamps intentionally, so they do not require `/clock`. Set `visualize: false`
+for normal deployment to avoid frame construction, the publisher thread, and Critic snapshots.
 
 ## Notes to Users
 
@@ -322,7 +368,9 @@ minimum-turning-radius interval. If those intervals are temporarily disjoint,
 the kinematic turning-radius constraint takes priority and the closest feasible
 yaw rate to the previous command is selected.
 
-Visualization of the trajectories using `visualize` uses compute resources to back out trajectories for visualization and therefore slows compute time. It is not suggested that this parameter is set to `true` during a deployed use, but is a useful debug instrument while tuning the system, but use sparingly. Visualizing 2000 batches @ 56 points at 30 hz is _a lot_.
+Visualization of the trajectories using `visualize` adds per-Critic cost snapshots and publishes a
+downsampled candidate batch, so it can slow compute time. It is not suggested that this parameter
+is set to `true` during deployed use; it is a debug instrument for tuning and RViz inspection.
 
 The most common parameters you might want to start off changing are the velocity profiles (`vx_max`, `vx_min`, `wz_max`, and `vy_max` if holonomic) and the `motion_model` to correspond to your vehicle. Its wise to consider the `prune_distance` of the path plan in proportion to your maximum velocity and prediction horizon. The deeper parameters to tune first are the `CostCritic` weights and `critical_cost`, together with the costmap inflation settings. If the obstacle penalty is too high, the robot will slow significantly or jitter in narrow corridors.
 

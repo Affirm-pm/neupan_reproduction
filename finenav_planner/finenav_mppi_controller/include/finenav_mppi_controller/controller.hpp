@@ -15,13 +15,17 @@
 #ifndef NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_
 #define NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_
 
+#include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 //#include "finenav_mppi_controller/tools/path_handler.hpp"
-//#include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
+#include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
 #include "finenav_mppi_controller/models/constraints.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
@@ -71,10 +75,17 @@ public:
     using Context = finenav::core::PlanningContext<MPPIController>;
     using ConfigType = finenav_mppi_controller::Params;
     void configure(const ConfigType& params) {              //应该传入参数 因测试先去除
-
         if (params.CostCritic.num_threads <= 0 || params.CostCritic.chunk_size <= 0) {
             throw std::invalid_argument(
                 "CostCritic.num_threads and CostCritic.chunk_size must be greater than zero");
+        }
+
+        if (params.visualize &&
+            (params.visualizer_trajectory_step <= 0 || params.visualizer_time_step <= 0 ||
+            params.visualizer_max_trajectories <= 0 || params.visualizer_publish_rate <= 0.0)) {
+            throw std::invalid_argument(
+                "Visualizer sampling, maximum trajectories, and publish rate must be greater "
+                "than zero");
         }
 
         if (!std::isfinite(params.ax_min) || !std::isfinite(params.ax_max) ||
@@ -103,6 +114,38 @@ public:
         registerCritic(std::make_unique<critics::TwirlingCritic>());
         registerCritic(std::make_unique<critics::VelocityDeadbandCritic>());
 
+        visualizer_enabled_ = params.visualize;
+        if (params.visualize) {
+            if (!rclcpp::ok()) {
+                throw std::runtime_error(
+                    "MPPI visualization requires an initialized ROS context");
+            }
+            if (!visualizer_node_) {
+                rclcpp::NodeOptions node_options;
+                node_options.use_global_arguments(false);
+                node_options.enable_rosout(false);
+                node_options.start_parameter_services(false);
+                node_options.start_parameter_event_publisher(false);
+                visualizer_node_ = rclcpp::Node::make_shared(
+                    params.visualizer_node_name, node_options);
+            }
+            VisualizerConfig visualizer_config;
+            visualizer_config.frame_id = params.visualizer_frame_id;
+            visualizer_config.trajectory_topic = params.visualizer_trajectory_topic;
+            visualizer_config.optimal_path_topic = params.visualizer_optimal_path_topic;
+            visualizer_config.reference_path_topic = params.visualizer_reference_path_topic;
+            visualizer_config.trajectory_step = static_cast<std::size_t>(
+              params.visualizer_trajectory_step);
+            visualizer_config.time_step = static_cast<std::size_t>(params.visualizer_time_step);
+            visualizer_config.max_trajectories = static_cast<std::size_t>(
+              params.visualizer_max_trajectories);
+            visualizer_config.publish_rate = params.visualizer_publish_rate;
+            visualizer_.configure(visualizer_node_, visualizer_config);
+        } else {
+            visualization_generation_.fetch_add(1, std::memory_order_relaxed);
+            visualizer_.reset();
+        }
+
         std::cout<<"[nav2_mppi_controller] Critics registered. Initializing optimizer..."<<std::endl;
         std::cout<<"[nav2_mppi_controller] Number of critics: "<<critics_.size()<<std::endl;
 
@@ -114,6 +157,8 @@ public:
        //TODO:初始化过程需要完善
     }
 
+
+     std::optional<finenav::DataPacket<OutputProfile>>plan(const finenav::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
      std::optional<finenav::core::Trajectory<OutputProfile>>plan(const finenav::core::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
         using Clock = std::chrono::steady_clock;
         using Ms    = std::chrono::duration<double, std::milli>;
@@ -158,6 +203,15 @@ public:
             map_view
             );
         const double ms_optimize = Ms(Clock::now() - t_optimize_start).count();
+
+        if (visualizer_enabled_) {
+            visualizer_.submit(
+                optimizer_.getGeneratedTrajectories(),
+                optimizer_.getCriticCostBreakdown(),
+                optimization_result.trajectory,
+                path,
+                visualization_generation_.load(std::memory_order_relaxed));
+        }
 
         // 装填输出轨迹
 
@@ -215,6 +269,12 @@ public:
    *        a zero warm-start, independent of any previous planning direction.
    */
   void reset() {
+      // Called by ControlLayer at the episode boundary on the same worker as plan().
+      const auto generation = visualization_generation_.fetch_add(
+        1, std::memory_order_relaxed) + 1;
+      if (visualizer_enabled_) {
+        visualizer_.clear(generation);
+      }
       optimizer_.reset();
   }
 
@@ -269,19 +329,21 @@ protected:
 	//  }
 //  	last_time_called_ = clock_->now();
 
-//  	std::lock_guard<std::mutex> param_lock(*parameters_handler_->getLock());
-//
-
 	// geometry_msgs::msg::TwistStamped cmd =
     auto result = optimizer_.evalControl(robot_pose, robot_speed, path_ ,map_view);
 
     return result;
 }
 
-  nav_msgs::msg::Path path_;
+    nav_msgs::msg::Path path_;
 
-  Optimizer optimizer_;
+    std::shared_ptr<rclcpp::Node> visualizer_node_;
+    TrajectoryVisualizer visualizer_;
+    bool visualizer_enabled_{false};
+    std::atomic<std::uint64_t> visualization_generation_{0};
+    Optimizer optimizer_;
   std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
+
 };
 
 }  // namespace nav2_mppi_controller

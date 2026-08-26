@@ -11,10 +11,12 @@ include_directories(
 
 set(dependencies_pkgs
   rclcpp
+  builtin_interfaces
   tf2
   geometry_msgs
   visualization_msgs
   nav_msgs
+  std_msgs
   tf2_geometry_msgs
   tf2_eigen
   tf2_ros
@@ -83,6 +85,7 @@ add_library(mppi_controller SHARED
   src/controller.cpp
   src/critic_manager.cpp
   src/noise_generator.cpp
+  src/trajectory_visualizer.cpp
 )
 
 add_library(mppi_critics SHARED
@@ -211,6 +214,51 @@ if(BUILD_TESTING)
   )
   ament_target_dependencies(utils_test ${dependencies_pkgs})
   target_include_directories(utils_test PRIVATE include)
+
+  ament_add_gtest(trajectory_visualizer_test
+    test/trajectory_visualizer_test.cpp
+  )
+  ament_target_dependencies(trajectory_visualizer_test ${dependencies_pkgs})
+  target_include_directories(trajectory_visualizer_test PRIVATE include)
+  target_link_libraries(
+    trajectory_visualizer_test
+    mppi_controller
+    mppi_critics
+    finenav_mppi_controller_params
+  )
+  ament_add_gtest(trajectory_visualizer_channel_test
+    test/trajectory_visualizer_channel_test.cpp
+  )
+  ament_target_dependencies(trajectory_visualizer_channel_test ${dependencies_pkgs})
+  target_include_directories(trajectory_visualizer_channel_test PRIVATE include)
+  target_link_libraries(
+    trajectory_visualizer_channel_test
+    mppi_controller
+    mppi_critics
+    finenav_mppi_controller_params
+  )
+  ament_add_gtest(critic_breakdown_test
+    test/critic_breakdown_test.cpp
+  )
+  ament_target_dependencies(critic_breakdown_test ${dependencies_pkgs})
+  target_include_directories(critic_breakdown_test PRIVATE include)
+  target_link_libraries(
+    critic_breakdown_test
+    mppi_controller
+    mppi_critics
+    finenav_mppi_controller_params
+  )
+  ament_add_gtest(optimizer_visualized_reset_test
+    test/optimizer_visualized_reset_test.cpp
+  )
+  ament_target_dependencies(optimizer_visualized_reset_test ${dependencies_pkgs})
+  target_include_directories(optimizer_visualized_reset_test PRIVATE include benchmark)
+  target_link_libraries(
+    optimizer_visualized_reset_test
+    mppi_controller
+    mppi_critics
+    finenav_mppi_controller_params
+  )
 endif()
 
 option(BUILD_BENCHMARKS "Build Eigen MPPI benchmarks" OFF)

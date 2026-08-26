@@ -105,6 +105,56 @@ finenav_mppi_controller:
     default_value: true
     description: "Regenerate sampling noise asynchronously for each optimization iteration"
 
+  # ── RViz diagnostics ──────────────────────────────────────────────────────
+  visualize:
+    type: bool
+    default_value: false
+    description: "Publish candidate, optimal, and reference trajectories for RViz"
+  visualizer_node_name:
+    type: string
+    default_value: "finenav_mppi_visualizer"
+    description: "Private ROS node name used by the MPPI trajectory visualizer"
+  visualizer_frame_id:
+    type: string
+    default_value: "map"
+    description: "Frame assigned to visualization messages"
+  visualizer_trajectory_topic:
+    type: string
+    default_value: "/mppi_debug/trajectories"
+    description: "MarkerArray topic for sampled trajectories"
+  visualizer_optimal_path_topic:
+    type: string
+    default_value: "/mppi_debug/optimal_trajectory"
+    description: "Path topic for the optimized trajectory"
+  visualizer_reference_path_topic:
+    type: string
+    default_value: "/mppi_debug/reference_path"
+    description: "Path topic for the current reference path"
+  visualizer_trajectory_step:
+    type: int
+    default_value: 5
+    description: "Batch stride used when publishing sampled trajectories"
+    validation:
+      gt<>: [0]
+  visualizer_time_step:
+    type: int
+    default_value: 3
+    description: "Horizon stride used when publishing sampled trajectories"
+    validation:
+      gt<>: [0]
+  visualizer_max_trajectories:
+    type: int
+    default_value: 500
+    description: "Maximum number of candidate trajectories published per frame"
+    validation:
+      gt<>: [0]
+  visualizer_publish_rate:
+    type: double
+    default_value: 10.0
+    description: "Maximum visualization frame publication rate in Hz"
+    validation:
+      gt<>: [0.0]
+
   # ── Critics ────────────────────────────────────────────────────────────────
   ConstraintCritic:
     enabled:

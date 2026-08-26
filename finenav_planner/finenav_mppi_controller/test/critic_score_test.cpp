@@ -329,6 +329,8 @@ TEST(CriticScoreTest, CostCriticMarksFailureWhenAllTrajectoriesCollide) {
     TestMapView map_view;
     map_view.cost = 254;
     map_view.collision = true;
+    mppi::CriticCostBreakdown breakdown;
+    fixture.data.critic_cost_breakdown = &breakdown;
     CostCritic critic;
     critic.initialize(params);
 
@@ -336,6 +338,9 @@ TEST(CriticScoreTest, CostCriticMarksFailureWhenAllTrajectoriesCollide) {
 
     expectPositiveCosts(fixture);
     EXPECT_TRUE(fixture.data.fail_flag);
+    ASSERT_EQ(breakdown.collision_flags.size(), 2U);
+    EXPECT_EQ(breakdown.collision_flags[0], 1U);
+    EXPECT_EQ(breakdown.collision_flags[1], 1U);
 }
 
 TEST(CriticScoreTest, CostCriticKeepsPlanningWhenOneTrajectoryIsFree) {
@@ -352,6 +357,8 @@ TEST(CriticScoreTest, CostCriticKeepsPlanningWhenOneTrajectoryIsFree) {
     TestMapView map_view;
     map_view.cost = 254;
     map_view.collide_when_x_negative = true;
+    mppi::CriticCostBreakdown breakdown;
+    fixture.data.critic_cost_breakdown = &breakdown;
     CostCritic critic;
     critic.initialize(params);
 
@@ -360,6 +367,9 @@ TEST(CriticScoreTest, CostCriticKeepsPlanningWhenOneTrajectoryIsFree) {
     EXPECT_FALSE(fixture.data.fail_flag);
     EXPECT_GT(fixture.costs(0), fixture.costs(1));
     EXPECT_GT(fixture.costs(1), 0.0f);
+    ASSERT_EQ(breakdown.collision_flags.size(), 2U);
+    EXPECT_EQ(breakdown.collision_flags[0], 1U);
+    EXPECT_EQ(breakdown.collision_flags[1], 0U);
 }
 
 }  // namespace
