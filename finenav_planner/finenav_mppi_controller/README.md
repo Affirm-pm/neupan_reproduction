@@ -83,6 +83,17 @@ source install/setup.bash
 不要只编译单个测试目标或混用两套 `install`；这会让新头文件与旧共享库的
 `CriticCostBreakdown` 布局不一致，表现为 reset 阶段的 `double free or corruption`。
 
+### Ackermann 约束与参数更新同步
+
+Ackermann `ConstraintCritic` 对角速度使用 `max(abs(wz), 1e-6)`，避免静止轨迹
+出现 `0/0` 并污染 MPPI 代价。控制序列约束遵循 Nav2 `#6072` 的顺序：先应用
+Ackermann 转弯半径，再按反馈速度和加速度限制逐点投影，最后再次应用专用运动学
+约束；当两类约束冲突时，以车辆运动学可行性优先。
+
+MPPI 控制器内部的 `configure()`、`reset()` 和 `plan()` 共用一把互斥锁。动态参数
+回调重建 Critic、Optimizer 或 Visualizer 时会等待当前规划完成，规划期间不会访问
+已被重建的对象；CostCritic 自身的 OpenMP dynamic 并行不受影响。
+
 ### Controller
  | Parameter                  | Type   | Definition                                                                                                                                                                                                                                                                                                           |
  | ---------------------      | ------ | -------------------------------------------------------------------------------------------------------- |

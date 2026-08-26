@@ -330,6 +330,10 @@ protected:
    */
     void applyControlSequenceConstraints()
     {
+        // Apply specialty vehicle constraints before the dynamic projection,
+        // matching Nav2's acceleration-aware control-sequence pipeline.
+        motion_model_->applyConstraints(control_sequence_);
+
         float previous_vx = state_.speed.linear.x;
         float previous_vy = state_.speed.linear.y;
         float previous_wz = state_.speed.angular.z;

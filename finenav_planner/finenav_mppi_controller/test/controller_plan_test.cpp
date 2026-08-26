@@ -168,6 +168,56 @@ TEST(ControllerPlanTest, ResetAllowsPlanningAgain) {
     expectFiniteBoundedOutput(*second, params);
 }
 
+TEST(ControllerPlanTest, SerializesPlanConfigureAndReset) {
+    auto params = makeControllerParams();
+    params.batch_size = 16;
+    params.time_steps = 4;
+    params.regenerate_noises = false;
+    MPPIController controller;
+    controller.configure(params);
+    TestMapView map_view;
+    const auto context = makeContext();
+    std::atomic<bool> failed{false};
+    std::atomic<int> plans_completed{0};
+
+    std::thread planner([&]() {
+      try {
+        for (int i = 0; i < 8; ++i) {
+          if (controller.plan(context, map_view).has_value()) {
+            ++plans_completed;
+          }
+        }
+      } catch (...) {
+        failed = true;
+      }
+    });
+    std::thread reconfigurer([&]() {
+      try {
+        for (int i = 0; i < 4; ++i) {
+          controller.configure(params);
+        }
+      } catch (...) {
+        failed = true;
+      }
+    });
+    std::thread resetter([&]() {
+      try {
+        for (int i = 0; i < 4; ++i) {
+          controller.reset();
+        }
+      } catch (...) {
+        failed = true;
+      }
+    });
+
+    planner.join();
+    reconfigurer.join();
+    resetter.join();
+
+    EXPECT_FALSE(failed.load());
+    EXPECT_EQ(plans_completed.load(), 8);
+}
+
 TEST(ControllerPlanTest, VisualizedPlanResetStressWithPracticalDimensions) {
     if (!rclcpp::ok()) {
         int argc = 0;

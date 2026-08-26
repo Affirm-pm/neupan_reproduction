@@ -54,8 +54,12 @@ void ConstraintCritic::score(CriticData & data, const IMapView& map_view)
   if (acker != nullptr) {
     auto & vx = data.state.vx;
     auto & wz = data.state.wz;
+    // Match Nav2's #5855 fix: keep the Ackermann radius ratio finite when
+    // angular velocity is zero or very small.
+    constexpr float epsilon = 1e-6F;
+    const auto wz_safe = wz.abs().max(epsilon);
     const auto out_of_turning_rad_motion = (acker->getMinTurningRadius() -
-      (vx.abs() / wz.abs())).max(0.0F);
+      (vx.abs() / wz_safe)).max(0.0F);
 
     data.costs += (((out_of_max_bounds_motion + out_of_min_bounds_motion +
       out_of_turning_rad_motion) * data.model_dt).rowwise().sum() * weight_).pow(power_);

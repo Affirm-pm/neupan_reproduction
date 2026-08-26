@@ -71,6 +71,18 @@ public:
     int apply_constraints_calls{0};
   };
 
+  class RecordingAckermannMotionModel : public AckermannMotionModel
+  {
+  public:
+    void applyConstraints(models::ControlSequence & control_sequence) override
+    {
+      ++apply_constraints_calls;
+      AckermannMotionModel::applyConstraints(control_sequence);
+    }
+
+    int apply_constraints_calls{0};
+  };
+
   void setKnownControlSequence()
   {
     settings_.time_steps = 3;
@@ -268,6 +280,27 @@ public:
     control_sequence_.wz(0) = requested_wz;
   }
 
+  std::shared_ptr<RecordingAckermannMotionModel> setRecordingAckermannControl(
+    float vx, float requested_wz, float previous_wz)
+  {
+    settings_.time_steps = 1;
+    settings_.model_dt = 0.1F;
+    settings_.constraints = {2.0F, -2.0F, 0.0F, 2.0F,
+      -10.0F, 10.0F, -1.0F, 1.0F, 1.0F};
+    auto motion_model = std::make_shared<RecordingAckermannMotionModel>();
+    motion_model->setConstraints(settings_.constraints, settings_.model_dt);
+    motion_model_ = motion_model;
+    state_.speed.linear.x = vx;
+    state_.speed.angular.z = previous_wz;
+    control_sequence_.vx.resize(1);
+    control_sequence_.vy.resize(1);
+    control_sequence_.wz.resize(1);
+    control_sequence_.vx(0) = vx;
+    control_sequence_.vy(0) = 0.0F;
+    control_sequence_.wz(0) = requested_wz;
+    return motion_model;
+  }
+
   void projectCandidateBatch()
   {
     updateInitialStateVelocities(state_);
@@ -326,7 +359,7 @@ TEST(OptimizerResultTest, CandidatePropagationUsesMotionModelPredict)
   EXPECT_EQ(motion_model->predict_calls, 1);
 }
 
-TEST(OptimizerResultTest, NominalProjectionUsesMotionModelConstraints)
+TEST(OptimizerResultTest, NominalProjectionUsesMotionModelConstraintsBeforeAndAfterDynamics)
 {
   TestOptimizer optimizer;
   optimizer.setKnownControlSequence();
@@ -334,7 +367,7 @@ TEST(OptimizerResultTest, NominalProjectionUsesMotionModelConstraints)
 
   optimizer.projectKnownSequence();
 
-  EXPECT_EQ(motion_model->apply_constraints_calls, 1);
+  EXPECT_EQ(motion_model->apply_constraints_calls, 2);
 }
 
 TEST(OptimizerResultTest, ReverseAccelerationUsesTravelDirection)
@@ -483,6 +516,17 @@ TEST(OptimizerResultTest, AckermannEmptyIntersectionPrioritizesTurningRadius)
 
   EXPECT_FLOAT_EQ(result.controls(0, 0), 0.0F);
   EXPECT_FLOAT_EQ(result.controls(0, 1), 0.0F);
+}
+
+TEST(OptimizerResultTest, AckermannProjectionAppliesSpecialtyConstraintsBeforeAndAfterDynamics)
+{
+  TestOptimizer optimizer;
+  const auto motion_model = optimizer.setRecordingAckermannControl(0.1F, 1.0F, 0.4F);
+
+  const auto result = optimizer.projectKnownSequence();
+
+  EXPECT_NEAR(result.controls(0, 1), 0.5F, 1e-6F);
+  EXPECT_EQ(motion_model->apply_constraints_calls, 2);
 }
 
 TEST(OptimizerResultTest, IntegratesPositionUsingYawBeforeCurrentTurn)

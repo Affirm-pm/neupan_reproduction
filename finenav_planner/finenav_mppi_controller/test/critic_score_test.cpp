@@ -133,6 +133,24 @@ TEST(CriticScoreTest, ConstraintCriticPenalizesAckermannTurningRadius) {
     expectPositiveCosts(fixture);
 }
 
+TEST(CriticScoreTest, ConstraintCriticKeepsStationaryAckermannCostFinite) {
+    finenav_mppi_controller::Params params;
+    CriticTestData fixture;
+    fixture.data.motion_model = std::make_shared<AckermannMotionModel>();
+    fixture.state.vx.setZero();
+    fixture.state.wz.setZero();
+    TestMapView map_view;
+    ConstraintCritic critic;
+    critic.initialize(params);
+
+    critic.score(fixture.data, map_view);
+
+    for (Eigen::Index i = 0; i < fixture.costs.size(); ++i) {
+      EXPECT_TRUE(std::isfinite(fixture.costs(i)));
+      EXPECT_NEAR(fixture.costs(i), 0.32F, 1e-6F);
+    }
+}
+
 TEST(CriticScoreTest, PreferForwardCriticPenalizesReverseMotionNearGoal) {
     finenav_mppi_controller::Params params;
     CriticTestData fixture;

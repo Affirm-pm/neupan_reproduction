@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -32,9 +33,11 @@
 #include "rclcpp/rclcpp.hpp"
 
 
+#include "finenav_interface/test_map_params.hpp"
+#include "finenav_interface/test_planner_params.hpp"
 
-#include "finenav_core/plan/planner_concept.hpp"
-#include "finenav_core/algo_configurator.hpp"
+#include "finenav_core/concepts.hpp"
+#include "finenav_util/algo_configurator.hpp"
 #include "finenav_mppi_controller/finenav_mppi_controller_params.hpp"
 #include "finenav_mppi_controller/optimizer.hpp"
 #include "finenav_mppi_controller/map_view_def.hpp"
@@ -58,13 +61,13 @@ public:
     */
     MPPIController() = default;
 
-    static constexpr finenav::core::IOProfile InputProfile = {
+    static constexpr finenav::IOProfile InputProfile = {
         .pose = true,
         .vel  = false,
         .accel= false,
         .time = false
     };
-    static constexpr finenav::core::IOProfile OutputProfile = {
+    static constexpr finenav::IOProfile OutputProfile = {
         .pose = true,
         .vel  = true,
         .accel= false,
@@ -72,9 +75,10 @@ public:
     };
 
     using IMapView = nav2_mppi_controller::IMapView;
-    using Context = finenav::core::PlanningContext<MPPIController>;
+    using Context = finenav::PlanningContext<MPPIController>;
     using ConfigType = finenav_mppi_controller::Params;
     void configure(const ConfigType& params) {              //应该传入参数 因测试先去除
+        std::lock_guard<std::mutex> lock(operation_mutex_);
         if (params.CostCritic.num_threads <= 0 || params.CostCritic.chunk_size <= 0) {
             throw std::invalid_argument(
                 "CostCritic.num_threads and CostCritic.chunk_size must be greater than zero");
@@ -157,14 +161,8 @@ public:
        //TODO:初始化过程需要完善
     }
 
-
      std::optional<finenav::DataPacket<OutputProfile>>plan(const finenav::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
-     std::optional<finenav::core::Trajectory<OutputProfile>>plan(const finenav::core::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
-        using Clock = std::chrono::steady_clock;
-        using Ms    = std::chrono::duration<double, std::milli>;
-        const auto t_plan_start = Clock::now();
-
-        finenav::core::Trajectory<OutputProfile> traj;
+        std::lock_guard<std::mutex> lock(operation_mutex_);
         if (ctx.ref_traj.poses.empty()) {
             return std::nullopt;
         }
@@ -178,31 +176,15 @@ public:
         this->setPlan(path);
 
         geometry_msgs::msg::PoseStamped start_pose_stamped;
-        start_pose_stamped.pose.position.x = robot_state.position.x();
-        start_pose_stamped.pose.position.y = robot_state.position.y();
-        start_pose_stamped.pose.position.z = robot_state.position.z();
-        start_pose_stamped.pose.orientation.w = robot_state.orientation.w();
-        start_pose_stamped.pose.orientation.x = robot_state.orientation.x();
-        start_pose_stamped.pose.orientation.y = robot_state.orientation.y();
-        start_pose_stamped.pose.orientation.z = robot_state.orientation.z();
+        start_pose_stamped.pose = robot_state.pose;
         start_pose_stamped.header.stamp = rclcpp::Clock().now();
         start_pose_stamped.header.frame_id = "map";
 
-        geometry_msgs::msg::Twist twist;
-        twist.linear.x  = robot_state.linear_velocity.x();
-        twist.linear.y  = robot_state.linear_velocity.y();
-        twist.linear.z  = robot_state.linear_velocity.z();
-        twist.angular.x = robot_state.angular_velocity.x();
-        twist.angular.y = robot_state.angular_velocity.y();
-        twist.angular.z = robot_state.angular_velocity.z();
-
-        const auto t_optimize_start= Clock::now();
         auto optimization_result = computeVelocityCommands(
             start_pose_stamped,
-            twist,
+            robot_state.twist,  // 直接使用当前实际速度
             map_view
             );
-        const double ms_optimize = Ms(Clock::now() - t_optimize_start).count();
 
         if (visualizer_enabled_) {
             visualizer_.submit(
@@ -241,17 +223,6 @@ public:
         traj.twists.push_back(twist);
     }
 
-    const double ms_total = Ms(Clock::now() - t_plan_start).count();
-    {
-        static rclcpp::Clock throttle_clk{RCL_STEADY_TIME};
-        RCLCPP_INFO_THROTTLE(
-            rclcpp::get_logger("MPPIController"), throttle_clk, 2000,
-            "\n[MPPIController] plan() timing\n"
-            "  evalControl (optimize) : %7.2f ms\n"
-            "  total plan()           : %7.2f ms",
-            ms_optimize, ms_total);
-    }
-
     return traj;
 }
 
@@ -269,6 +240,7 @@ public:
    *        a zero warm-start, independent of any previous planning direction.
    */
   void reset() {
+      std::lock_guard<std::mutex> lock(operation_mutex_);
       // Called by ControlLayer at the episode boundary on the same worker as plan().
       const auto generation = visualization_generation_.fetch_add(
         1, std::memory_order_relaxed) + 1;
@@ -343,6 +315,9 @@ protected:
     std::atomic<std::uint64_t> visualization_generation_{0};
     Optimizer optimizer_;
   std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
+    // Serialize parameter reconfiguration, episode reset, and planning so
+    // optimizer-owned objects are never rebuilt while plan() is using them.
+    std::mutex operation_mutex_;
 
 };
 
