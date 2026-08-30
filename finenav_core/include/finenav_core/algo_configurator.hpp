@@ -21,7 +21,7 @@ namespace finenav::core {
  * The specialisation tells the framework:
  *   - its parameter namespace
  *   - how to create a ParamListener and call algo.configure()
- *   - how to create a pollable handle for thread-safe dynamic parameter updates
+ *   - how to create a pollable handle for thread-sahfe dynamic parameter updates
  *
  * Use FINENAV_REGISTER_ALGO_CONFIG rather than writing a specialisation by hand.
  *

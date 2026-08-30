@@ -9,9 +9,9 @@
 #include <geometry_msgs/msg/twist.hpp>
 
 #include "finenav_core/algo_configurator.hpp"
-#include "finenav_core/math_def.hpp"
+#include "finenav_core/math_def.hpp" // TODO： 应该丢掉
 #include "finenav_core/plan/planner_concept.hpp"
-#include "finenav_core/plan/trajectory.hpp"
+#include "finenav_core/plan/trajectory.hpp" // TODO： 应该合并
 
 #include "finenav_example/dummy_planner_params.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
@@ -65,7 +65,7 @@ public:
     // Declare these to receive the logger and visualizer automatically.
     // The framework detects them via if constexpr — no extra registration needed.
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
-    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; }
+    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; } // TODO：这里的签名怎么不是const
 
     void reset();
 
