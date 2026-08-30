@@ -20,8 +20,8 @@ namespace finenav::core {
 // Constructor
 // ==============================================================================
 
-template <Planner... Planners>
-ControlLayer<Planners...>::ControlLayer(
+template <Planner PlannerT>
+ControlLayer<PlannerT>::ControlLayer(
     rclcpp::Node::SharedPtr node,
     const std::string& layer_name,
     ExecutionPolicyVariant policy,
@@ -35,13 +35,9 @@ ControlLayer<Planners...>::ControlLayer(
     pnode_thread_ = std::move(infra.pnode_thread);
     worker_       = std::move(infra.worker);
 
-    std::apply([this](auto&... planners) {
-        ([this](auto& p) {
-            using T = std::decay_t<decltype(p)>;
-            FINENAV_LOG_INFO(pnode_->get_logger(), "Loading planner: {}", AlgoConfigurator<T>::name);
-            param_keeper_.keep_alive(AlgoConfigurator<T>::load(pnode_, p));
-        }(planners), ...);
-    }, planners_instance_);
+    FINENAV_LOG_INFO(pnode_->get_logger(), "Loading planner: {}", AlgoConfigurator<PlannerT>::name);
+    param_keeper_.keep_alive(AlgoConfigurator<PlannerT>::load(pnode_, planner_instance_));
+    planner_name_ = std::string{AlgoConfigurator<PlannerT>::name};
 
     worker_thread_ = std::thread([this]() {
         while (rclcpp::ok() && !stop_execution_) {
@@ -53,8 +49,8 @@ ControlLayer<Planners...>::ControlLayer(
     });
 }
 
-template <Planner... Planners>
-ControlLayer<Planners...>::~ControlLayer() {
+template <Planner PlannerT>
+ControlLayer<PlannerT>::~ControlLayer() {
     stop_execution_ = true;
     if (worker_thread_.joinable()) worker_thread_.join();
 }
@@ -63,8 +59,8 @@ ControlLayer<Planners...>::~ControlLayer() {
 // IControlLayer
 // ==============================================================================
 
-template <Planner... Planners>
-void ControlLayer<Planners...>::connectFrom(const std::string& parent_topic) {
+template <Planner PlannerT>
+void ControlLayer<PlannerT>::connectFrom(const std::string& parent_topic) {
     setInputTopic(parent_topic);
     setupDataPorts();
 }
@@ -73,13 +69,13 @@ void ControlLayer<Planners...>::connectFrom(const std::string& parent_topic) {
 // Topic / Port Setup
 // ==============================================================================
 
-template <Planner... Planners>
-void ControlLayer<Planners...>::setInputTopic(const std::string& topic) {
+template <Planner PlannerT>
+void ControlLayer<PlannerT>::setInputTopic(const std::string& topic) {
     input_topic_ = topic;
 }
 
-template <Planner... Planners>
-void ControlLayer<Planners...>::setupDataPorts() {
+template <Planner PlannerT>
+void ControlLayer<PlannerT>::setupDataPorts() {
     if (!input_topic_.empty()) {
         plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::TaskFeedback>(
             input_topic_, 10,
@@ -93,8 +89,8 @@ void ControlLayer<Planners...>::setupDataPorts() {
 // Utilities
 // ==============================================================================
 
-template <Planner... Planners>
-void ControlLayer<Planners...>::PlanRefCallback(
+template <Planner PlannerT>
+void ControlLayer<PlannerT>::PlanRefCallback(
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg)
 {
     std::lock_guard<std::mutex> lock(plan_ref_mutex_);
@@ -105,24 +101,15 @@ void ControlLayer<Planners...>::PlanRefCallback(
 // Shared Helpers
 // ==============================================================================
 
-template <Planner... Planners>
-void ControlLayer<Planners...>::resetActivePlanner() {
-    std::apply([&](auto&... planners) {
-        ([&](auto& p) {
-            using PlannerT = std::decay_t<decltype(p)>;
-            if (AlgoConfigurator<PlannerT>::name == active_planner_id_) {
-                if constexpr (requires { p.reset(); }) {
-                    p.reset();
-                    FINENAV_LOG_INFO(pnode_->get_logger(),
-                        "Planner '{}' reset at episode boundary.", active_planner_id_);
-                }
-            }
-        }(planners), ...);
-    }, planners_instance_);
+template <Planner PlannerT>
+void ControlLayer<PlannerT>::resetPlanner() {
+    if constexpr (requires { planner_instance_.reset(); }) {
+        planner_instance_.reset();
+    }
 }
 
-template <Planner... Planners>
-bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
+template <Planner PlannerT>
+bool ControlLayer<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     if (!map_view_factory_) {
         FINENAV_LOG_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
         return false;
@@ -151,74 +138,40 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
 
     param_keeper_.pollAll(); // Apply pending dynamic parameter updates
 
-    bool plan_success  = false;
-    bool planner_found = false;
+    bool plan_success = false;
     finenav_interfaces::msg::Trajectory output_traj_msg;
 
-    auto try_run_planner = [&](auto& planner) -> bool {
-        using PlannerT = std::decay_t<decltype(planner)>;
-        if (AlgoConfigurator<PlannerT>::name != active_planner_id_) {
-            return false;
-        }
+    PrePlanContext pre_ctx{
+        planner_name_, current_robot_state, goal_pose, current_ref_msg};
 
-        auto opt_ctx = [&]() -> std::optional<PlanningContext<PlannerT>> {
-            PrePlanContext pre_ctx{
-                active_planner_id_, current_robot_state, goal_pose, current_ref_msg};
-
-            if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
-                return std::nullopt;
-            }
-
-            PlanningContext<PlannerT> ctx;
-            ctx.robot_state = current_robot_state;
-            ctx.goal_pose = pre_ctx.goal_pose;
-            fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj);
-            return ctx;
-        }();
-
-        if (!opt_ctx.has_value()) {
-            return true; // 短路遍历
-        }
-
-        auto& ctx   = opt_ctx.value();
-        auto  bound = map_view_factory_(active_planner_id_);
-
-        using ExpectedPtrType = std::shared_ptr<typename PlannerT::IMapView>;
-        if (auto* ptr = std::get_if<ExpectedPtrType>(&bound.view_variant)) {
-            if (*ptr) {
-                // bound.lock_guard 持有读锁，plan() 调用期间地图不被写入
-                auto result = planner.plan(ctx, **ptr);
-                if (result.has_value()) {
-                    plan_success = true;
-                    toROSMsg(std::move(result.value()), output_traj_msg);
-                } else {
-                    FINENAV_LOG_WARN(pnode_->get_logger(), "plan() returned nullopt.");
-                }
-            } else {
-                FINENAV_LOG_ERROR(pnode_->get_logger(),
-                    "MapView ptr is null for planner '{}'.", active_planner_id_);
-            }
-        } else {
-            FINENAV_LOG_ERROR(pnode_->get_logger(),
-                "MapView type mismatch for planner '{}'.", active_planner_id_);
-        }
-
-        if (on_post_plan_) {
-            PostPlanContext post_ctx{active_planner_id_, plan_success, output_traj_msg};
-            plan_success = on_post_plan_(post_ctx);
-        }
-
-        return true; // 短路遍历
-    };
-
-    std::apply([&](auto&... planners) {
-        planner_found = (try_run_planner(planners) || ...);
-    }, planners_instance_);
-
-    if (!planner_found) {
-        FINENAV_LOG_ERROR(pnode_->get_logger(),
-            "Planner '{}' not found.", active_planner_id_);
+    if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
         return false;
+    }
+
+    PlanningContext<PlannerT> ctx;
+    ctx.robot_state = current_robot_state;
+    ctx.goal_pose = pre_ctx.goal_pose;
+    fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj);
+
+    auto bound = map_view_factory_();
+
+    if (bound.view) {
+        // bound.lock_guard 持有读锁，plan() 调用期间地图不被写入
+        auto result = planner_instance_.plan(ctx, *bound.view);
+        if (result.has_value()) {
+            plan_success = true;
+            toROSMsg(std::move(result.value()), output_traj_msg);
+        } else {
+            FINENAV_LOG_WARN(pnode_->get_logger(), "plan() returned nullopt.");
+        }
+    } else {
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
+            "MapView ptr is null for planner '{}'.", planner_name_);
+    }
+
+    if (on_post_plan_) {
+        PostPlanContext post_ctx{planner_name_, plan_success, output_traj_msg};
+        plan_success = on_post_plan_(post_ctx);
     }
 
     if (plan_success) {
@@ -233,11 +186,10 @@ bool ControlLayer<Planners...>::planOnce(geometry_msgs::msg::Pose goal_pose) {
 // execute() — Episode Entry-Point
 // ==============================================================================
 
-template <Planner... Planners>
-void ControlLayer<Planners...>::execute() {
+template <Planner PlannerT>
+void ControlLayer<PlannerT>::execute() {
     auto goal = worker_->latestGoal();
     if (!goal) return;
-    active_planner_id_ = goal->planner_id;
     worker_->ackGoal();  // consume the goal
 
     // ── Wait for the localizer to initialise before any Policy runs ─────────
@@ -253,7 +205,7 @@ void ControlLayer<Planners...>::execute() {
     }
 
     FINENAV_LOG_INFO(pnode_->get_logger(), "New goal received — starting episode.");
-    resetActivePlanner();
+    resetPlanner();
     std::visit([this](auto& p) { this->executeImpl(p); }, policy_);
 }
 
@@ -261,8 +213,8 @@ void ControlLayer<Planners...>::execute() {
 // executeImpl — SingleShotPolicy
 // ==============================================================================
 
-template <Planner... Planners>
-void ControlLayer<Planners...>::executeImpl(SingleShotPolicy&) {
+template <Planner PlannerT>
+void ControlLayer<PlannerT>::executeImpl(SingleShotPolicy&) {
     auto goal = worker_->latestGoal();
     if (!goal) return;
 
@@ -286,8 +238,8 @@ void ControlLayer<Planners...>::executeImpl(SingleShotPolicy&) {
 // executeImpl — ContinuousPolicy
 // ==============================================================================
 
-template <Planner... Planners>
-void ControlLayer<Planners...>::executeImpl(ContinuousPolicy& policy) {
+template <Planner PlannerT>
+void ControlLayer<PlannerT>::executeImpl(ContinuousPolicy& policy) {
     auto goal = worker_->latestGoal();
     if (!goal) return;
     auto goal_pose = goal->goal;
@@ -333,31 +285,31 @@ void ControlLayer<Planners...>::executeImpl(ContinuousPolicy& policy) {
 // bind_map_view
 // ==============================================================================
 
-template <Planner... Planners>
+template <Planner PlannerT>
 template <typename MapT, typename BuilderFn>
-void ControlLayer<Planners...>::bind_map_view(
+void ControlLayer<PlannerT>::bind_map_view(
     std::shared_ptr<MapServer<MapT>> server,
     BuilderFn&& builder)
 {
     static_assert(Map<MapT>, // Use `static_assert` instead of `requires` to prevent clangd error.
         "MapT must satisfy Map.");
-    static_assert(std::is_invocable_v<BuilderFn, const MapT&, const std::string&>,
-        "BuilderFn must be callable with (const MapT&, const std::string& active_planner_id).");
-    static_assert(std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&, const std::string&>,
-                                      MapViewsVariant>,
-        "BuilderFn must return a type convertible to MapViewsVariant.");
-    std::function<MapViewsVariant(const MapT&, const std::string&)> erased_builder =
+    static_assert(std::is_invocable_v<BuilderFn, const MapT&>,
+        "BuilderFn must be callable with (const MapT&).");
+    static_assert(std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>,
+                                      MapViewPtr>,
+        "BuilderFn must return a type convertible to MapViewPtr.");
+    std::function<MapViewPtr(const MapT&)> erased_builder =
         std::forward<BuilderFn>(builder);
     std::weak_ptr<MapServer<MapT>> weak_server = server;
 
     map_view_factory_ = [weak_server,
                          erased_builder = std::move(erased_builder)]
-                        (const std::string& active_planner_id) -> BoundMapView {
+                        () -> BoundMapView {
         auto srv = weak_server.lock();
         if (!srv) { return BoundMapView{}; }
         auto locked = std::make_shared<LockedMapRO<MapT>>(srv->getLockedReadView());
-        MapViewsVariant view_variant = erased_builder(locked->get(), active_planner_id);
-        return BoundMapView{std::move(view_variant), std::move(locked)};
+        MapViewPtr view = erased_builder(locked->get());
+        return BoundMapView{std::move(view), std::move(locked)};
     };
 }
 

@@ -50,7 +50,7 @@ int main(int argc, char** argv) {
     auto layer = engine->createLayer<DummyPlanner>("my_layer", core::ContinuousPolicy{10.0});
 
     // 3. Bind map to layer
-    layer->bind_map_view(map_server, [](const DummyMap& map_data, const std::string&) {
+    layer->bind_map_view(map_server, [](const DummyMap& map_data) {
             return std::make_shared<ASimpleMapView>(map_data);
     });
 

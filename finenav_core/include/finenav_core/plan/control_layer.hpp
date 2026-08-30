@@ -14,7 +14,6 @@
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
-#include "finenav_core/plan/generate_map_views_variant.hpp"
 #include "finenav_core/param_handle_keeper.hpp"
 #include "finenav_core/plan/i_control_layer.hpp"
 #include "finenav_util/ros/task_channel.hpp"
@@ -25,20 +24,20 @@ namespace finenav::core {
 template <Map MapT> class MapServer;  // full definition in map_server.hpp
 
 /**
- * @brief ControlLayer — binds a set of planners to a MapServer under an execution policy.
+ * @brief ControlLayer — binds a single planner to a MapServer under an execution policy.
  *
- * Each ControlLayer runs one planner at a time (selected at runtime by active_planner_id).
- * It owns the planner instances, manages the ROS action server, and orchestrates the
- * plan-once flow: pre-callback → read-lock MapView → planner.plan() → post-callback.
+ * Each ControlLayer owns exactly one planner instance and runs it under the configured
+ * execution policy. It manages the ROS action server and orchestrates the plan-once flow:
+ * pre-callback → read-lock MapView → planner.plan() → post-callback.
  *
- * @tparam Planners  The planner types supported by this layer (one or more).
+ * @tparam PlannerT  The planner type owned by this layer.
  */
-template <Planner... Planners>
+template <Planner PlannerT>
 class ControlLayer : public IControlLayer {
 public:
     // ── Types ──────────────────────────────────────────────────────────────
 
-    using MapViewsVariant = GenerateMapViewsVariant<Planners...>;
+    using MapViewPtr = std::shared_ptr<typename PlannerT::IMapView>;
     using PrePlanCallback = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback = std::function<bool(PostPlanContext&)>;
 
@@ -62,14 +61,13 @@ public:
     void setupDataPorts();
 
     /**
-     * @brief Bind a MapServer to this layer so planners can read the map.
+     * @brief Bind a MapServer to this layer so the planner can read the map.
      *
      * At every plan() call the framework acquires a read-lock from @p server,
-     * passes the locked const MapT& to @p builder together with the currently
-     * active planner name, and holds the lock until plan() returns via
-     * BoundMapView::lock_guard.
+     * passes the locked const MapT& to @p builder, and holds the lock until
+     * plan() returns via BoundMapView::lock_guard.
      *
-     * @param builder  (const MapT&, const std::string& active_planner_id) → MapViewsVariant
+     * @param builder  (const MapT&) → MapViewPtr
      * @tparam MapT      Must satisfy Map.
      */
     template <typename MapT, typename BuilderFn>
@@ -78,17 +76,15 @@ public:
     void set_on_pre_plan(PrePlanCallback cb)   { on_pre_plan_  = std::move(cb); }
     void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
 
-    const std::string& get_active_planner_id() const { return active_planner_id_; }
-
 private:
     // ── Internal types ─────────────────────────────────────────────────────
 
     struct BoundMapView {
-        MapViewsVariant        view_variant;
-        std::shared_ptr<void>  lock_guard;
+        MapViewPtr            view;
+        std::shared_ptr<void> lock_guard;
     };
 
-    using MapViewFactory = std::function<BoundMapView(const std::string& active_planner_id)>;
+    using MapViewFactory = std::function<BoundMapView()>;
 
     // ── Methods ────────────────────────────────────────────────────────────
 
@@ -105,8 +101,8 @@ private:
     void executeImpl(SingleShotPolicy& policy);
     void executeImpl(ContinuousPolicy&   policy);
 
-    /// Reset each planner whose AlgoConfigurator name matches active_planner_id_.
-    void resetActivePlanner();
+    /// Reset the planner at an episode boundary.
+    void resetPlanner();
 
     /**
      * @brief Run one planning step: pre-cb → read-lock MapView → plan() → post-cb.
@@ -129,9 +125,9 @@ private:
 
     // ── Planner state ──────────────────────────────────────────────────────
 
-    std::tuple<Planners...> planners_instance_;
-    std::string               active_planner_id_;
-    ExecutionPolicyVariant   policy_;
+    PlannerT                planner_instance_;
+    std::string             planner_name_;
+    ExecutionPolicyVariant  policy_;
 
     // ── Callbacks ──────────────────────────────────────────────────────────
 

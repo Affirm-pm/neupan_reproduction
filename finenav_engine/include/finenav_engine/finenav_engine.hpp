@@ -63,12 +63,12 @@ public:
 
     // ── Factory: layer ────────────────────────────────────────────────────
 
-    template <finenav::core::Planner... Planners, typename PolicyT = finenav::core::SingleShotPolicy>
-    std::shared_ptr<finenav::core::ControlLayer<Planners...>>
+    template <finenav::core::Planner PlannerT, typename PolicyT = finenav::core::SingleShotPolicy>
+    std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
     createLayer(const std::string& name, PolicyT policy = {});
 
-    template <finenav::core::Planner... Planners>
-    [[nodiscard]] std::shared_ptr<finenav::core::ControlLayer<Planners...>>
+    template <finenav::core::Planner PlannerT>
+    [[nodiscard]] std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
     getControlLayer(const std::string& name);
 
     bool removeControlLayer(const std::string& name);
@@ -140,22 +140,22 @@ std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(cons
 //  Factory: layer
 // ══════════════════════════════════════════════════════════════════════════════
 
-template <finenav::core::Planner... Planners, typename PolicyT>
-std::shared_ptr<finenav::core::ControlLayer<Planners...>>
+template <finenav::core::Planner PlannerT, typename PolicyT>
+std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
 FineNavEngine::createLayer(const std::string& name, PolicyT policy) {
     navigator_->master().manageLayer(name);
-    auto layer = std::make_shared<finenav::core::ControlLayer<Planners...>>(
+    auto layer = std::make_shared<finenav::core::ControlLayer<PlannerT>>(
         node_, name, std::move(policy), localizer_.get());
     layers_[name] = layer;
     return layer;
 }
 
-template <finenav::core::Planner... Planners>
-std::shared_ptr<finenav::core::ControlLayer<Planners...>>
+template <finenav::core::Planner PlannerT>
+std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
 FineNavEngine::getControlLayer(const std::string& name) {
     auto it = layers_.find(name);
     if (it == layers_.end()) return nullptr;
-    return std::dynamic_pointer_cast<finenav::core::ControlLayer<Planners...>>(it->second);
+    return std::dynamic_pointer_cast<finenav::core::ControlLayer<PlannerT>>(it->second);
 }
 
 }  // namespace finenav
