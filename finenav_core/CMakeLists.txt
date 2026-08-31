@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 project(finenav_core)
 
+# TODO: 设置编译选项和Cpp标准
 find_package(ament_cmake REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Eigen3 REQUIRED)

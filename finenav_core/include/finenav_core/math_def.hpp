@@ -8,6 +8,7 @@
 
 namespace finenav::core {
 
+// TODO：取缔。不做math_def，公用def目前只需要做 坐标系  WORLD_FIXED_FRAME, ROBOT_FRAME
 /**
  * @brief Math definition that used in FineNav-Engine
  */
