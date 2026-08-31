@@ -15,10 +15,20 @@
 
 #include <gtest/gtest.h>
 
+#include "finenav_visualizer/finenav_visualizer.hpp"
 #include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
 
 namespace
 {
+
+const visualization_msgs::msg::Marker * findMarker(
+  const visualization_msgs::msg::MarkerArray & markers, const std::string & ns)
+{
+  const auto it = std::find_if(
+    markers.markers.begin(), markers.markers.end(),
+    [&ns](const auto & marker) {return marker.ns == ns;});
+  return it == markers.markers.end() ? nullptr : &*it;
+}
 
 class TrajectoryVisualizerTest : public ::testing::Test
 {
@@ -26,8 +36,6 @@ protected:
   struct CapturedMessages
   {
     std::shared_ptr<visualization_msgs::msg::MarkerArray> markers;
-    std::shared_ptr<nav_msgs::msg::Path> optimal;
-    std::shared_ptr<nav_msgs::msg::Path> reference;
   };
 
   static void SetUpTestSuite()
@@ -49,17 +57,17 @@ protected:
   void SetUp() override
   {
     node_ = std::make_shared<rclcpp::Node>("trajectory_visualizer_test_node");
+    framework_visualizer_ = std::make_shared<finenav::viz::FineNavVisualizer>(node_);
     config_ = makeConfig();
     const auto suffix = std::to_string(next_topic_id_.fetch_add(1));
     config_.trajectory_topic += suffix;
-    config_.optimal_path_topic += suffix;
-    config_.reference_path_topic += suffix;
-    visualizer_.configure(node_, config_);
+    visualizer_.configure(*framework_visualizer_, config_);
   }
 
   void TearDown() override
   {
     visualizer_.reset();
+    framework_visualizer_.reset();
     node_.reset();
   }
 
@@ -109,42 +117,31 @@ protected:
     const nav_msgs::msg::Path & reference)
   {
     CapturedMessages captured{
-      std::make_shared<visualization_msgs::msg::MarkerArray>(),
-      std::make_shared<nav_msgs::msg::Path>(),
-      std::make_shared<nav_msgs::msg::Path>()};
+      std::make_shared<visualization_msgs::msg::MarkerArray>()};
     auto marker_subscription = node_->create_subscription<visualization_msgs::msg::MarkerArray>(
       config_.trajectory_topic, rclcpp::QoS(10),
       [messages = captured.markers](visualization_msgs::msg::MarkerArray::SharedPtr message) {
         *messages = *message;
       });
-    auto optimal_subscription = node_->create_subscription<nav_msgs::msg::Path>(
-      config_.optimal_path_topic, rclcpp::QoS(10),
-      [messages = captured.optimal](nav_msgs::msg::Path::SharedPtr message) {
-        *messages = *message;
-      });
-    auto reference_subscription = node_->create_subscription<nav_msgs::msg::Path>(
-      config_.reference_path_topic, rclcpp::QoS(10),
-      [messages = captured.reference](nav_msgs::msg::Path::SharedPtr message) {
-        *messages = *message;
-      });
-
     visualizer_.submit(candidates, breakdown, optimal, reference, 42);
 
     for (int attempt = 0; attempt < 100; ++attempt) {
       rclcpp::spin_some(node_);
-      if (!captured.markers->markers.empty() && !captured.optimal->poses.empty()) {
+      const auto has_optimal = std::any_of(
+        captured.markers->markers.begin(), captured.markers->markers.end(),
+        [](const auto & marker) {return marker.ns == "optimal_trajectory";});
+      if (has_optimal) {
         break;
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     (void)marker_subscription;
-    (void)optimal_subscription;
-    (void)reference_subscription;
     return captured;
   }
 
   mppi::VisualizerConfig config_;
   rclcpp::Node::SharedPtr node_;
+  std::shared_ptr<finenav::viz::FineNavVisualizer> framework_visualizer_;
   mppi::TrajectoryVisualizer visualizer_;
   inline static std::atomic<std::uint64_t> next_topic_id_{0};
 };
@@ -155,9 +152,8 @@ TEST_F(TrajectoryVisualizerTest, CandidateMarkersStartWithDeleteAllAndDownsample
     makeCandidates(), makeBreakdown(), mppi::models::BatchArray::Ones(3, 3),
     nav_msgs::msg::Path{});
 
-  ASSERT_EQ(captured.markers->markers.size(), 5U);
-  EXPECT_EQ(captured.markers->markers.front().action, visualization_msgs::msg::Marker::DELETEALL);
-  for (std::size_t index = 1; index < 4; ++index) {
+  ASSERT_EQ(captured.markers->markers.size(), 4U);
+  for (std::size_t index = 0; index < 3; ++index) {
     const auto & marker = captured.markers->markers[index];
     EXPECT_EQ(marker.header.frame_id, "map");
     EXPECT_EQ(marker.ns, "candidate_trajectories");
@@ -165,19 +161,21 @@ TEST_F(TrajectoryVisualizerTest, CandidateMarkersStartWithDeleteAllAndDownsample
     EXPECT_EQ(marker.points.size(), 3U);
   }
   EXPECT_EQ(captured.markers->markers.back().ns, "optimal_trajectory");
+  EXPECT_EQ(captured.markers->markers.back().type, visualization_msgs::msg::Marker::LINE_STRIP);
 }
 
 TEST_F(TrajectoryVisualizerTest, CandidateMarkersRespectMaximumCount)
 {
   config_.max_trajectories = 2;
   visualizer_.reset();
-  visualizer_.configure(node_, config_);
+  visualizer_.configure(*framework_visualizer_, config_);
   const auto captured = capture(
     makeCandidates(), makeBreakdown(), mppi::models::BatchArray::Ones(3, 3),
     nav_msgs::msg::Path{});
 
-  ASSERT_EQ(captured.markers->markers.size(), 4U);
-  EXPECT_EQ(captured.markers->markers.front().action, visualization_msgs::msg::Marker::DELETEALL);
+  ASSERT_EQ(captured.markers->markers.size(), 3U);
+  EXPECT_EQ(captured.markers->markers[0].ns, "candidate_trajectories");
+  EXPECT_EQ(captured.markers->markers[1].ns, "candidate_trajectories");
   EXPECT_EQ(captured.markers->markers.back().ns, "optimal_trajectory");
 }
 
@@ -196,12 +194,17 @@ TEST_F(TrajectoryVisualizerTest, SubmitBuildsImmutableFrameBeforeSourceMutation)
   optimal.setConstant(-100.0F);
   reference.poses.clear();
 
-  ASSERT_GE(captured.markers->markers.size(), 2U);
-  EXPECT_FLOAT_EQ(captured.markers->markers[1].points.front().x, 0.0F);
-  ASSERT_EQ(captured.optimal->poses.size(), 3U);
-  EXPECT_FLOAT_EQ(captured.optimal->poses.front().pose.position.x, 1.0F);
-  ASSERT_EQ(captured.reference->poses.size(), 1U);
-  EXPECT_FLOAT_EQ(captured.reference->poses.front().pose.position.x, 4.0F);
+  const auto * candidate = findMarker(*captured.markers, "candidate_trajectories");
+  const auto * optimal_marker = findMarker(*captured.markers, "optimal_trajectory");
+  const auto * reference_marker = findMarker(*captured.markers, "reference_path");
+  ASSERT_NE(candidate, nullptr);
+  ASSERT_NE(optimal_marker, nullptr);
+  ASSERT_NE(reference_marker, nullptr);
+  EXPECT_FLOAT_EQ(candidate->points.front().x, 0.0F);
+  EXPECT_EQ(optimal_marker->points.size(), 3U);
+  EXPECT_FLOAT_EQ(optimal_marker->points.front().x, 1.0F);
+  ASSERT_EQ(reference_marker->points.size(), 1U);
+  EXPECT_FLOAT_EQ(reference_marker->points.front().x, 4.0F);
 }
 
 TEST_F(TrajectoryVisualizerTest, ZeroContributionUsesNeutralColor)
@@ -212,12 +215,12 @@ TEST_F(TrajectoryVisualizerTest, ZeroContributionUsesNeutralColor)
   const auto captured = capture(
     makeCandidates(), breakdown, mppi::models::BatchArray::Ones(3, 3), nav_msgs::msg::Path{});
 
-  ASSERT_GT(captured.markers->markers.size(), 1U);
-  const auto & marker = captured.markers->markers[1];
-  EXPECT_NEAR(marker.color.r, 0.5F, 1e-6F);
-  EXPECT_NEAR(marker.color.g, 0.5F, 1e-6F);
-  EXPECT_NEAR(marker.color.b, 0.5F, 1e-6F);
-  EXPECT_NEAR(marker.color.a, 0.4F, 1e-6F);
+  const auto * marker = findMarker(*captured.markers, "candidate_trajectories");
+  ASSERT_NE(marker, nullptr);
+  EXPECT_NEAR(marker->color.r, 0.5F, 1e-6F);
+  EXPECT_NEAR(marker->color.g, 0.5F, 1e-6F);
+  EXPECT_NEAR(marker->color.b, 0.5F, 1e-6F);
+  EXPECT_NEAR(marker->color.a, 0.4F, 1e-6F);
 }
 
 TEST_F(TrajectoryVisualizerTest, DominantCriticControlsDeterministicColorAndAlpha)
@@ -231,17 +234,15 @@ TEST_F(TrajectoryVisualizerTest, DominantCriticControlsDeterministicColorAndAlph
     makeCandidates(), breakdown, mppi::models::BatchArray::Ones(3, 3), nav_msgs::msg::Path{});
 
   ASSERT_GE(captured.markers->markers.size(), 4U);
-  const auto & path_follow_marker = captured.markers->markers[1];
-  EXPECT_NEAR(path_follow_marker.color.r, 0.58F, 1e-6F);
-  EXPECT_NEAR(path_follow_marker.color.g, 0.40F, 1e-6F);
-  EXPECT_NEAR(path_follow_marker.color.b, 0.74F, 1e-6F);
-  EXPECT_NEAR(path_follow_marker.color.a, 0.75F, 1e-6F);
+  EXPECT_NEAR(captured.markers->markers[0].color.r, 0.58F, 1e-6F);
+  EXPECT_NEAR(captured.markers->markers[0].color.g, 0.40F, 1e-6F);
+  EXPECT_NEAR(captured.markers->markers[0].color.b, 0.74F, 1e-6F);
+  EXPECT_NEAR(captured.markers->markers[0].color.a, 0.75F, 1e-6F);
 
-  const auto & cost_marker = captured.markers->markers[2];
-  EXPECT_NEAR(cost_marker.color.r, 0.12F, 1e-6F);
-  EXPECT_NEAR(cost_marker.color.g, 0.47F, 1e-6F);
-  EXPECT_NEAR(cost_marker.color.b, 0.71F, 1e-6F);
-  EXPECT_NEAR(cost_marker.color.a, 1.0F, 1e-6F);
+  EXPECT_NEAR(captured.markers->markers[1].color.r, 0.12F, 1e-6F);
+  EXPECT_NEAR(captured.markers->markers[1].color.g, 0.47F, 1e-6F);
+  EXPECT_NEAR(captured.markers->markers[1].color.b, 0.71F, 1e-6F);
+  EXPECT_NEAR(captured.markers->markers[1].color.a, 1.0F, 1e-6F);
 }
 
 TEST_F(TrajectoryVisualizerTest, NonFiniteContributionUsesCollisionColor)
@@ -251,12 +252,12 @@ TEST_F(TrajectoryVisualizerTest, NonFiniteContributionUsesCollisionColor)
   const auto captured = capture(
     makeCandidates(), breakdown, mppi::models::BatchArray::Ones(3, 3), nav_msgs::msg::Path{});
 
-  ASSERT_GT(captured.markers->markers.size(), 1U);
-  const auto & marker = captured.markers->markers[1];
-  EXPECT_NEAR(marker.color.r, 1.0F, 1e-6F);
-  EXPECT_NEAR(marker.color.g, 0.1F, 1e-6F);
-  EXPECT_NEAR(marker.color.b, 0.1F, 1e-6F);
-  EXPECT_TRUE(std::isfinite(marker.color.a));
+  const auto * marker = findMarker(*captured.markers, "candidate_trajectories");
+  ASSERT_NE(marker, nullptr);
+  EXPECT_NEAR(marker->color.r, 1.0F, 1e-6F);
+  EXPECT_NEAR(marker->color.g, 0.1F, 1e-6F);
+  EXPECT_NEAR(marker->color.b, 0.1F, 1e-6F);
+  EXPECT_TRUE(std::isfinite(marker->color.a));
 }
 
 TEST_F(TrajectoryVisualizerTest, ExplicitCollisionFlagUsesCollisionColor)
@@ -266,15 +267,15 @@ TEST_F(TrajectoryVisualizerTest, ExplicitCollisionFlagUsesCollisionColor)
   const auto captured = capture(
     makeCandidates(), breakdown, mppi::models::BatchArray::Ones(3, 3), nav_msgs::msg::Path{});
 
-  ASSERT_GT(captured.markers->markers.size(), 1U);
-  const auto & marker = captured.markers->markers[1];
-  EXPECT_NEAR(marker.color.r, 1.0F, 1e-6F);
-  EXPECT_NEAR(marker.color.g, 0.1F, 1e-6F);
-  EXPECT_NEAR(marker.color.b, 0.1F, 1e-6F);
-  EXPECT_FLOAT_EQ(marker.color.a, 1.0F);
+  const auto * marker = findMarker(*captured.markers, "candidate_trajectories");
+  ASSERT_NE(marker, nullptr);
+  EXPECT_NEAR(marker->color.r, 1.0F, 1e-6F);
+  EXPECT_NEAR(marker->color.g, 0.1F, 1e-6F);
+  EXPECT_NEAR(marker->color.b, 0.1F, 1e-6F);
+  EXPECT_FLOAT_EQ(marker->color.a, 1.0F);
 }
 
-TEST_F(TrajectoryVisualizerTest, ConvertsOptimalTrajectoryToZeroStampedPath)
+TEST_F(TrajectoryVisualizerTest, ConvertsOptimalTrajectoryToLineStrip)
 {
   mppi::models::BatchArray optimal(3, 3);
   optimal << 1.0F, 2.0F, 0.1F,
@@ -283,18 +284,15 @@ TEST_F(TrajectoryVisualizerTest, ConvertsOptimalTrajectoryToZeroStampedPath)
   const auto captured = capture(
     makeCandidates(), makeBreakdown(), optimal, nav_msgs::msg::Path{});
 
-  ASSERT_EQ(captured.optimal->poses.size(), 3U);
-  EXPECT_EQ(captured.optimal->header.frame_id, "map");
-  EXPECT_EQ(captured.optimal->header.stamp.sec, 0);
-  EXPECT_EQ(captured.optimal->header.stamp.nanosec, 0U);
-  EXPECT_FLOAT_EQ(captured.optimal->poses[1].pose.position.x, 2.0F);
-  EXPECT_FLOAT_EQ(captured.optimal->poses[1].pose.position.y, 3.0F);
-  EXPECT_EQ(captured.optimal->poses[1].header.frame_id, "map");
-  EXPECT_EQ(captured.optimal->poses[1].header.stamp.sec, 0);
-  EXPECT_NEAR(captured.optimal->poses[1].pose.orientation.z, std::sin(0.1F), 1e-6F);
+  const auto * marker = findMarker(*captured.markers, "optimal_trajectory");
+  ASSERT_NE(marker, nullptr);
+  ASSERT_EQ(marker->points.size(), 3U);
+  EXPECT_EQ(marker->header.frame_id, "map");
+  EXPECT_FLOAT_EQ(marker->points[1].x, 2.0F);
+  EXPECT_FLOAT_EQ(marker->points[1].y, 3.0F);
 }
 
-TEST_F(TrajectoryVisualizerTest, ConvertsReferencePathToConfiguredFrame)
+TEST_F(TrajectoryVisualizerTest, ConvertsReferencePathToLineStrip)
 {
   nav_msgs::msg::Path reference;
   reference.header.frame_id = "odom";
@@ -306,13 +304,12 @@ TEST_F(TrajectoryVisualizerTest, ConvertsReferencePathToConfiguredFrame)
   const auto captured = capture(
     makeCandidates(), makeBreakdown(), mppi::models::BatchArray::Ones(3, 3), reference);
 
-  ASSERT_EQ(captured.reference->poses.size(), 1U);
-  EXPECT_EQ(captured.reference->header.frame_id, "map");
-  EXPECT_EQ(captured.reference->poses.front().header.frame_id, "map");
-  EXPECT_EQ(captured.reference->poses.front().header.stamp.sec, 0);
-  EXPECT_EQ(captured.reference->poses.front().header.stamp.nanosec, 0U);
-  EXPECT_FLOAT_EQ(captured.reference->poses.front().pose.position.x, 4.0F);
-  EXPECT_FLOAT_EQ(captured.reference->poses.front().pose.position.y, -2.0F);
+  const auto * marker = findMarker(*captured.markers, "reference_path");
+  ASSERT_NE(marker, nullptr);
+  ASSERT_EQ(marker->points.size(), 1U);
+  EXPECT_EQ(marker->header.frame_id, "map");
+  EXPECT_FLOAT_EQ(marker->points.front().x, 4.0F);
+  EXPECT_FLOAT_EQ(marker->points.front().y, -2.0F);
 }
 
 }  // namespace

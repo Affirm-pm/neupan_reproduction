@@ -29,6 +29,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
+#include "finenav_visualizer/finenav_visualizer.hpp"
 #include "finenav_mppi_controller/critic_data.hpp"
 #include "finenav_mppi_controller/models/trajectories.hpp"
 
@@ -88,17 +89,18 @@ private:
 };
 
 /**
- * @brief Publishes Nav2-style MPPI diagnostic trajectories for RViz.
+ * @brief Publishes MPPI diagnostic trajectories through FineNavVisualizer.
  *
- * The component owns publishers and, when configured, one latest-frame
- * publishing thread. It has no subscriptions, timers, or executor.
+ * The component owns one latest-frame publishing thread, while the framework
+ * visualizer owns the ROS node and publishers.
  */
 class TrajectoryVisualizer
 {
 public:
   ~TrajectoryVisualizer();
 
-  void configure(const rclcpp::Node::SharedPtr & node, const VisualizerConfig & config);
+  void configure(
+    finenav::viz::FineNavVisualizer & visualizer, const VisualizerConfig & config);
 
   void submit(
     const models::Trajectories & candidates,
@@ -142,9 +144,7 @@ private:
     const models::BatchArray & optimal,
     const VisualizerConfig & config);
 
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr trajectories_publisher_;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr optimal_path_publisher_;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr reference_path_publisher_;
+  finenav::viz::FineNavVisualizer * visualizer_{nullptr};
   VisualizerConfig config_;
   mutable std::mutex mutex_;
   std::mutex lifecycle_mutex_;

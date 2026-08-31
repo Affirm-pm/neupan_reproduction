@@ -90,9 +90,10 @@ Ackermann `ConstraintCritic` 对角速度使用 `max(abs(wz), 1e-6)`，避免静
 Ackermann 转弯半径，再按反馈速度和加速度限制逐点投影，最后再次应用专用运动学
 约束；当两类约束冲突时，以车辆运动学可行性优先。
 
-MPPI 控制器内部的 `configure()`、`reset()` 和 `plan()` 共用一把互斥锁。动态参数
-回调重建 Critic、Optimizer 或 Visualizer 时会等待当前规划完成，规划期间不会访问
-已被重建的对象；CostCritic 自身的 OpenMP dynamic 并行不受影响。
+MPPI 控制器自身不再为 `configure()`、`reset()` 和 `plan()` 加互斥锁。通过 FineNav
+框架运行时，`ControlLayer` 在同一个规划 worker 上依次完成参数轮询、episode reset 和
+`plan()`，因此这些入口不会并发执行；CostCritic 自身的 OpenMP dynamic 并行不受影响。
+直接绕过框架并从多个线程调用这些入口不属于支持的使用方式。
 
 ### Controller
  | Parameter                  | Type   | Definition                                                                                                                                                                                                                                                                                                           |
@@ -125,12 +126,12 @@ MPPI 控制器内部的 `configure()`、`reset()` 和 `plan()` 共用一把互�
 #### Trajectory Visualizer
  | Parameter                       | Type   | Definition                                                                                                      |
  | ------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
- | visualize                      | bool   | Default: false. Enable the optional publisher-only MPPI visualizer.                                            |
- | visualizer_node_name           | string | Default: finenav_mppi_visualizer. Private ROS node name owned by MPPI.                                         |
+ | visualize                      | bool   | Default: false. Enable optional MPPI trajectory visualization through the framework visualizer.                |
+ | visualizer_node_name           | string | Deprecated compatibility parameter. The framework injects the visualizer node.                                  |
  | visualizer_frame_id            | string | Default: map. Frame assigned to all visualization messages.                                                    |
- | visualizer_trajectory_topic    | string | Default: /mppi_debug/trajectories. Candidate MarkerArray topic.                                                |
- | visualizer_optimal_path_topic  | string | Default: /mppi_debug/optimal_trajectory. Optimized nav_msgs/Path topic.                                        |
- | visualizer_reference_path_topic| string | Default: /mppi_debug/reference_path. Reference nav_msgs/Path topic.                                            |
+ | visualizer_trajectory_topic    | string | Default: /mppi_debug/trajectories. MarkerArray topic containing candidate, optimal, and reference lines.       |
+ | visualizer_optimal_path_topic  | string | Deprecated compatibility parameter; optimal trajectory is included in the MarkerArray.                         |
+ | visualizer_reference_path_topic| string | Deprecated compatibility parameter; reference trajectory is included in the MarkerArray.                       |
  | visualizer_trajectory_step     | int    | Default: 5. Batch stride used to downsample candidate trajectories.                                            |
  | visualizer_time_step           | int    | Default: 3. Horizon stride used to downsample points in each candidate trajectory.                             |
  | visualizer_max_trajectories    | int    | Default: 500. Maximum candidate trajectories retained in one visualization frame.                            |
@@ -333,9 +334,7 @@ controller_server:
 
 | Topic                     | Type                             | Description                                                           |
 |---------------------------|----------------------------------|-----------------------------------------------------------------------|
-| `/mppi_debug/trajectories`       | `visualization_msgs/MarkerArray` | Downsampled candidate trajectories; the first marker is `DELETEALL` and the final marker is the orange optimal trajectory. |
-| `/mppi_debug/optimal_trajectory` | `nav_msgs/Path`                  | The optimized trajectory returned by MPPI.                             |
-| `/mppi_debug/reference_path`     | `nav_msgs/Path`                  | The current reference path in the configured visualization frame.      |
+| `/mppi_debug/trajectories`       | `visualization_msgs/MarkerArray` | Candidate, orange optimal, and cyan reference trajectories in one marker channel. |
 | `/mppi_path`                     | `nav_msgs/Path`                  | Existing demo bridge output; retained separately from MPPI diagnostics. |
 
 ### RViz manual check
@@ -345,15 +344,15 @@ to `true` in `finenav_demo/stvl_with_mppi/config/mppi_params.yaml`, then launch
 `stvl_with_mppi.launch.py` and add these RViz displays:
 
 1. `MarkerArray` on `/mppi_debug/trajectories`.
-2. `Path` on `/mppi_debug/optimal_trajectory`.
-3. `Path` on `/mppi_debug/reference_path`.
 
 Set RViz's fixed frame to `map`. Candidate markers are downsampled and colored by the dominant
 Critic contribution; the orange line is the optimal trajectory. MPPI builds an immutable
 downsampled frame and a capacity-one publisher queue keeps only the newest frame, so RViz
-publication never reads Optimizer-owned Eigen buffers. All three diagnostic streams use zero
-message timestamps intentionally, so they do not require `/clock`. Set `visualize: false`
-for normal deployment to avoid frame construction, the publisher thread, and Critic snapshots.
+publication never reads Optimizer-owned Eigen buffers. Immediately before publication,
+`MarkerViz` stamps every diagnostic marker with the current clock of the framework visualizer
+node. When `use_sim_time` is enabled, `/clock` and matching-time TF data must therefore be
+available to RViz. Set `visualize: false` for normal deployment to avoid frame construction, the
+publisher thread, and Critic snapshots.
 
 ## Notes to Users
 

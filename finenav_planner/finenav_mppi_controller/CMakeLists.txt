@@ -4,6 +4,7 @@ project(finenav_mppi_controller)
 find_package(ament_cmake REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(OpenMP REQUIRED)
 include_directories(
   include
 )
@@ -25,6 +26,7 @@ set(dependencies_pkgs
         finenav_collision_model
         finenav_util
         finenav_core
+        finenav_visualizer
         generate_parameter_library
         finenav_interfaces
 )
@@ -105,13 +107,15 @@ set(libraries mppi_controller mppi_critics)
 
 foreach(lib IN LISTS libraries)
   target_compile_options(${lib} PUBLIC -fconcepts)
-  target_link_libraries(${lib} Eigen3::Eigen finenav_mppi_controller_params)
+  if(lib STREQUAL "mppi_critics")
+    target_link_libraries(${lib} Eigen3::Eigen finenav_mppi_controller_params OpenMP::OpenMP_CXX)
+  else()
+    target_link_libraries(${lib} Eigen3::Eigen finenav_mppi_controller_params)
+  endif()
   target_include_directories(${lib} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-    ${xsimd_INCLUDE_DIRS}
   )
-  target_link_libraries(${lib} xtensor xtensor::optimize xtensor::use_xsimd finenav_mppi_controller_params )
   ament_target_dependencies(${lib} ${dependencies_pkgs})
 endforeach()
 

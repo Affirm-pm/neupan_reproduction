@@ -113,7 +113,7 @@ finenav_mppi_controller:
   visualizer_node_name:
     type: string
     default_value: "finenav_mppi_visualizer"
-    description: "Private ROS node name used by the MPPI trajectory visualizer"
+    description: "Deprecated compatibility parameter; the framework injects the visualizer node"
   visualizer_frame_id:
     type: string
     default_value: "map"
@@ -121,15 +121,15 @@ finenav_mppi_controller:
   visualizer_trajectory_topic:
     type: string
     default_value: "/mppi_debug/trajectories"
-    description: "MarkerArray topic for sampled trajectories"
+    description: "MarkerArray topic for sampled, optimal, and reference trajectories"
   visualizer_optimal_path_topic:
     type: string
     default_value: "/mppi_debug/optimal_trajectory"
-    description: "Path topic for the optimized trajectory"
+    description: "Deprecated compatibility parameter; optimal trajectory is published as a marker"
   visualizer_reference_path_topic:
     type: string
     default_value: "/mppi_debug/reference_path"
-    description: "Path topic for the current reference path"
+    description: "Deprecated compatibility parameter; reference trajectory is published as a marker"
   visualizer_trajectory_step:
     type: int
     default_value: 5

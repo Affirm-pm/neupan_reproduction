@@ -24,6 +24,7 @@
 #include <stdexcept>
 #include <thread>
 #include <utility>
+#include <vector>
 
 #include "builtin_interfaces/msg/time.hpp"
 #include "std_msgs/msg/color_rgba.hpp"
@@ -266,7 +267,13 @@ void LatestFrameChannel::restart()
 
 TrajectoryVisualizer::~TrajectoryVisualizer()
 {
-  reset();
+  // FineNavVisualizer is injected as a non-owning pointer. During framework
+  // teardown it may be released before the planner instance, so destruction
+  // must stop the worker without publishing through that pointer.
+  std::lock_guard<std::mutex> lifecycle_lock(lifecycle_mutex_);
+  stopWorker();
+  std::lock_guard<std::mutex> lock(mutex_);
+  visualizer_ = nullptr;
 }
 
 void TrajectoryVisualizer::stopWorker()
@@ -278,11 +285,8 @@ void TrajectoryVisualizer::stopWorker()
 }
 
 void TrajectoryVisualizer::configure(
-  const rclcpp::Node::SharedPtr & node, const VisualizerConfig & config)
+  finenav::viz::FineNavVisualizer & visualizer, const VisualizerConfig & config)
 {
-  if (!node) {
-    throw std::invalid_argument("TrajectoryVisualizer requires a ROS node");
-  }
   if (config.trajectory_step == 0 || config.time_step == 0) {
     throw std::invalid_argument("TrajectoryVisualizer sampling steps must be greater than zero");
   }
@@ -296,14 +300,10 @@ void TrajectoryVisualizer::configure(
 
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    visualizer_ = &visualizer;
     config_ = config;
-    trajectories_publisher_ = node->create_publisher<visualization_msgs::msg::MarkerArray>(
-      config_.trajectory_topic, rclcpp::QoS(1));
-    optimal_path_publisher_ = node->create_publisher<nav_msgs::msg::Path>(
-      config_.optimal_path_topic, rclcpp::QoS(1));
-    reference_path_publisher_ = node->create_publisher<nav_msgs::msg::Path>(
-      config_.reference_path_topic, rclcpp::QoS(1));
   }
+  visualizer.markers().setBaseFrame(config.frame_id);
 
   channel_.restart();
   publish_thread_ = std::thread(&TrajectoryVisualizer::run, this);
@@ -319,12 +319,13 @@ void TrajectoryVisualizer::submit(
   VisualizerConfig config;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (!trajectories_publisher_ || !optimal_path_publisher_ || !reference_path_publisher_) {
+    if (!visualizer_) {
       return;
     }
     config = config_;
   }
-  auto frame = buildFrame(candidates, critic_breakdown, optimal, reference_path, config, generation);
+  auto frame = buildFrame(
+    candidates, critic_breakdown, optimal, reference_path, config, generation);
   channel_.submit(std::move(frame));
 }
 
@@ -337,14 +338,12 @@ void TrajectoryVisualizer::clear(const std::uint64_t generation)
 void TrajectoryVisualizer::reset()
 {
   std::lock_guard<std::mutex> lifecycle_lock(lifecycle_mutex_);
+  stopWorker();
   if (rclcpp::ok()) {
     publishClear();
   }
-  stopWorker();
   std::lock_guard<std::mutex> lock(mutex_);
-  trajectories_publisher_.reset();
-  optimal_path_publisher_.reset();
-  reference_path_publisher_.reset();
+  visualizer_ = nullptr;
 }
 
 void TrajectoryVisualizer::run()
@@ -383,50 +382,64 @@ void TrajectoryVisualizer::run()
 
 void TrajectoryVisualizer::publishFrame(const VisualizationFrame & frame)
 {
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr trajectories_publisher;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr optimal_path_publisher;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr reference_path_publisher;
+  finenav::viz::FineNavVisualizer * visualizer = nullptr;
+  VisualizerConfig config;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    trajectories_publisher = trajectories_publisher_;
-    optimal_path_publisher = optimal_path_publisher_;
-    reference_path_publisher = reference_path_publisher_;
+    visualizer = visualizer_;
+    config = config_;
   }
-  if (!trajectories_publisher || !optimal_path_publisher || !reference_path_publisher) {
+  if (!visualizer) {
     return;
   }
-  trajectories_publisher->publish(frame.trajectories);
-  optimal_path_publisher->publish(frame.optimal_path);
-  reference_path_publisher->publish(frame.reference_path);
+
+  auto & markers = visualizer->markers();
+  markers.deleteAllMarkers(config.trajectory_topic);
+
+  for (const auto & marker : frame.trajectories.markers) {
+    if (marker.action != visualization_msgs::msg::Marker::ADD || marker.points.empty()) {
+      continue;
+    }
+
+    std::vector<Eigen::Vector3d> points;
+    points.reserve(marker.points.size());
+    for (const auto & point : marker.points) {
+      points.emplace_back(point.x, point.y, point.z);
+    }
+    markers.addLineStrip(points, marker.color, marker.scale.x, marker.ns);
+  }
+
+  if (!frame.reference_path.poses.empty()) {
+    std::vector<Eigen::Vector3d> points;
+    points.reserve(frame.reference_path.poses.size());
+    for (const auto & pose : frame.reference_path.poses) {
+      points.emplace_back(
+        pose.pose.position.x, pose.pose.position.y, pose.pose.position.z);
+    }
+    std_msgs::msg::ColorRGBA color;
+    color.r = 0.0F;
+    color.g = 0.8F;
+    color.b = 1.0F;
+    color.a = 1.0F;
+    markers.addLineStrip(points, color, 0.04, "reference_path");
+  }
+
+  markers.publish(config.trajectory_topic);
 }
 
 void TrajectoryVisualizer::publishClear()
 {
-  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr trajectories_publisher;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr optimal_path_publisher;
-  rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr reference_path_publisher;
+  finenav::viz::FineNavVisualizer * visualizer = nullptr;
   VisualizerConfig config;
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    trajectories_publisher = trajectories_publisher_;
-    optimal_path_publisher = optimal_path_publisher_;
-    reference_path_publisher = reference_path_publisher_;
+    visualizer = visualizer_;
     config = config_;
   }
-  if (!trajectories_publisher || !optimal_path_publisher || !reference_path_publisher) {
+  if (!visualizer) {
     return;
   }
-
-  visualization_msgs::msg::MarkerArray markers;
-  visualization_msgs::msg::Marker delete_all;
-  setZeroHeader(delete_all.header, config.frame_id);
-  delete_all.action = visualization_msgs::msg::Marker::DELETEALL;
-  markers.markers.push_back(delete_all);
-  trajectories_publisher->publish(markers);
-  nav_msgs::msg::Path empty_path;
-  setZeroHeader(empty_path.header, config.frame_id);
-  optimal_path_publisher->publish(empty_path);
-  reference_path_publisher->publish(empty_path);
+  visualizer->markers().deleteAllMarkers(config.trajectory_topic);
 }
 
 visualization_msgs::msg::MarkerArray TrajectoryVisualizer::buildTrajectoryMarkers(

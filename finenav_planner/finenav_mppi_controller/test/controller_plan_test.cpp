@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 
+#include "finenav_visualizer/finenav_visualizer.hpp"
 #include "finenav_mppi_controller/controller.hpp"
 
 namespace nav2_mppi_controller {
@@ -122,8 +123,9 @@ MPPIController::Context makeContext(std::size_t path_size = 24) {
     return context;
 }
 
-void expectFiniteBoundedOutput(const finenav::OutputDataT<MPPIController>& output,
-                               const finenav_mppi_controller::Params& params) {
+void expectFiniteBoundedOutput(
+    const finenav::core::OutputTrajectoryT<MPPIController>& output,
+    const finenav_mppi_controller::Params& params) {
     ASSERT_EQ(output.poses.size(), static_cast<std::size_t>(params.time_steps));
     ASSERT_EQ(output.twists.size(), static_cast<std::size_t>(params.time_steps));
 
@@ -132,13 +134,21 @@ void expectFiniteBoundedOutput(const finenav::OutputDataT<MPPIController>& outpu
         const auto& twist = output.twists[i];
         EXPECT_TRUE(std::isfinite(pose.position.x));
         EXPECT_TRUE(std::isfinite(pose.position.y));
-        EXPECT_NEAR(pose.orientation.z * pose.orientation.z + pose.orientation.w * pose.orientation.w, 1.0, 1e-5);
+        EXPECT_NEAR(
+            pose.orientation.z * pose.orientation.z + pose.orientation.w * pose.orientation.w,
+            1.0, 1e-5);
         EXPECT_TRUE(std::isfinite(twist.linear.x));
         EXPECT_GE(twist.linear.x, params.vx_min - 1e-5);
         EXPECT_LE(twist.linear.x, params.vx_max + 1e-5);
         EXPECT_NEAR(twist.linear.y, 0.0, 1e-6);
         EXPECT_LE(std::abs(twist.angular.z), params.wz_max + 1e-5);
     }
+}
+
+TEST(ControllerPlanTest, AcceptsFrameworkLoggerInjection) {
+    MPPIController controller;
+
+    EXPECT_NO_THROW(controller.setLogger(rclcpp::get_logger("injected_mppi_test")));
 }
 
 TEST(ControllerPlanTest, PlanReturnsFiniteBoundedTrajectory) {
@@ -168,56 +178,6 @@ TEST(ControllerPlanTest, ResetAllowsPlanningAgain) {
     expectFiniteBoundedOutput(*second, params);
 }
 
-TEST(ControllerPlanTest, SerializesPlanConfigureAndReset) {
-    auto params = makeControllerParams();
-    params.batch_size = 16;
-    params.time_steps = 4;
-    params.regenerate_noises = false;
-    MPPIController controller;
-    controller.configure(params);
-    TestMapView map_view;
-    const auto context = makeContext();
-    std::atomic<bool> failed{false};
-    std::atomic<int> plans_completed{0};
-
-    std::thread planner([&]() {
-      try {
-        for (int i = 0; i < 8; ++i) {
-          if (controller.plan(context, map_view).has_value()) {
-            ++plans_completed;
-          }
-        }
-      } catch (...) {
-        failed = true;
-      }
-    });
-    std::thread reconfigurer([&]() {
-      try {
-        for (int i = 0; i < 4; ++i) {
-          controller.configure(params);
-        }
-      } catch (...) {
-        failed = true;
-      }
-    });
-    std::thread resetter([&]() {
-      try {
-        for (int i = 0; i < 4; ++i) {
-          controller.reset();
-        }
-      } catch (...) {
-        failed = true;
-      }
-    });
-
-    planner.join();
-    reconfigurer.join();
-    resetter.join();
-
-    EXPECT_FALSE(failed.load());
-    EXPECT_EQ(plans_completed.load(), 8);
-}
-
 TEST(ControllerPlanTest, VisualizedPlanResetStressWithPracticalDimensions) {
     if (!rclcpp::ok()) {
         int argc = 0;
@@ -233,8 +193,12 @@ TEST(ControllerPlanTest, VisualizedPlanResetStressWithPracticalDimensions) {
     params.CostCritic.chunk_size = 1;
 
     {
+        auto visualizer_node = std::make_shared<rclcpp::Node>(
+            "controller_plan_visualizer_test_node");
+        finenav::viz::FineNavVisualizer framework_visualizer(visualizer_node);
         MPPIController controller;
         controller.configure(params);
+        controller.setVisualizer(framework_visualizer);
         TestMapView map_view;
 
         for (int episode = 0; episode < 5; ++episode) {
