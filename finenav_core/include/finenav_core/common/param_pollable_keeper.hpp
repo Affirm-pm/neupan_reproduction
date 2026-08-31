@@ -10,7 +10,7 @@
 namespace finenav::core {
 
 /**
- * @brief IParamPollable -- Abstract interface for a pollable parameter handle.
+ * @brief IParamPollable -- Abstract interface for a pollable parameter object.
  */
 class IParamPollable {
 public:
@@ -19,16 +19,17 @@ public:
 };
 
 /**
- * @brief ParamHandleKeeper -- Owns IParamPollable handles and provides a single pollAll() entry point.
+ * @brief ParamPollableKeeper -- Owns IParamPollable objects and provides a
+ *        single pollAll() entry point for periodic dynamic-parameter updates.
  */
-class ParamHandleKeeper {
+class ParamPollableKeeper {
 public:
-    /// Take ownership of a pollable parameter handle.
-    void keep_alive(std::shared_ptr<IParamPollable> handle) {
-        if (handle) pollables_.push_back(std::move(handle));
+    /// Take ownership of a pollable parameter object.
+    void keep_alive(std::shared_ptr<IParamPollable> pollable) {
+        if (pollable) pollables_.push_back(std::move(pollable));
     }
 
-    /// Poll all registered handles.
+    /// Poll all registered objects.
     void pollAll() {
         for (auto& p : pollables_) p->poll();
     }

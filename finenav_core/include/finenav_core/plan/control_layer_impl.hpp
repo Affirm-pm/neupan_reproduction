@@ -8,11 +8,17 @@
 
 #pragma once
 
-#include "finenav_core/algo_configurator.hpp"
-#include "finenav_core/detail/control_layer_infra.hpp"
+#include <chrono>
+#include <memory>
+#include <string>
+
+#include "finenav_core/common/algo_registry.hpp"
 #include "finenav_core/map/map_server.hpp"
+#include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/ros_conversions.hpp"
 #include "finenav_util/common/log_macros.hpp"
+#include "finenav_util/ros/node_thread.hpp"
+#include "finenav_util/ros/task_channel.hpp"
 
 namespace finenav::core {
 
@@ -23,6 +29,7 @@ namespace finenav::core {
 template <Planner PlannerT>
 ControlLayer<PlannerT>::ControlLayer(
     rclcpp::Node::SharedPtr node,
+    const std::string& algo_name,
     const std::string& layer_name,
     ExecutionPolicyVariant policy,
     RobotStateProvider* state_provider)
@@ -30,14 +37,36 @@ ControlLayer<PlannerT>::ControlLayer(
       node_(node), layer_name_(layer_name), policy_(std::move(policy)),
       state_provider_(state_provider)
 {
-    auto infra = detail::buildControlLayerInfra(node, layer_name, policy_);
-    pnode_        = std::move(infra.pnode);
-    pnode_thread_ = std::move(infra.pnode_thread);
-    worker_       = std::move(infra.worker);
+    // ── Private node + worker infrastructure ─────────────────────────────
+    rclcpp::NodeOptions pnode_opts;
+    pnode_opts.append_parameter_override(
+        "use_sim_time",
+        node->get_parameter("use_sim_time").as_bool());
+    pnode_ = rclcpp::Node::make_shared(layer_name, node->get_name(), pnode_opts);
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
-    FINENAV_LOG_INFO(pnode_->get_logger(), "Loading planner: {}", AlgoConfigurator<PlannerT>::name);
-    param_keeper_.keep_alive(AlgoConfigurator<PlannerT>::load(pnode_, planner_instance_));
-    planner_name_ = std::string{AlgoConfigurator<PlannerT>::name};
+    std::visit([&pnode = pnode_](auto& p) {
+        if constexpr (requires { p.declare_parameters(*pnode); }) {
+            p.declare_parameters(*pnode);
+        }
+    }, policy_);
+
+    worker_ = std::make_unique<finenav::util::TaskWorker>(pnode_, layer_name);
+
+    planner_name_ = algo_name;
+    auto pollable = AlgoRegistry::instance().loadPlannerParams(
+        algo_name, pnode_, &planner_instance_);
+    if (!pollable) {
+        // No FINENAV_REGISTER_PLANNER entry reached the registry for this name.
+        // Parameters will NOT load; the planner still runs with defaults.
+        FINENAV_LOG_WARN(pnode_->get_logger(),
+            "ControlLayer '{}': no params registered under '{}' — parameters will NOT "
+            "be loaded. Register it in its .cpp with FINENAV_REGISTER_PLANNER.",
+            layer_name_, algo_name);
+    }
+    param_keeper_.keep_alive(std::move(pollable));
+    FINENAV_LOG_INFO(pnode_->get_logger(), "Loading planner '{}' (layer '{}').",
+        planner_name_, layer_name_);
 
     worker_thread_ = std::thread([this]() {
         while (rclcpp::ok() && !stop_execution_) {

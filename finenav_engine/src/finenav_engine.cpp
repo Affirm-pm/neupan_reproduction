@@ -5,6 +5,13 @@
 #include "finenav_engine/finenav_engine.hpp"
 
 #include <chrono>
+#include <filesystem>
+
+#include <ament_index_cpp/get_package_prefix.hpp>
+#include <behaviortree_cpp/utils/shared_library.h>
+
+#include "finenav_core/common/algo_registry.hpp"
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
 
@@ -38,6 +45,104 @@ bool FineNavEngine::removeMapServer(const std::string& name) {
 
 bool FineNavEngine::removeControlLayer(const std::string& name) {
     return layers_.erase(name) > 0;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Factory by name (runtime reflection via AlgoRegistry)
+// ══════════════════════════════════════════════════════════════════════════════
+
+std::shared_ptr<finenav::core::IControlLayer> FineNavEngine::createLayerByName(
+    const std::string& algo_name, const std::string& layer_name,
+    finenav::core::ExecutionPolicyVariant policy)
+{
+    auto layer = finenav::core::AlgoRegistry::instance().createLayer(
+        node_, algo_name, layer_name, std::move(policy), localizer_.get());
+    if (!layer) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "createLayerByName('{}', '{}'): planner not registered. "
+            "Call loadAlgoPlugins() first if the algorithm lives in a plugin .so.",
+            algo_name, layer_name);
+        return nullptr;
+    }
+    navigator_->master().manageLayer(layer_name);
+    layers_[layer_name] = layer;
+    FINENAV_LOG_INFO(node_->get_logger(),
+        "createLayerByName('{}', '{}'): layer created.", algo_name, layer_name);
+    return layer;
+}
+
+std::shared_ptr<finenav::core::IMapResource> FineNavEngine::createMapServerByName(
+    const std::string& algo_name, const std::string& server_name)
+{
+    auto server = finenav::core::AlgoRegistry::instance().createMap(
+        node_, algo_name, server_name, localizer_.get());
+    if (!server) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "createMapServerByName('{}', '{}'): map not registered. "
+            "Call loadAlgoPlugins() first if the algorithm lives in a plugin .so.",
+            algo_name, server_name);
+        return nullptr;
+    }
+    maps_[server_name] = server;
+    FINENAV_LOG_INFO(node_->get_logger(),
+        "createMapServerByName('{}', '{}'): map server created.", algo_name, server_name);
+    return server;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  Plugin discovery (dlopen)
+// ══════════════════════════════════════════════════════════════════════════════
+
+bool FineNavEngine::loadAlgoPlugins(const std::vector<std::string>& plugins)
+{
+    int loaded_total = 0;
+    for (const auto& plugin_param : plugins) {
+        const auto slash = plugin_param.find('/');
+        if (slash == std::string::npos) {
+            FINENAV_LOG_ERROR(node_->get_logger(),
+                "loadAlgoPlugins: '{}' is not in 'pkg_name/sub_folder' form.", plugin_param);
+            continue;
+        }
+        const auto pkg_name = plugin_param.substr(0, slash);
+        const auto sub_folder = plugin_param.substr(slash + 1);
+
+        std::filesystem::path plugin_directory;
+        try {
+            plugin_directory = std::filesystem::path(
+                ament_index_cpp::get_package_prefix(pkg_name)) / sub_folder;
+        }
+        catch (const ament_index_cpp::PackageNotFoundError&) {
+            FINENAV_LOG_ERROR(node_->get_logger(),
+                "loadAlgoPlugins: package '{}' not found.", pkg_name);
+            continue;
+        }
+        if (!std::filesystem::exists(plugin_directory)) {
+            FINENAV_LOG_WARN(node_->get_logger(),
+                "loadAlgoPlugins: directory not found: {}", plugin_directory.string());
+            continue;
+        }
+
+        int loaded_count = 0;
+        for (const auto& entry :
+             std::filesystem::recursive_directory_iterator(plugin_directory)) {
+            if (entry.path().extension() != ".so") continue;
+            try {
+                // dlopen alone is enough — static-init runs the self-registrars.
+                // RTLD_GLOBAL (BT::SharedLibrary's default) keeps cross-DSO RTTI working.
+                plugin_handles_.push_back(
+                    std::make_shared<BT::SharedLibrary>(entry.path().string()));
+                ++loaded_count;
+            } catch (const std::exception& e) {
+                FINENAV_LOG_ERROR(node_->get_logger(),
+                    "loadAlgoPlugins: failed to dlopen '{}': {}", entry.path().filename().string(), e.what());
+            }
+        }
+        FINENAV_LOG_INFO(node_->get_logger(),
+            "loadAlgoPlugins: scanned '{}' — loaded {} plugin .so(s).",
+            plugin_directory.string(), loaded_count);
+        loaded_total += loaded_count;
+    }
+    return loaded_total > 0;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

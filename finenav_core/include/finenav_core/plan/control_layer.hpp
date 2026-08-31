@@ -9,15 +9,15 @@
 #include <thread>
 #include <variant>
 
-#include "rclcpp/rclcpp.hpp"
-#include "finenav_interfaces/msg/trajectory.hpp"
+#include "../common/param_pollable_keeper.hpp"
 #include "finenav_core/map/map_concept.hpp"
-#include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
-#include "finenav_core/param_handle_keeper.hpp"
 #include "finenav_core/plan/i_control_layer.hpp"
-#include "finenav_util/ros/task_channel.hpp"
+#include "finenav_core/plan/planner_concept.hpp"
+#include "finenav_interfaces/msg/trajectory.hpp"
 #include "finenav_util/ros/node_thread.hpp"
+#include "finenav_util/ros/task_channel.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 namespace finenav::core {
 
@@ -45,6 +45,7 @@ public:
 
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,
+        const std::string& algo_name,
         const std::string& layer_name,
         ExecutionPolicyVariant policy = SingleShotPolicy{},
         RobotStateProvider* state_provider = nullptr);
@@ -144,7 +145,7 @@ private:
     std::mutex                       plan_ref_mutex_;
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;
 
-    ParamHandleKeeper param_keeper_;
+    ParamPollableKeeper param_keeper_;
 };
 
 } // namespace finenav::core

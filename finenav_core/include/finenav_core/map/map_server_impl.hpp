@@ -4,36 +4,127 @@
 
 #pragma once
 
-#include "finenav_core/algo_configurator.hpp"
-#include "finenav_core/detail/map_server_infra.hpp"
+#include <chrono>
+#include <memory>
+#include <string>
+
+#include "finenav_core/common/algo_registry.hpp"
 #include "finenav_util/common/log_macros.hpp"
 #include "finenav_util/common/stopwatch.hpp"
+#include "finenav_util/ros/node_thread.hpp"
 
 namespace finenav::core {
+namespace detail {
+
+// Parameter declaration + validation for the MapServer private node.
+// (Formerly src/map_server_helpers.cpp.)
+
+inline void declareMapServerParameters(
+    rclcpp::Node& pnode,
+    double& update_rate_hz,
+    double& shift_rate_hz,
+    double& shift_margin_ratio)
+{
+    // update_rate_hz
+    {
+        auto desc = rcl_interfaces::msg::ParameterDescriptor{};
+        desc.description = "Sensor fusion update rate (Hz). Must be > 0.0.";
+        pnode.declare_parameter<double>("update_rate_hz", update_rate_hz, desc);
+        update_rate_hz = pnode.get_parameter("update_rate_hz").as_double();
+        if (update_rate_hz <= 0.0) {
+            FINENAV_LOG_WARN(pnode.get_logger(),
+                "update_rate_hz must be > 0.0 (got {:.1f}). Falling back to 10.0.",
+                update_rate_hz);
+            update_rate_hz = 10.0;
+        }
+    }
+    // shift_rate_hz
+    {
+        auto desc = rcl_interfaces::msg::ParameterDescriptor{};
+        desc.description = "Map window shift check rate (Hz). Must be > 0.0.";
+        pnode.declare_parameter<double>("shift_rate_hz", shift_rate_hz, desc);
+        shift_rate_hz = pnode.get_parameter("shift_rate_hz").as_double();
+        if (shift_rate_hz <= 0.0) {
+            FINENAV_LOG_WARN(pnode.get_logger(),
+                "shift_rate_hz must be > 0.0 (got {:.1f}). Falling back to 50.0.",
+                shift_rate_hz);
+            shift_rate_hz = 50.0;
+        }
+    }
+    // shift_margin_ratio
+    {
+        auto desc = rcl_interfaces::msg::ParameterDescriptor{};
+        desc.description =
+            "Distance-from-centre ratio triggering a window shift "
+            "(0 = centre only, 1 = at edge). Must be in [0.0, 1.0].";
+        rcl_interfaces::msg::FloatingPointRange range;
+        range.from_value = 0.0;
+        range.to_value   = 1.0;
+        range.step       = 0.0;
+        desc.floating_point_range = {range};
+        pnode.declare_parameter<double>("shift_margin_ratio", shift_margin_ratio, desc);
+        shift_margin_ratio = pnode.get_parameter("shift_margin_ratio").as_double();
+        if (shift_margin_ratio < 0.0) {
+            FINENAV_LOG_WARN(pnode.get_logger(),
+                "shift_margin_ratio must be >= 0.0 (got {:.2f}). Falling back to 0.0.",
+                shift_margin_ratio);
+            shift_margin_ratio = 0.0;
+        }
+        if (shift_margin_ratio > 1.0) {
+            FINENAV_LOG_WARN(pnode.get_logger(),
+                "shift_margin_ratio must be <= 1.0 (got {:.2f}). Falling back to 1.0.",
+                shift_margin_ratio);
+            shift_margin_ratio = 1.0;
+        }
+    }
+}
+
+}  // namespace detail
 
 // --- MapServer::MapServer  (see map_server.hpp) --------------------------------
 template <Map MapT>
 MapServer<MapT>::MapServer(
     rclcpp::Node::SharedPtr node,
+    const std::string& algo_name,
     const std::string& server_name,
     RobotStateProvider* state_provider)
     : IMapResource(server_name),
       node_(node), server_name_(server_name), state_provider_(state_provider),
       runtime_(node, node->get_logger()) {
 
-    auto infra = detail::buildMapServerInfra(
-        node, server_name, update_rate_hz_, shift_rate_hz_, shift_margin_ratio_);
-    pnode_              = std::move(infra.pnode);
-    pnode_thread_       = std::move(infra.pnode_thread);
-    update_timer_       = std::move(infra.update_timer);
-    shift_timer_        = std::move(infra.shift_timer);
-    param_keeper_       = std::move(infra.param_keeper);
-    update_rate_hz_     = infra.update_rate_hz;
-    shift_rate_hz_      = infra.shift_rate_hz;
-    shift_margin_ratio_ = infra.shift_margin_ratio;
+    // ── Private node + timers infrastructure ─────────────────────────────
+    rclcpp::NodeOptions pnode_opts;
+    pnode_opts.append_parameter_override(
+        "use_sim_time",
+        node->get_parameter("use_sim_time").as_bool());
+    pnode_ = rclcpp::Node::make_shared(server_name, node->get_name(), pnode_opts);
+    pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
+
+    detail::declareMapServerParameters(
+        *pnode_, update_rate_hz_, shift_rate_hz_, shift_margin_ratio_);
+
+    // Provisional update timer (re-bound below once runUpdateCycle exists).
+    auto provisional_period = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::duration<double>(1.0 / update_rate_hz_));
+    update_timer_ = rclcpp::create_timer(
+        pnode_, pnode_->get_clock(), provisional_period,
+        [pnode = pnode_]() {
+            FINENAV_LOG_WARN_ONCE(pnode->get_logger(),
+                "MapServer update timer fired but runUpdateCycle not yet bound.");
+        });
 
     map_instance_ = std::make_unique<MapT>();
-    param_keeper_.keep_alive(AlgoConfigurator<MapT>::load(pnode_, *map_instance_));
+    auto pollable = AlgoRegistry::instance().loadMapParams(
+        algo_name, pnode_, map_instance_.get());
+    if (!pollable) {
+        // No FINENAV_REGISTER_MAP entry reached the registry for this name.
+        // Parameters will NOT load; the map still runs with defaults.
+        FINENAV_LOG_WARN(node_->get_logger(),
+            "MapServer '{}': no params registered under '{}' — parameters will NOT "
+            "be loaded. Register it in its .cpp with FINENAV_REGISTER_MAP.",
+            server_name_, algo_name);
+    }
+    param_keeper_.keep_alive(std::move(pollable));
 
     map_instance_->selfManage(runtime_);
 

@@ -15,6 +15,8 @@
     <depend>finenav_motion_decorator</depend>
     <depend>finenav_interfaces</depend>
     <depend>finenav_util</depend>
+    <depend>ament_index_cpp</depend>
+    <depend>behaviortree_cpp</depend>
 
 
     <test_depend>ament_cmake_gtest</test_depend>

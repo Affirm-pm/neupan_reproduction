@@ -8,12 +8,15 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include "finenav_interfaces/action/navigate_to_pose.hpp"
+
+#include <behaviortree_cpp/utils/shared_library.h>
 
 #include "finenav_core/map/map_server.hpp"
 #include "finenav_core/plan/control_layer.hpp"
@@ -54,7 +57,8 @@ public:
     // ── Factory: map ──────────────────────────────────────────────────────
 
     template <finenav::core::Map MapT>
-    std::shared_ptr<finenav::core::MapServer<MapT>> createMapServer(const std::string& name);
+    std::shared_ptr<finenav::core::MapServer<MapT>> createMapServer(
+        const std::string& algo_name, const std::string& server_name);
 
     template <finenav::core::Map MapT>
     [[nodiscard]] std::shared_ptr<finenav::core::MapServer<MapT>> getMapServer(const std::string& name);
@@ -65,13 +69,38 @@ public:
 
     template <finenav::core::Planner PlannerT, typename PolicyT = finenav::core::SingleShotPolicy>
     std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
-    createLayer(const std::string& name, PolicyT policy = {});
+    createLayer(const std::string& algo_name, const std::string& name, PolicyT policy = {});
 
     template <finenav::core::Planner PlannerT>
     [[nodiscard]] std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
     getControlLayer(const std::string& name);
 
     bool removeControlLayer(const std::string& name);
+
+    // ── Factory by name (runtime reflection via AlgoRegistry) ────────────
+    // The algorithm .so self-registers its factory under the registration name
+    // (#PARAM_NS from FINENAV_REGISTER_PLANNER / FINENAV_REGISTER_MAP) at
+    // static-init (dlopen or link).  These look the factory up by name and build
+    // the layer / map server inside the plugin, so the engine never needs the
+    // concrete type.  Unknown names fail loudly (nullptr + ERROR) — no silent
+    // fallback.  The concrete type is recovered later with getControlLayer<T>() /
+    // getMapServer<T>() (for typed operations such as bind_map_view).
+
+    /// Create a ControlLayer for a planner registered under @p algo_name.
+    std::shared_ptr<finenav::core::IControlLayer> createLayerByName(
+        const std::string& algo_name, const std::string& layer_name,
+        finenav::core::ExecutionPolicyVariant policy);
+
+    /// Create a MapServer for a map registered under @p algo_name.
+    std::shared_ptr<finenav::core::IMapResource> createMapServerByName(
+        const std::string& algo_name, const std::string& server_name);
+
+    /// dlopen every .so under "pkg_name/sub_folder" so its self-registering
+    /// algorithms become discoverable by name WITHOUT relinking.  Each entry is
+    /// "package/sub_folder" (e.g. {"finenav_example/lib"}).  The handles are kept
+    /// alive for the engine's lifetime (BT::SharedLibrary itself never unloads).
+    /// Must be called before the first by-name create.
+    bool loadAlgoPlugins(const std::vector<std::string>& plugins);
 
     // ── Connector ─────────────────────────────────────────────────────────
 
@@ -105,6 +134,9 @@ private:
     std::unique_ptr<finenav::localizer::FineNavLocalizer> localizer_;
     std::unique_ptr<finenav::navigator::BtNavigator>      navigator_;
 
+    /// dlopen handles for plugin libraries loaded via loadAlgoPlugins().
+    std::vector<std::shared_ptr<BT::SharedLibrary>> plugin_handles_;
+
     rclcpp_action::Client<NavAction>::SharedPtr                     nav_client_;
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
     std::string                                                      default_bt_id_;
@@ -116,10 +148,11 @@ private:
 
 template <finenav::core::Map MapT>
 std::shared_ptr<finenav::core::MapServer<MapT>>
-FineNavEngine::createMapServer(const std::string& name) {
+FineNavEngine::createMapServer(
+    const std::string& algo_name, const std::string& server_name) {
     auto server = std::make_shared<finenav::core::MapServer<MapT>>(
-        node_, name, localizer_.get());
-    maps_[name] = server;
+        node_, algo_name, server_name, localizer_.get());
+    maps_[server_name] = server;
     return server;
 }
 
@@ -142,10 +175,11 @@ std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(cons
 
 template <finenav::core::Planner PlannerT, typename PolicyT>
 std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
-FineNavEngine::createLayer(const std::string& name, PolicyT policy) {
+FineNavEngine::createLayer(
+    const std::string& algo_name, const std::string& name, PolicyT policy) {
     navigator_->master().manageLayer(name);
     auto layer = std::make_shared<finenav::core::ControlLayer<PlannerT>>(
-        node_, name, std::move(policy), localizer_.get());
+        node_, algo_name, name, std::move(policy), localizer_.get());
     layers_[name] = layer;
     return layer;
 }

@@ -9,15 +9,15 @@
 #include <shared_mutex>
 #include <string>
 
-#include "rclcpp/rclcpp.hpp"
+#include "../common/param_pollable_keeper.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
+#include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/map/map_runtime.hpp"
-#include "finenav_core/robot_state/robot_state.hpp"
-#include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/observation_source.hpp"
+#include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_util/ros/node_thread.hpp"
-#include "finenav_core/param_handle_keeper.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 namespace finenav::core {
 
@@ -63,11 +63,13 @@ public:
     /**
      * @brief MapServer Constructor.
      * @param node           Parent ROS node
+     * @param algo_name      Algorithm registry key (e.g. "grid_map")
      * @param server_name    Unique name
      * @param state_provider Source of robot pose
      */
     explicit MapServer(
         rclcpp::Node::SharedPtr node,
+        const std::string& algo_name,
         const std::string& server_name,
         RobotStateProvider* state_provider);
 
@@ -158,7 +160,7 @@ private:
     PreUpdateHook                                    pre_update_hook_;
     PostUpdateHook                                   post_update_hook_;
 
-    ParamHandleKeeper                                param_keeper_;
+    ParamPollableKeeper                              param_keeper_;
     double                                           update_rate_hz_{10.0};
     double                                           shift_rate_hz_{50.0};
     double                                           shift_margin_ratio_{0.5};

@@ -13,7 +13,6 @@
 
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
-#include "finenav_core/algo_configurator.hpp"
 
 // ── Minimal self-managing Map for testing ───────────────────────────────────
 
@@ -47,17 +46,6 @@ private:
 
 static_assert(finenav::core::Map<SmokeMap>);
 static_assert(finenav::core::ShiftableMap<SmokeMap>);
-
-// ── AlgoConfigurator specialisation ────────────────────────────────────────
-
-namespace finenav::core {
-template <>
-struct AlgoConfigurator<SmokeMap> {
-    static std::shared_ptr<IParamPollable> load(rclcpp::Node::SharedPtr, SmokeMap&) {
-        return nullptr;
-    }
-};
-} // namespace finenav::core
 
 // ── Mock state provider ────────────────────────────────────────────────────
 
