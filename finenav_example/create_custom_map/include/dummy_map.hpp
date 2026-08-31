@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "finenav_core/algo_configurator.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/math_def.hpp"
 
@@ -47,7 +46,9 @@ public:
     finenav::core::Region3D   getWindowBounds()  const;
     finenav::core::Position3D getWindowCenter()  const;
 
-    bool isOccupied(const finenav::core::Position3D& p) const;
+    // Inline so the getting_started executable needs no symbol from this .so —
+    // it recovers the typed handle by header + RTTI only (the .so is dlopened).
+    bool isOccupied(const finenav::core::Position3D&) const { return false; }
 
     void selfManage(finenav::core::MapRuntime&) {}
 
@@ -59,7 +60,3 @@ private:
 };
 
 }  // namespace finenav::example
-
-// Register this map into the FineNav-Engine parameter system.
-// "dummy_map" must match the top-level key in dummy_map.yaml.
-FINENAV_REGISTER_ALGO_CONFIG(finenav::example::DummyMap, dummy_map)

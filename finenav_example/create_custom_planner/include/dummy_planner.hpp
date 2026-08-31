@@ -8,7 +8,6 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 
-#include "finenav_core/algo_configurator.hpp"
 #include "finenav_core/math_def.hpp" // TODO： 应该丢掉
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/plan/trajectory.hpp" // TODO： 应该合并
@@ -32,7 +31,7 @@ public:
  * DummyPlanner's parameters (linear_speed, angular_speed) are hot-reloadable
  * because their YAML does NOT have `read_only: true`.  The framework calls
  * configure() in two scenarios:
- *   1. Startup:  AlgoConfigurator loads initial values (YAML defaults or
+ *   1. Startup:  the framework loads initial values (YAML defaults or
  *               --params-file overrides).
  *   2. Runtime:  `ros2 param set` triggers the ParamListener callback, which
  *               calls configure() with the full new parameter set.
@@ -82,7 +81,3 @@ private:
 };
 
 }  // namespace finenav::example
-
-// Register this planner into the FineNav-Engine parameter system.
-// "dummy_planner" must match the top-level key in dummy_planner.yaml.
-FINENAV_REGISTER_ALGO_CONFIG(finenav::example::DummyPlanner, dummy_planner)

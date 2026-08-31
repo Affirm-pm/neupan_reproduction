@@ -4,6 +4,8 @@
 
 #include "dummy_map.hpp"
 
+#include "finenav_core/common/algo_register_macros.hpp"
+
 namespace finenav::example {
 
 DummyMap::DummyMap()
@@ -25,8 +27,8 @@ finenav::core::Position3D DummyMap::getWindowCenter() const {
     return bounds_.center();
 }
 
-bool DummyMap::isOccupied(const finenav::core::Position3D& p) const {
-    return false;   // DummyMap never reports occupancy
-}
-
 }  // namespace finenav::example
+
+// One-line registration: parameter wiring + plugin self-registration.
+// "dummy_map" must match the top-level key in dummy_map.yaml.
+FINENAV_REGISTER_MAP(finenav::example::DummyMap, dummy_map)

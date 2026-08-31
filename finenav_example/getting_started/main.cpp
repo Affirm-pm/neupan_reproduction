@@ -5,6 +5,7 @@
 // Getting started: assemble a complete navigation stack using FineNavEngine.
 
 #include <memory>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -43,20 +44,37 @@ int main(int argc, char** argv) {
     // 0. Set the default behavior tree (used by /goal_pose and navigateTo() without bt_id).
     engine->setDefaultBehaviorTree("GettingStartedNavigate");
 
-    // 1. Create MapServer
-    auto map_server = engine->createMapServer<DummyMap>("my_map");
+    // 1. Load the algorithm .so's.  They are NOT linked into this executable
+    //    (see getting_started/CMakeLists.txt): a self-registering .so that the
+    //    executable references no symbol from would be dropped by --as-needed and
+    //    its static-init registrar would never run.  dlopen forces the registrar
+    //    in each .so to fire, which populates the shared AlgoRegistry.
+    //    "finenav_example/lib" resolves to <prefix>/lib where the two libraries
+    //    were installed; the scan loads every *.so it finds.
+    engine->loadAlgoPlugins({"finenav_example/lib"});
 
-    // 2. Create ControlLayer
-    auto layer = engine->createLayer<DummyPlanner>("my_layer", core::ContinuousPolicy{10.0});
+    // 2. Create MapServer by algorithm name.
+    //    DummyMap self-registered as "dummy_map" (FINENAV_REGISTER_MAP in its .cpp);
+    //    the factory runs inside libdummy_map.so, so the engine never sees the type.
+    engine->createMapServerByName("dummy_map", "my_map");
 
-    // 3. Bind map to layer
-    layer->bind_map_view(map_server, [](const DummyMap& map_data) {
+    // 3. Create ControlLayer by algorithm name.
+    //    libdummy_planner.so self-registered as "dummy_planner".
+    engine->createLayerByName("dummy_planner", "my_layer", core::ContinuousPolicy{10.0});
+
+    // 4. Bind map to layer.
+    //    bind_map_view is a typed ControlLayer<DummyPlanner> method — recover the
+    //    concrete types (dynamic_pointer_cast only, no ctor instantiation here;
+    //    RTLD_GLOBAL keeps the RTTI unified across the DSO boundary).
+    auto typed_map   = engine->getMapServer<DummyMap>("my_map");
+    auto typed_layer = engine->getControlLayer<DummyPlanner>("my_layer");
+    typed_layer->bind_map_view(typed_map, [](const DummyMap& map_data) {
             return std::make_shared<ASimpleMapView>(map_data);
     });
 
-    // 4. Wire tree
+    // 5. Wire tree
     engine->wireControlPipeline({
-        _root >> layer
+        _root >> typed_layer
     });
 
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");

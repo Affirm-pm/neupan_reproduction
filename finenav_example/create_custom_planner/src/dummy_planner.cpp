@@ -6,6 +6,8 @@
 
 #include <cmath>
 
+#include "finenav_core/common/algo_register_macros.hpp"
+
 namespace finenav::example {
 
 DummyPlanner::DummyPlanner() = default;
@@ -50,3 +52,7 @@ DummyPlanner::Result DummyPlanner::plan(const Context& ctx,const IMapView& map_v
 }
 
 }  // namespace finenav::example
+
+// One-line registration: parameter wiring + plugin self-registration.
+// "dummy_planner" must match the top-level key in dummy_planner.yaml.
+FINENAV_REGISTER_PLANNER(finenav::example::DummyPlanner, dummy_planner)
