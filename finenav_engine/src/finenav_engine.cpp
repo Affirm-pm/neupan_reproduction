@@ -10,7 +10,9 @@
 #include <ament_index_cpp/get_package_prefix.hpp>
 #include <behaviortree_cpp/utils/shared_library.h>
 
-#include "finenav_core/common/algo_registry.hpp"
+#include "finenav_core/common/plan_registry.hpp"
+#include "finenav_core/common/map_registry.hpp"
+#include "finenav_core/common/mapview_registry.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
@@ -48,14 +50,14 @@ bool FineNavEngine::removeControlLayer(const std::string& name) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  Factory by name (runtime reflection via AlgoRegistry)
+//  Factory by name (runtime reflection via PlanRegistry / MapRegistry)
 // ══════════════════════════════════════════════════════════════════════════════
 
 std::shared_ptr<finenav::core::IControlLayer> FineNavEngine::createLayerByName(
     const std::string& algo_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
-    auto layer = finenav::core::AlgoRegistry::instance().createLayer(
+    auto layer = finenav::core::PlanRegistry::instance().createLayer(
         node_, algo_name, layer_name, std::move(policy), localizer_.get());
     if (!layer) {
         FINENAV_LOG_ERROR(node_->get_logger(),
@@ -74,7 +76,7 @@ std::shared_ptr<finenav::core::IControlLayer> FineNavEngine::createLayerByName(
 std::shared_ptr<finenav::core::IMapResource> FineNavEngine::createMapServerByName(
     const std::string& algo_name, const std::string& server_name)
 {
-    auto server = finenav::core::AlgoRegistry::instance().createMap(
+    auto server = finenav::core::MapRegistry::instance().createMap(
         node_, algo_name, server_name, localizer_.get());
     if (!server) {
         FINENAV_LOG_ERROR(node_->get_logger(),
@@ -87,6 +89,81 @@ std::shared_ptr<finenav::core::IMapResource> FineNavEngine::createMapServerByNam
     FINENAV_LOG_INFO(node_->get_logger(),
         "createMapServerByName('{}', '{}'): map server created.", algo_name, server_name);
     return server;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  MapView assembly (runtime reflection via MapViewRegistry + PlanRegistry + MapRegistry)
+// ══════════════════════════════════════════════════════════════════════════════
+
+std::shared_ptr<finenav::core::IMapResource> FineNavEngine::ensureMapServer(
+    const std::string& algo_name)
+{
+    auto it = maps_.find(algo_name);
+    if (it != maps_.end()) return it->second;
+    return createMapServerByName(algo_name, algo_name);
+}
+
+std::shared_ptr<finenav::core::IControlLayer> FineNavEngine::createLayerByMapView(
+    const std::string& mapview_name, const std::string& layer_name,
+    finenav::core::ExecutionPolicyVariant policy)
+{
+    auto entry = finenav::core::MapViewRegistry::instance().lookup(mapview_name);
+    if (!entry) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "createLayerByMapView: MapView '{}' is not registered. "
+            "Call loadAlgoPlugins() first if it lives in a plugin .so.",
+            mapview_name);
+        return nullptr;
+    }
+
+    auto& plans = finenav::core::PlanRegistry::instance();
+    auto& maps  = finenav::core::MapRegistry::instance();
+
+    // Resolve the planner type the view bridges → its registered algo name.
+    auto planner_name = plans.findPlannerNameByType(entry->planner_type);
+    if (!planner_name) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "createLayerByMapView('{}'): planner type '{}' is not registered as an algo.",
+            mapview_name, entry->planner_type);
+        return nullptr;
+    }
+
+    // Resolve + dedup the map server(s) the view depends on.
+    std::vector<std::shared_ptr<finenav::core::IMapResource>> map_resources;
+    map_resources.reserve(entry->map_types.size());
+    for (const auto& map_type : entry->map_types) {
+        auto map_name = maps.findMapNameByType(map_type);
+        if (!map_name) {
+            FINENAV_LOG_ERROR(node_->get_logger(),
+                "createLayerByMapView('{}'): map type '{}' is not registered as an algo.",
+                mapview_name, map_type);
+            return nullptr;
+        }
+        map_resources.push_back(ensureMapServer(*map_name));
+    }
+
+    // Build the view: hand build() a MapAccess carrying the resolved maps.
+    std::vector<finenav::core::MapHandle> handles;
+    handles.reserve(map_resources.size());
+    for (const auto& res : map_resources) {
+        handles.push_back({res->mapTypeId(), res->mapData()});
+    }
+    finenav::core::MapAccess access(std::move(handles));
+    auto view = entry->build(access);
+    if (!view) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "createLayerByMapView('{}'): build() returned null.", mapview_name);
+        return nullptr;
+    }
+
+    // Create the layer for the resolved planner and attach the built view.
+    auto layer = createLayerByName(*planner_name, layer_name, std::move(policy));
+    if (!layer) return nullptr;
+    layer->attachMapView(std::move(view), std::move(map_resources));
+    FINENAV_LOG_INFO(node_->get_logger(),
+        "createLayerByMapView('{}', '{}'): assembled layer over planner '{}'.",
+        mapview_name, layer_name, *planner_name);
+    return layer;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

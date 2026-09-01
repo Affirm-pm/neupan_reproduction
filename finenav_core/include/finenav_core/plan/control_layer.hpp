@@ -5,9 +5,11 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <variant>
+#include <vector>
 
 #include "../common/param_pollable_keeper.hpp"
 #include "finenav_core/map/map_concept.hpp"
@@ -56,37 +58,20 @@ public:
 
     void connectFrom(const std::string& parent_topic) override;
 
+    /// IControlLayer — attach a pre-built MapView plus its backing map resources.
+    void attachMapView(
+        std::shared_ptr<void> view,
+        std::vector<std::shared_ptr<IMapResource>> maps) override;
+
     // ── Configuration ──────────────────────────────────────────────────────
 
     void setInputTopic(const std::string& topic);
     void setupDataPorts();
 
-    /**
-     * @brief Bind a MapServer to this layer so the planner can read the map.
-     *
-     * At every plan() call the framework acquires a read-lock from @p server,
-     * passes the locked const MapT& to @p builder, and holds the lock until
-     * plan() returns via BoundMapView::lock_guard.
-     *
-     * @param builder  (const MapT&) → MapViewPtr
-     * @tparam MapT      Must satisfy Map.
-     */
-    template <typename MapT, typename BuilderFn>
-    void bind_map_view(std::shared_ptr<MapServer<MapT>> server, BuilderFn&& builder);
-
     void set_on_pre_plan(PrePlanCallback cb)   { on_pre_plan_  = std::move(cb); }
     void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
 
 private:
-    // ── Internal types ─────────────────────────────────────────────────────
-
-    struct BoundMapView {
-        MapViewPtr            view;
-        std::shared_ptr<void> lock_guard;
-    };
-
-    using MapViewFactory = std::function<BoundMapView()>;
-
     // ── Methods ────────────────────────────────────────────────────────────
 
     void PlanRefCallback(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
@@ -132,7 +117,8 @@ private:
 
     // ── Callbacks ──────────────────────────────────────────────────────────
 
-    MapViewFactory              map_view_factory_;
+    MapViewPtr                  view_;              ///< pre-built IMapView (attached once)
+    std::vector<std::shared_ptr<IMapResource>> map_resources_;  ///< maps to read-lock per plan
     PrePlanCallback             on_pre_plan_;
     PostPlanCallback            on_post_plan_;
     RobotStateProvider*        state_provider_{nullptr};

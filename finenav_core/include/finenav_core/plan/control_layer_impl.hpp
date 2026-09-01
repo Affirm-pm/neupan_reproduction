@@ -12,7 +12,7 @@
 #include <memory>
 #include <string>
 
-#include "finenav_core/common/algo_registry.hpp"
+#include "finenav_core/common/plan_registry.hpp"
 #include "finenav_core/map/map_server.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/ros_conversions.hpp"
@@ -54,7 +54,7 @@ ControlLayer<PlannerT>::ControlLayer(
     worker_ = std::make_unique<finenav::util::TaskWorker>(pnode_, layer_name);
 
     planner_name_ = algo_name;
-    auto pollable = AlgoRegistry::instance().loadPlannerParams(
+    auto pollable = PlanRegistry::instance().loadPlannerParams(
         algo_name, pnode_, &planner_instance_);
     if (!pollable) {
         // No FINENAV_REGISTER_PLANNER entry reached the registry for this name.
@@ -139,8 +139,9 @@ void ControlLayer<PlannerT>::resetPlanner() {
 
 template <Planner PlannerT>
 bool ControlLayer<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
-    if (!map_view_factory_) {
-        FINENAV_LOG_ERROR(pnode_->get_logger(), "MapViewFactory not set!");
+    if (!view_) {
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
+            "MapView not attached — call attachMapView() or createLayerByMapView() first.");
         return false;
     }
     if (!state_provider_) {
@@ -182,20 +183,19 @@ bool ControlLayer<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     ctx.goal_pose = pre_ctx.goal_pose;
     fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj);
 
-    auto bound = map_view_factory_();
+    // Acquire read locks on every map this view reads, held until plan() returns.
+    std::vector<std::shared_ptr<void>> map_locks;
+    map_locks.reserve(map_resources_.size());
+    for (const auto& res : map_resources_) {
+        map_locks.push_back(res->lockRead());
+    }
 
-    if (bound.view) {
-        // bound.lock_guard 持有读锁，plan() 调用期间地图不被写入
-        auto result = planner_instance_.plan(ctx, *bound.view);
-        if (result.has_value()) {
-            plan_success = true;
-            toROSMsg(std::move(result.value()), output_traj_msg);
-        } else {
-            FINENAV_LOG_WARN(pnode_->get_logger(), "plan() returned nullopt.");
-        }
+    auto result = planner_instance_.plan(ctx, *view_);
+    if (result.has_value()) {
+        plan_success = true;
+        toROSMsg(std::move(result.value()), output_traj_msg);
     } else {
-        FINENAV_LOG_ERROR(pnode_->get_logger(),
-            "MapView ptr is null for planner '{}'.", planner_name_);
+        FINENAV_LOG_WARN(pnode_->get_logger(), "plan() returned nullopt.");
     }
 
     if (on_post_plan_) {
@@ -311,35 +311,19 @@ void ControlLayer<PlannerT>::executeImpl(ContinuousPolicy& policy) {
 }
 
 // ==============================================================================
-// bind_map_view
+// attachMapView
 // ==============================================================================
 
 template <Planner PlannerT>
-template <typename MapT, typename BuilderFn>
-void ControlLayer<PlannerT>::bind_map_view(
-    std::shared_ptr<MapServer<MapT>> server,
-    BuilderFn&& builder)
+void ControlLayer<PlannerT>::attachMapView(
+    std::shared_ptr<void> view,
+    std::vector<std::shared_ptr<IMapResource>> maps)
 {
-    static_assert(Map<MapT>, // Use `static_assert` instead of `requires` to prevent clangd error.
-        "MapT must satisfy Map.");
-    static_assert(std::is_invocable_v<BuilderFn, const MapT&>,
-        "BuilderFn must be callable with (const MapT&).");
-    static_assert(std::convertible_to<std::invoke_result_t<BuilderFn, const MapT&>,
-                                      MapViewPtr>,
-        "BuilderFn must return a type convertible to MapViewPtr.");
-    std::function<MapViewPtr(const MapT&)> erased_builder =
-        std::forward<BuilderFn>(builder);
-    std::weak_ptr<MapServer<MapT>> weak_server = server;
-
-    map_view_factory_ = [weak_server,
-                         erased_builder = std::move(erased_builder)]
-                        () -> BoundMapView {
-        auto srv = weak_server.lock();
-        if (!srv) { return BoundMapView{}; }
-        auto locked = std::make_shared<LockedMapRO<MapT>>(srv->getLockedReadView());
-        MapViewPtr view = erased_builder(locked->get());
-        return BoundMapView{std::move(view), std::move(locked)};
-    };
+    // The erased pointer already points at the PlannerT::IMapView base subobject
+    // (MapViewRegistry's build upcasts before erasing to void*), so this static
+    // cast is an identity cast — no undefined pointer adjustment.
+    view_ = std::static_pointer_cast<typename PlannerT::IMapView>(std::move(view));
+    map_resources_ = std::move(maps);
 }
 
 } // namespace finenav::core

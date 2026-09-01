@@ -79,6 +79,11 @@ public:
     MapServer& operator=(MapServer&&) = delete;
     ~MapServer() = default;
 
+    // ── IMapResource introspection (type-erased, for MapView assembly) ─────
+    std::string       mapTypeId() const override;
+    const void*       mapData() const override;
+    std::shared_ptr<void> lockRead() override;
+
     /** @brief Register a user-facing hook called BEFORE sensor fusion, with write lock held. */
     void registerPreUpdateHook(PreUpdateHook hook);
 

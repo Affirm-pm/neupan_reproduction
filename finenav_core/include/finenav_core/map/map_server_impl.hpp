@@ -7,8 +7,9 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <typeinfo>
 
-#include "finenav_core/common/algo_registry.hpp"
+#include "finenav_core/common/map_registry.hpp"
 #include "finenav_util/common/log_macros.hpp"
 #include "finenav_util/common/stopwatch.hpp"
 #include "finenav_util/ros/node_thread.hpp"
@@ -114,7 +115,7 @@ MapServer<MapT>::MapServer(
         });
 
     map_instance_ = std::make_unique<MapT>();
-    auto pollable = AlgoRegistry::instance().loadMapParams(
+    auto pollable = MapRegistry::instance().loadMapParams(
         algo_name, pnode_, map_instance_.get());
     if (!pollable) {
         // No FINENAV_REGISTER_MAP entry reached the registry for this name.
@@ -157,6 +158,24 @@ MapServer<MapT>::MapServer(
             "MapServer '{}': shift timer started at {:.1f} Hz.",
             server_name_, shift_rate_hz_);
     }
+}
+
+// --- MapServer::mapTypeId  (see map_server.hpp) -------------------------------
+template <Map MapT>
+std::string MapServer<MapT>::mapTypeId() const {
+    return typeid(MapT).name();
+}
+
+// --- MapServer::mapData  (see map_server.hpp) ---------------------------------
+template <Map MapT>
+const void* MapServer<MapT>::mapData() const {
+    return map_instance_.get();
+}
+
+// --- MapServer::lockRead  (see map_server.hpp) --------------------------------
+template <Map MapT>
+std::shared_ptr<void> MapServer<MapT>::lockRead() {
+    return std::make_shared<LockedMapRO<MapT>>(getLockedReadView());
 }
 
 // --- MapServer::registerPreUpdateHook  (see map_server.hpp) --------------------

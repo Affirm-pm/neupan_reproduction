@@ -6,6 +6,11 @@
 
 #include "finenav_core/common/algo_register_details.hpp"
 
+// Self-registrars live in the split registries (planner / map) on the shared
+// RegistryTable bottom.
+#include "finenav_core/common/plan_registry.hpp"
+#include "finenav_core/common/map_registry.hpp"
+
 // Guarantees complete definitions are visible at expansion time
 #include "finenav_core/plan/control_layer.hpp"
 #include "finenav_core/map/map_server.hpp"

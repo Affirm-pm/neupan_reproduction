@@ -77,14 +77,14 @@ public:
 
     bool removeControlLayer(const std::string& name);
 
-    // ── Factory by name (runtime reflection via AlgoRegistry) ────────────
+    // ── Factory by name (runtime reflection via PlanRegistry / MapRegistry) ────
     // The algorithm .so self-registers its factory under the registration name
     // (#PARAM_NS from FINENAV_REGISTER_PLANNER / FINENAV_REGISTER_MAP) at
     // static-init (dlopen or link).  These look the factory up by name and build
     // the layer / map server inside the plugin, so the engine never needs the
     // concrete type.  Unknown names fail loudly (nullptr + ERROR) — no silent
     // fallback.  The concrete type is recovered later with getControlLayer<T>() /
-    // getMapServer<T>() (for typed operations such as bind_map_view).
+    // getMapServer<T>() (for typed operations).
 
     /// Create a ControlLayer for a planner registered under @p algo_name.
     std::shared_ptr<finenav::core::IControlLayer> createLayerByName(
@@ -94,6 +94,16 @@ public:
     /// Create a MapServer for a map registered under @p algo_name.
     std::shared_ptr<finenav::core::IMapResource> createMapServerByName(
         const std::string& algo_name, const std::string& server_name);
+
+    /// Assemble a complete ControlLayer from a registered MapView bridge by name.
+    /// The MapView registry entry declares only TYPES (planner + maps); this
+    /// resolves those types back to registered algo names, (re)uses dedup'd
+    /// MapServer(s), builds the IMapView and attaches it to a freshly created
+    /// layer.  The end user names ONLY the MapView — never a planner/map name.
+    std::shared_ptr<finenav::core::IControlLayer> createLayerByMapView(
+        const std::string& mapview_name,
+        const std::string& layer_name,
+        finenav::core::ExecutionPolicyVariant policy = finenav::core::SingleShotPolicy{});
 
     /// dlopen every .so under "pkg_name/sub_folder" so its self-registering
     /// algorithms become discoverable by name WITHOUT relinking.  Each entry is
@@ -123,6 +133,11 @@ private:
     void connectEdge(const std::string& from, const std::string& to);
     void connectEdge(const std::string& from,
                      std::shared_ptr<finenav::core::IControlLayer> to);
+
+    /// Return the MapServer already created under @p algo_name, or create one
+    /// (server name == algo name) on first use — so multiple MapViews sharing a
+    /// map type reuse one server.
+    std::shared_ptr<finenav::core::IMapResource> ensureMapServer(const std::string& algo_name);
 
     using NavAction = finenav_interfaces::action::NavigateToPose;
 

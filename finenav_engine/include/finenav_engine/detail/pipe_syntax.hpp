@@ -31,4 +31,17 @@ inline ControlPipeEdge operator>>(ControlPipeEdge&& e,
     return std::move(e);
 }
 
+// String-only chaining for name-based assembly: the 傻瓜 user wires layers by
+// their registered layer_name without ever holding a typed layer handle.
+inline ControlPipeEdge operator>>(const std::string& from, const std::string& to) {
+    ControlPipeEdge e;
+    e.chain = {from, to};
+    return e;
+}
+
+inline ControlPipeEdge operator>>(ControlPipeEdge&& e, const std::string& to) {
+    e.chain.push_back(to);
+    return std::move(e);
+}
+
 }  // namespace finenav

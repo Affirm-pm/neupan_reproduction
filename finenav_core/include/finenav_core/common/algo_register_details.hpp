@@ -10,7 +10,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/algo_registry.hpp"
+#include "finenav_core/common/named_registry.hpp"
 #include "finenav_core/common/param_pollable_keeper.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
 
@@ -97,7 +97,7 @@ std::shared_ptr<IParamPollable> makeParamPollable(
  * @tparam ListenerT generate_parameter_library ParamListener (PARAM_NS::ParamListener).
  */
 template <typename AlgoT, typename ParamsT, typename ListenerT>
-AlgoRegistry::ConfigLoader makeConfigLoader(std::string_view algo_name) {
+ConfigLoader makeConfigLoader(std::string_view algo_name) {
     return [algo_name](rclcpp::Node::SharedPtr node, void* instance)
         -> std::shared_ptr<IParamPollable> {
         return makeParamPollable<AlgoT, ParamsT, ListenerT>(

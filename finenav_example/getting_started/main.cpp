@@ -5,35 +5,12 @@
 // Getting started: assemble a complete navigation stack using FineNavEngine.
 
 #include <memory>
-#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_engine/finenav_engine.hpp"
-#include <geometry_msgs/msg/pose.hpp>
-
-#include "dummy_map.hpp"
-#include "dummy_planner.hpp"
 
 using namespace finenav;
-
-using example::DummyPlanner;
-using example::DummyMap;
-
-/**
- *  @brief Define a MapView, which determine the rule for planner
- *  @details In this example, the rule is quite simple: the planner only considers the map occupied if the position is occupied in the map.
- */
-class ASimpleMapView : public DummyPlanner::IMapView {
-public:
-    ASimpleMapView(const DummyMap& map_ptr) : map_(map_ptr) {}
-    bool isWalkable(const core::Position3D&) const override {
-        return !map_.isOccupied(core::Position3D());
-    }
-private:
-    const DummyMap& map_;
-};
-
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
@@ -44,37 +21,24 @@ int main(int argc, char** argv) {
     // 0. Set the default behavior tree (used by /goal_pose and navigateTo() without bt_id).
     engine->setDefaultBehaviorTree("GettingStartedNavigate");
 
-    // 1. Load the algorithm .so's.  They are NOT linked into this executable
-    //    (see getting_started/CMakeLists.txt): a self-registering .so that the
-    //    executable references no symbol from would be dropped by --as-needed and
-    //    its static-init registrar would never run.  dlopen forces the registrar
-    //    in each .so to fire, which populates the shared AlgoRegistry.
-    //    "finenav_example/lib" resolves to <prefix>/lib where the two libraries
-    //    were installed; the scan loads every *.so it finds.
+    // 1. Load the algorithm .so's.  The planner, map and mapview libraries are
+    //    deliberately NOT linked into this executable (see CMakeLists.txt) — a
+    //    self-registering .so the executable references no symbol from would be
+    //    dropped by --as-needed.  dlopen forces each registrar to fire, which
+    //    populates the shared PlanRegistry + MapRegistry + MapViewRegistry.
+    //    "finenav_example/lib" resolves to <prefix>/lib and loads every *.so it finds.
     engine->loadAlgoPlugins({"finenav_example/lib"});
 
-    // 2. Create MapServer by algorithm name.
-    //    DummyMap self-registered as "dummy_map" (FINENAV_REGISTER_MAP in its .cpp);
-    //    the factory runs inside libdummy_map.so, so the engine never sees the type.
-    engine->createMapServerByName("dummy_map", "my_map");
+    // 2. Assemble a ControlLayer from a MapView bridge by NAME.
+    //    createLayerByMapView resolves the planner + map TYPES the bridge declares
+    //    back to their registered names ("dummy_planner" / "dummy_map"), reuses
+    //    (or creates) the MapServer, builds the IMapView and attaches it.  The
+    //    end user never names a planner or a map — only the MapView.
+    engine->createLayerByMapView("dummy_mapview", "my_layer", core::ContinuousPolicy{10.0});
 
-    // 3. Create ControlLayer by algorithm name.
-    //    libdummy_planner.so self-registered as "dummy_planner".
-    engine->createLayerByName("dummy_planner", "my_layer", core::ContinuousPolicy{10.0});
-
-    // 4. Bind map to layer.
-    //    bind_map_view is a typed ControlLayer<DummyPlanner> method — recover the
-    //    concrete types (dynamic_pointer_cast only, no ctor instantiation here;
-    //    RTLD_GLOBAL keeps the RTTI unified across the DSO boundary).
-    auto typed_map   = engine->getMapServer<DummyMap>("my_map");
-    auto typed_layer = engine->getControlLayer<DummyPlanner>("my_layer");
-    typed_layer->bind_map_view(typed_map, [](const DummyMap& map_data) {
-            return std::make_shared<ASimpleMapView>(map_data);
-    });
-
-    // 5. Wire tree
+    // 3. Wire the tree — layers are addressed by their layer_name string.
     engine->wireControlPipeline({
-        _root >> typed_layer
+        _root >> "my_layer"
     });
 
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");
