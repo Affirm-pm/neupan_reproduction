@@ -47,32 +47,51 @@ struct PostPlanContext {
 
 
 /**
+ * @brief HasMapView — does the planner declare an IMapView (i.e. read a map)?
+ *
+ * A planner that reads a map declares `using IMapView = ...;` and its plan()
+ * takes a map view.  A map-less planner (e.g. a pure trajectory decorator)
+ * declares NO IMapView and its plan() takes only the context.  This structural
+ * trait lets the framework dispatch between the two signatures.
+ */
+template <typename T>
+concept HasMapView = requires { typename T::IMapView; };
+
+/**
  * @brief Planner — the fundamental contract for motion generation algorithms.
  *
- * A Planner reads a map view and produces a trajectory
+ * A Planner maps a reference trajectory to an output trajectory.  Whether it
+ * reads a map is expressed by the plan() signature itself:
+ *   - reads a map   → declares IMapView, plan(ctx, map_view)
+ *   - map-less      → declares no IMapView, plan(ctx)
  */
 template <typename T>
 concept Planner =
     std::default_initializable<T> &&
     requires {
         typename T::ConfigType;
-        typename T::IMapView;
         typename InputTrajectoryT<T>;
         typename OutputTrajectoryT<T>;
     } &&
     requires(T planner,
              const typename T::ConfigType& config,
-             const PlanningContext<T>& ctx,
-             const typename T::IMapView& map_view) {
+             const PlanningContext<T>& ctx) {
 
         // --- Basic configuration ---
         { planner.configure(config) } -> std::same_as<void>;
 
         // --- Episode boundary: called by framework when a new goal arrives ---
         { planner.reset() } -> std::same_as<void>;
-
-        // --- Core planning interface ---
+    } &&
+    (requires(T planner,
+              const PlanningContext<T>& ctx,
+              const typename T::IMapView& map_view) {
+        // --- Core planning interface (map-reading planner) ---
         { planner.plan(ctx, map_view) } -> std::same_as<std::optional<OutputTrajectoryT<T>>>;
-    };
+    } ||
+    requires(T planner, const PlanningContext<T>& ctx) {
+        // --- Core planning interface (map-less planner) ---
+        { planner.plan(ctx) } -> std::same_as<std::optional<OutputTrajectoryT<T>>>;
+    });
 
 }  // namespace finenav::core

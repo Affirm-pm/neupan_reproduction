@@ -139,10 +139,12 @@ void ControlLayer<PlannerT>::resetPlanner() {
 
 template <Planner PlannerT>
 bool ControlLayer<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
-    if (!view_) {
-        FINENAV_LOG_ERROR(pnode_->get_logger(),
-            "MapView not attached — call attachMapView() or createLayerByMapView() first.");
-        return false;
+    if constexpr (HasMapView<PlannerT>) {
+        if (!view_) {
+            FINENAV_LOG_ERROR(pnode_->get_logger(),
+                "MapView not attached — call attachMapView() or createLayerByMapView() first.");
+            return false;
+        }
     }
     if (!state_provider_) {
         FINENAV_LOG_ERROR(pnode_->get_logger(),
@@ -190,7 +192,17 @@ bool ControlLayer<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
         map_locks.push_back(res->lockRead());
     }
 
-    auto result = planner_instance_.plan(ctx, *view_);
+    auto result = [&]() -> std::optional<OutputTrajectoryT<PlannerT>> {
+        if constexpr (HasMapView<PlannerT>) {
+            // view_ is type-erased (already targeting the PlannerT::IMapView base
+            // subobject); recover the typed pointer here.  This branch is only
+            // compiled for map-reading planners.
+            auto typed_view = std::static_pointer_cast<typename PlannerT::IMapView>(view_);
+            return planner_instance_.plan(ctx, *typed_view);
+        } else {
+            return planner_instance_.plan(ctx);
+        }
+    }();
     if (result.has_value()) {
         plan_success = true;
         toROSMsg(std::move(result.value()), output_traj_msg);
@@ -319,11 +331,21 @@ void ControlLayer<PlannerT>::attachMapView(
     std::shared_ptr<void> view,
     std::vector<std::shared_ptr<IMapResource>> maps)
 {
-    // The erased pointer already points at the PlannerT::IMapView base subobject
-    // (MapViewRegistry's build upcasts before erasing to void*), so this static
-    // cast is an identity cast — no undefined pointer adjustment.
-    view_ = std::static_pointer_cast<typename PlannerT::IMapView>(std::move(view));
-    map_resources_ = std::move(maps);
+    if constexpr (HasMapView<PlannerT>) {
+        // Stored type-erased: the pointer already targets the PlannerT::IMapView
+        // base subobject (MapViewRegistry upcasts before erasing), so planOnce
+        // recovers the typed pointer with a static cast.
+        view_ = std::move(view);
+        map_resources_ = std::move(maps);
+    } else {
+        // Map-less planner: it declares no IMapView, so no view can target it
+        // (a MapView can never be registered against it either).
+        (void)view;
+        (void)maps;
+        FINENAV_LOG_WARN(pnode_->get_logger(),
+            "attachMapView ignored: '{}' (layer '{}') is a map-less planner.",
+            planner_name_, layer_name_);
+    }
 }
 
 } // namespace finenav::core

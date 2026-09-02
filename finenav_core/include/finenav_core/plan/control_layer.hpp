@@ -39,7 +39,6 @@ class ControlLayer : public IControlLayer {
 public:
     // ── Types ──────────────────────────────────────────────────────────────
 
-    using MapViewPtr = std::shared_ptr<typename PlannerT::IMapView>;
     using PrePlanCallback = std::function<bool(PrePlanContext&)>;
     using PostPlanCallback = std::function<bool(PostPlanContext&)>;
 
@@ -117,7 +116,7 @@ private:
 
     // ── Callbacks ──────────────────────────────────────────────────────────
 
-    MapViewPtr                  view_;              ///< pre-built IMapView (attached once)
+    std::shared_ptr<void>       view_;              ///< type-erased IMapView (map-reading planners only)
     std::vector<std::shared_ptr<IMapResource>> map_resources_;  ///< maps to read-lock per plan
     PrePlanCallback             on_pre_plan_;
     PostPlanCallback            on_post_plan_;
