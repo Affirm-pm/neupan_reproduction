@@ -21,18 +21,19 @@ namespace finenav::core {
 struct PrePlanContext {
     const std::string&           active_planner_id;  ///< ID of the planner that is about to run (const)
     RobotState&                  robot_state;        ///< Current robot state
-    geometry_msgs::msg::Pose&    goal_pose;          ///< Goal pose for the current planning episode
     finenav_interfaces::msg::Trajectory& ref_traj;   ///< Reference trajectory for the current planning episode
 };
 
 /**
  * @brief PlanningContext — context passed to planner.plan() calls.
+ *
+ * The goal of an episode is carried as the last pose of the reference
+ * trajectory (`ref_traj.poses.back()`), not as a separate field.
  * @tparam PlannerT Planner type
  */
 template <typename PlannerT>
 struct PlanningContext {
     RobotState                    robot_state;      ///< Current robot state
-    geometry_msgs::msg::Pose      goal_pose;        ///< Goal pose for the current planning episode
     InputTrajectoryT<PlannerT>    ref_traj;         ///< Reference trajectory for the current planning episode
 };
 

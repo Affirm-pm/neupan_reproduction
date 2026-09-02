@@ -57,8 +57,10 @@ BfsPathSearch::Result BfsPathSearch::plan(
         return map_view.getCost(cellCentre(c));
     };
 
+    if (ctx.ref_traj.poses.empty()) return std::nullopt;
+
     const auto& sp = ctx.robot_state.position;
-    const auto& gp = ctx.goal_pose.position;
+    const auto& gp = ctx.ref_traj.poses.back().position;
 
     const astar::Vec3 start = worldToCell(sp.x(), sp.y(), sp.z());
     const astar::Vec3 goal  = worldToCell(gp.x, gp.y, gp.z);

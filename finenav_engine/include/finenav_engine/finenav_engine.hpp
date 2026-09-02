@@ -125,7 +125,7 @@ public:
 
     // ── Navigation control ────────────────────────────────────────────────
 
-    void navigateTo(const geometry_msgs::msg::Pose& goal,
+    void navigateTo(const std::vector<geometry_msgs::msg::Pose>& goals,
                     const std::string& bt_id = "");
     void cancelNavigation();
 

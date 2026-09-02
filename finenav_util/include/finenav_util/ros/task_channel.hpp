@@ -4,9 +4,8 @@
 
 /// Master/Worker communication over intra-process ROS topics.
 ///
-/// 3 topics per channel:
-///   <name>/__cmd       → TaskCmd      (Master→Worker: start a task)
-///   <name>/__stop      → TaskStop     (Master→Worker: stop the current task)
+/// 2 topics per channel:
+///   <name>/__cmd       → TaskCmd      (Master→Worker: START/STOP control)
 ///   <name>/__feedback  → TaskFeedback (Worker→Master: running/completed/failed)
 
 #pragma once
@@ -20,7 +19,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "finenav_interfaces/msg/task_cmd.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
-#include "finenav_interfaces/msg/task_stop.hpp"
 
 namespace finenav::util {
 
@@ -40,12 +38,10 @@ inline std::shared_ptr<rclcpp::Node> make_intra_node(
 
 struct TaskChannel {
     static std::string cmdTopic(const std::string& name)      { return name + "/__cmd"; }
-    static std::string stopTopic(const std::string& name)     { return name + "/__stop"; }
     static std::string feedbackTopic(const std::string& name) { return name + "/__feedback"; }
 };
 
 using CmdMsg      = finenav_interfaces::msg::TaskCmd;
-using StopMsg     = finenav_interfaces::msg::TaskStop;
 using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
 
 /**
@@ -58,15 +54,15 @@ public:
     explicit TaskMaster(std::shared_ptr<rclcpp::Node> node);
 
     /**
-     * @brief Register a Worker channel (3 topics). Called once per layer.
+     * @brief Register a Worker channel (2 topics). Called once per layer.
      */
     void manageLayer(const std::string& name);
     void unmanageLayer(const std::string& name);
 
     /**
-     * @brief Master → Worker, start a task on a specific layer.
+     * @brief Master → Worker, activate a layer for the next episode.
      */
-    void start(const std::string& name, CmdMsg&& cmd);
+    void start(const std::string& name);
 
     /**
      * @brief Master → Worker, stop a single layer.
@@ -91,7 +87,6 @@ public:
 private:
     struct Channel {
         std::shared_ptr<rclcpp::Publisher<CmdMsg>>      cmd_pub;
-        std::shared_ptr<rclcpp::Publisher<StopMsg>>     stop_pub;
         std::shared_ptr<rclcpp::Subscription<FeedbackMsg>> feedback_sub;
         std::shared_ptr<const FeedbackMsg>             latest_fb;
     };
@@ -118,15 +113,14 @@ public:
     /**
      * @brief Worker loop helpers
      * @details
-     * hasNewGoal() - Check if a new goal has been received from the master.
-     * latestGoal() - Get the latest goal message.
-     * shouldStop() - Check if a stop command has been received from the master.
-     * ackGoal() - Acknowledge that the latest goal has been processed.
+     * hasStart()  - Check if a START control has been received from the master.
+     * shouldStop()- Check if a STOP control has been received from the master.
+     * ackStart()  - Acknowledge that the START has been processed (also clears
+     *               any pending STOP: a START supersedes a prior STOP).
      */
-    bool hasNewGoal() const;
-    std::shared_ptr<const CmdMsg> latestGoal() const;
+    bool hasStart() const;
     bool shouldStop() const;
-    void ackGoal();
+    void ackStart();
 
     /**
      * @brief Worker -> Master, publish feedback messages
@@ -143,11 +137,9 @@ private:
     std::shared_ptr<rclcpp::Node> node_;
 
     std::shared_ptr<rclcpp::Subscription<CmdMsg>>    cmd_sub_;
-    std::shared_ptr<rclcpp::Subscription<StopMsg>>   stop_sub_;
     std::shared_ptr<rclcpp::Publisher<FeedbackMsg>>  feedback_pub_;
 
-    std::shared_ptr<const CmdMsg> latest_goal_;
-    std::atomic<bool> new_goal_{false};
+    std::atomic<bool> start_{false};
     std::atomic<bool> should_stop_{false};
 };
 

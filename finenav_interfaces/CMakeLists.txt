@@ -14,7 +14,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
         msg/RobotState.msg
         msg/NavStatus.msg
         msg/TaskCmd.msg
-        msg/TaskStop.msg
         msg/TaskFeedback.msg
         action/NavigateToPose.action
         DEPENDENCIES geometry_msgs std_msgs

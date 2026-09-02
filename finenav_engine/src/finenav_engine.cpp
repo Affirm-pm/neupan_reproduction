@@ -30,7 +30,7 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
 
     goal_sub_ = node_->create_subscription<geometry_msgs::msg::PoseStamped>(
         "/goal_pose", 10,
-        [this](const geometry_msgs::msg::PoseStamped& msg) { navigateTo(msg.pose); });
+        [this](const geometry_msgs::msg::PoseStamped& msg) { navigateTo({msg.pose}); });
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -58,7 +58,7 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByName(
     finenav::core::ExecutionPolicyVariant policy)
 {
     // A reactive layer is data-driven: it is not commanded by the navigator, so
-    // it must NOT be registered with the TaskMaster (no __cmd/__stop topics).
+    // it must NOT be registered with the TaskMaster (no __cmd topic).
     const bool reactive = std::holds_alternative<finenav::core::ReactivePolicy>(policy);
 
     auto layer = finenav::core::PlanRegistry::instance().createLayer(
@@ -268,13 +268,19 @@ void FineNavEngine::wireControlPipeline(std::initializer_list<ControlPipeEdge> e
 //  Navigation control
 // ══════════════════════════════════════════════════════════════════════════════
 
-void FineNavEngine::navigateTo(const geometry_msgs::msg::Pose& goal,
+void FineNavEngine::navigateTo(const std::vector<geometry_msgs::msg::Pose>& goals,
                                const std::string& bt_id) {
     const std::string tree_id = bt_id.empty() ? default_bt_id_ : bt_id;
     if (tree_id.empty()) {
         FINENAV_LOG_ERROR(node_->get_logger(),
             "navigateTo: behavior tree ID is empty. "
             "Pass a bt_id or call setDefaultBehaviorTree() first.");
+        return;
+    }
+
+    if (goals.empty()) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "navigateTo: empty goal list — nothing to navigate to.");
         return;
     }
 
@@ -285,15 +291,13 @@ void FineNavEngine::navigateTo(const geometry_msgs::msg::Pose& goal,
     }
 
     auto goal_msg = NavAction::Goal();
-    goal_msg.pose.pose         = goal;
-    goal_msg.pose.header.stamp = node_->now();
-    goal_msg.pose.header.frame_id = "map";
-    goal_msg.behavior_tree     = tree_id;
+    goal_msg.poses          = goals;
+    goal_msg.behavior_tree  = tree_id;
 
     nav_client_->async_send_goal(goal_msg);
     FINENAV_LOG_INFO(node_->get_logger(),
         "Navigation goal sent: ({:.2f}, {:.2f}, {:.2f})",
-        goal.position.x, goal.position.y, goal.position.z);
+        goals.back().position.x, goals.back().position.y, goals.back().position.z);
 }
 
 void FineNavEngine::cancelNavigation() {

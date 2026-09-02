@@ -28,8 +28,10 @@ DummyPlanner::Result DummyPlanner::plan(const Context& ctx,const IMapView& map_v
 
     using Trajectory = finenav::core::Trajectory<OutputProfile>; // TODO：这个写法不错，很漂亮
 
-    double dx = ctx.goal_pose.position.x - ctx.robot_state.pose.position.x;
-    double dy = ctx.goal_pose.position.y - ctx.robot_state.pose.position.y;
+    if (ctx.ref_traj.poses.empty()) return std::nullopt;
+    const auto& goal = ctx.ref_traj.poses.back();
+    double dx = goal.position.x - ctx.robot_state.pose.position.x;
+    double dy = goal.position.y - ctx.robot_state.pose.position.y;
 
     double desired_yaw = std::atan2(dy, dx);
 

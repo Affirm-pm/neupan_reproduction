@@ -45,7 +45,7 @@ public:
     using ConfigType = bfs_planner::Params;
 
     static constexpr IOProfile InputProfile = {
-        .pose  = false,
+        .pose  = true,   // goal = ref_traj.poses.back()
         .vel   = false,
         .accel = false,
         .time  = false

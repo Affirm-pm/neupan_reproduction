@@ -30,6 +30,11 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
     // with every ControlLayer's TaskWorker (also under /hello_finenav).
     master_ = std::make_unique<finenav::util::TaskMaster>(pnode_);
 
+    // _root goal-source channel: downstream ControlLayers wired with `_root >> …`
+    // subscribe here to receive the episode goal list as their ref_traj.
+    root_feedback_pub_ = pnode_->create_publisher<FeedbackMsg>(
+        finenav::util::TaskChannel::feedbackTopic("_root"), 10);
+
     // ── 读取参数 ──────────────────────────────────────────────────────────────
     param_listener_ = std::make_unique<finenav_navigator::ParamListener>(pnode_);
     params_ = param_listener_->get_params();
@@ -65,6 +70,12 @@ void BtNavigator::execute()
     FINENAV_LOG_INFO(pnode_->get_logger(), "Executing action...");
 
     auto goal = action_server_->get_current_goal();
+    if (!goal || goal->poses.empty()) {
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
+            "NavigateToPose goal carries no poses — nothing to navigate to.");
+        if (goal) action_server_->terminate_all();
+        return;
+    }
 
     try {
         tree_ = bt_engine_->factory().createTree(goal->behavior_tree);
@@ -77,16 +88,26 @@ void BtNavigator::execute()
     }
 
     auto blackboard = tree_.rootBlackboard();
-    blackboard->set("goal", goal->pose.pose);
+    blackboard->set("goal", goal->poses.back());
     blackboard->set("_node", parent_node_);
     blackboard->set("_nav_task_master", master_.get());
     blackboard->set("_chassis_cmd", chassis_cmd_.get());
+
+    // Publish the goal list onto the _root goal-source channel as a reference
+    // trajectory, so layers wired `_root >> …` receive it as their ref_traj.
+    FeedbackMsg root_fb;
+    root_fb.status = FeedbackMsg::RUNNING;
+    root_fb.trajectory.header.stamp = pnode_->now();
+    root_fb.trajectory.header.frame_id = "map";
+    root_fb.trajectory.valid_fields = finenav_interfaces::msg::Trajectory::TRAJ_POSE;
+    root_fb.trajectory.poses = goal->poses;
+    root_feedback_pub_->publish(root_fb);
 
     auto episode_start = pnode_->now();
     rclcpp::WallRate loop_rate(params_.tick_frequency);
     FINENAV_LOG_INFO(pnode_->get_logger(),
         "Starting navigation to ({:.2f}, {:.2f})",
-        goal->pose.pose.position.x, goal->pose.pose.position.y);
+        goal->poses.back().position.x, goal->poses.back().position.y);
 
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
@@ -163,7 +184,7 @@ void BtNavigator::execute()
             auto result = std::make_shared<typename ActionT::Result>();
             if (state_provider_) {
                 if (auto rs = state_provider_->getRobotState()) {
-                    auto& g = goal->pose.pose;
+                    auto& g = goal->poses.back();
                     result->position_error.x = rs->pose.position.x - g.position.x;
                     result->position_error.y = rs->pose.position.y - g.position.y;
                     result->position_error.z = rs->pose.position.z - g.position.z;

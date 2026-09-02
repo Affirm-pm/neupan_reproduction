@@ -9,8 +9,6 @@
 namespace finenav::navigator {
 
 BT::NodeStatus ComputePlan::onStart() {
-    using CmdMsg = finenav_interfaces::msg::TaskCmd;
-
     auto* master = config().blackboard->get<finenav::util::TaskMaster*>("_nav_task_master");
     if (!master) return BT::NodeStatus::FAILURE;
 
@@ -21,17 +19,13 @@ BT::NodeStatus ComputePlan::onStart() {
     if (!getInput("goal", goal) || !getInput("planner_id", planner_id))
         return BT::NodeStatus::FAILURE;
 
-    CmdMsg cmd;
-    cmd.goal = goal;
-    cmd.planner_id = planner_id;
-    master->start(layer_, std::move(cmd));
+    master->start(layer_);
     last_goal_ = goal;
     last_planner_id_ = planner_id;
     return BT::NodeStatus::RUNNING;
 }
 
 BT::NodeStatus ComputePlan::onRunning() {
-    using CmdMsg = finenav_interfaces::msg::TaskCmd;
     using Status = finenav_interfaces::msg::TaskFeedback;
 
     auto* master = config().blackboard->get<finenav::util::TaskMaster*>("_nav_task_master");
@@ -50,10 +44,7 @@ BT::NodeStatus ComputePlan::onRunning() {
 
     // Goal changed — restart the task
     if (taskChanged(goal, planner_id)) {
-        CmdMsg cmd;
-        cmd.goal = goal;
-        cmd.planner_id = planner_id;
-        master->start(layer_, std::move(cmd));
+        master->start(layer_);
         last_goal_ = goal;
         last_planner_id_ = planner_id;
     }

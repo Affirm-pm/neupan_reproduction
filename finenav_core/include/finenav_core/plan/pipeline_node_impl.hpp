@@ -141,7 +141,7 @@ void PipelineNode<PlannerT>::resetPlanner() {
 
 template <Planner PlannerT>
 std::optional<finenav_interfaces::msg::Trajectory>
-PipelineNode<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
+PipelineNode<PlannerT>::planOnce() {
     if constexpr (HasMapView<PlannerT>) {
         if (!view_) {
             FINENAV_LOG_ERROR(pnode_->get_logger(),
@@ -164,10 +164,24 @@ PipelineNode<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     RobotState current_robot_state = *maybe_state;
 
     finenav_interfaces::msg::Trajectory current_ref_msg;
+    bool has_ref = false;
     {
         std::lock_guard<std::mutex> lock(plan_ref_mutex_);
         if (plan_ref_msg_) {
             current_ref_msg = plan_ref_msg_->trajectory;  // copy only the trajectory
+            has_ref = true;
+        }
+    }
+
+    // A pose-reading planner derives its goal from the reference trajectory
+    // (`ref_traj.poses.back()`), so a missing reference means "no goal yet".
+    // Fail gracefully instead of letting fromROSMsg throw in the worker thread.
+    if constexpr (PlannerT::InputProfile.pose) {
+        if (!has_ref) {
+            FINENAV_LOG_WARN(pnode_->get_logger(),
+                "planOnce: no reference trajectory received yet (layer '{}').",
+                layer_name_);
+            return std::nullopt;
         }
     }
 
@@ -177,7 +191,7 @@ PipelineNode<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
     finenav_interfaces::msg::Trajectory output_traj_msg;
 
     PrePlanContext pre_ctx{
-        planner_name_, current_robot_state, goal_pose, current_ref_msg};
+        planner_name_, current_robot_state, current_ref_msg};
 
     if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
         return std::nullopt;
@@ -185,7 +199,6 @@ PipelineNode<PlannerT>::planOnce(geometry_msgs::msg::Pose goal_pose) {
 
     PlanningContext<PlannerT> ctx;
     ctx.robot_state = current_robot_state;
-    ctx.goal_pose = pre_ctx.goal_pose;
     fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj);
 
     // Acquire read locks on every map this view reads, held until plan() returns.

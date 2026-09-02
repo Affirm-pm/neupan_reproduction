@@ -52,6 +52,7 @@ RoutePathSearch::Result RoutePathSearch::plan(
     std::lock_guard<std::mutex> lock(*graph_mutex_);
 
     if (!cached_graph_ || cached_graph_->nodes.empty()) return std::nullopt;
+    if (ctx.ref_traj.poses.empty()) return std::nullopt;
     const auto& orig_graph = *cached_graph_;
 
     // Obstacle-aware BFS to snap start and goal to nearest reachable
@@ -67,7 +68,8 @@ RoutePathSearch::Result RoutePathSearch::plan(
     const auto start_snap = findNearestGraphPoint(orig_graph, start_pose, map_view);
     if (!start_snap.isNode() && !start_snap.isPath()) return std::nullopt;
 
-    const auto goal_snap = findNearestGraphPoint(orig_graph, ctx.goal_pose, map_view);
+    const auto goal_snap =
+        findNearestGraphPoint(orig_graph, ctx.ref_traj.poses.back(), map_view);
     if (!goal_snap.isNode() && !goal_snap.isPath()) return std::nullopt;
 
     // ── Build mutable working graph ──────────────────────────────────────
@@ -141,7 +143,7 @@ RoutePathSearch::Result RoutePathSearch::plan(
     for (size_t i = (skip_first_route ? 1 : 0); i < route_opt->size(); ++i)
         appendPose((*route_opt)[i].first, (*route_opt)[i].second);
 
-    // ── Goal connector (snap_point → goal_pose), reversed ──
+    // ── Goal connector (snap_point → final ref pose), reversed ──
     if (!isDegenerate(goal_snap.connector_path)) {
         const auto& route_end = output.poses.back().position;
         const auto& goal_last = goal_snap.connector_path.back();  // snap point

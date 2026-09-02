@@ -12,7 +12,6 @@
 #include <thread>
 #include <type_traits>
 
-#include "geometry_msgs/msg/pose.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::core {
@@ -66,8 +65,8 @@ void ControlLayer<PlannerT>::startWorker(std::function<void()> episode_body) {
     worker_ = std::make_unique<finenav::util::TaskWorker>(this->pnode_, this->layer_name_);
     worker_thread_ = std::thread([this, episode_body = std::move(episode_body)]() {
         while (rclcpp::ok() && !stop_) {
-            if (worker_->hasNewGoal()) {
-                worker_->ackGoal();
+            if (worker_->hasStart()) {
+                worker_->ackStart();
                 if (!waitForState()) {
                     worker_->publishFailed();
                     continue;
@@ -103,15 +102,12 @@ bool ControlLayer<PlannerT>::waitForState() {
 
 template <Planner PlannerT>
 void ControlLayer<PlannerT>::runSingleShot() {
-    auto goal = worker_->latestGoal();
-    if (!goal) return;
-
     if (worker_->shouldStop()) {
         worker_->publishFailed();
         return;
     }
 
-    auto out = this->planOnce(goal->goal);
+    auto out = this->planOnce();
     if (!out) {
         FINENAV_LOG_ERROR(this->pnode_->get_logger(), "SingleShot: plan() failed.");
         worker_->publishFailed();
@@ -125,9 +121,6 @@ void ControlLayer<PlannerT>::runSingleShot() {
 
 template <Planner PlannerT>
 void ControlLayer<PlannerT>::runContinuous() {
-    auto goal = worker_->latestGoal();
-    if (!goal) return;
-    auto goal_pose = goal->goal;
     rclcpp::Rate rate(std::get<ContinuousPolicy>(policy_).frequency_hz);
 
     while (rclcpp::ok()) {
@@ -135,14 +128,8 @@ void ControlLayer<PlannerT>::runContinuous() {
             worker_->publishFailed();
             return;
         }
-        if (worker_->hasNewGoal()) {  // preemption: hot-swap goal, keep warm-start
-            if (auto ng = worker_->latestGoal()) {
-                goal_pose = ng->goal;
-                worker_->ackGoal();
-            }
-        }
 
-        auto out = this->planOnce(goal_pose);
+        auto out = this->planOnce();
         if (!out) {
             FINENAV_LOG_ERROR(this->pnode_->get_logger(), "Tracking: plan() failed — aborting.");
             worker_->publishFailed();
@@ -173,10 +160,9 @@ void ControlLayer<PlannerT>::onPlanRef(
 
 template <Planner PlannerT>
 void ControlLayer<PlannerT>::react() {
-    // TODO(Step 3): a reactive node has no commanded goal — a default pose stands
-    // in until PlanningContext drops goal_pose and the reference trajectory alone
-    // drives planning.
-    auto out = this->planOnce(geometry_msgs::msg::Pose{});
+    // A reactive node is data-driven: the upstream reference trajectory alone
+    // drives planning (the goal is its last pose).
+    auto out = this->planOnce();
     if (!out) return;
 
     auto fb = std::make_unique<finenav_interfaces::msg::TaskFeedback>();

@@ -104,9 +104,10 @@ makeCtx(double sx, double sy, double gx, double gy)
     ctx.robot_state.position.x() = sx;
     ctx.robot_state.position.y() = sy;
     ctx.robot_state.orientation.w() = 1.0;
-    ctx.goal_pose.position.x    = gx;
-    ctx.goal_pose.position.y    = gy;
-    ctx.goal_pose.orientation.w = 1.0;
+    ctx.ref_traj.poses.resize(1);
+    ctx.ref_traj.poses[0].position.x    = gx;
+    ctx.ref_traj.poses[0].position.y    = gy;
+    ctx.ref_traj.poses[0].orientation.w = 1.0;
     return ctx;
 }
 

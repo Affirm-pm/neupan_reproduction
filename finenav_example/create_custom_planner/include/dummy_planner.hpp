@@ -46,7 +46,7 @@ public:
     using ConfigType    = dummy_planner::Params;
     using IMapView      = DummyMapView;
 
-    static constexpr finenav::core::IOProfile InputProfile{false, false, false, false};
+    static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
     static constexpr finenav::core::IOProfile OutputProfile{false, true, false, false};
 
     DummyPlanner();

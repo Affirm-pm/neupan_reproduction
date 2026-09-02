@@ -47,7 +47,7 @@ using finenav::core::Trajectory;
 //   2. AStarAlgorithm::findPathToAny (h=0 + map isWalkable/getCost)
 //      → find the nearest REACHABLE graph point (node OR path point)
 //        to ctx.robot_state.pose.
-//   3. Same search for ctx.goal_pose.
+//   3. Same search for the goal — ctx.ref_traj.poses.back().
 //   4. For path-point snaps: insert virtual nodes + split edges on a
 //      mutable graph copy.
 //   5. Dijkstra on the (possibly modified) route graph (route::findRoute).
@@ -61,7 +61,7 @@ public:
     using ConfigType = route_planner::Params;
 
     static constexpr IOProfile InputProfile = {
-        .pose  = false,
+        .pose  = true,   // goal = ref_traj.poses.back()
         .vel   = false,
         .accel = false,
         .time  = false

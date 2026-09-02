@@ -227,8 +227,10 @@ makeCtx(double sx, double sy, double gx, double gy)
     finenav::PlanningContext<finenav::BfsPathSearch> ctx;
     ctx.robot_state.position.x() = sx;
     ctx.robot_state.position.y() = sy;
-    ctx.goal_pose.position.x = gx;
-    ctx.goal_pose.position.y = gy;
+    ctx.ref_traj.poses.resize(1);
+    ctx.ref_traj.poses[0].position.x    = gx;
+    ctx.ref_traj.poses[0].position.y    = gy;
+    ctx.ref_traj.poses[0].orientation.w = 1.0;
     return ctx;
 }
 

@@ -101,7 +101,6 @@ public:
 
         finenav::core::Trajectory<OutputProfile> traj;
         const auto& robot_state = ctx.robot_state;
-        auto goal_pose = ctx.goal_pose;
 
         nav_msgs::msg::Path path = convertDataPacketToPath(ctx.ref_traj, "map");
         this->setPlan(path);

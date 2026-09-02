@@ -12,7 +12,7 @@
 
 namespace finenav {
 
-inline const std::string _root;
+inline const std::string _root = "_root";
 
 struct ControlPipeEdge {
     std::vector<std::string> chain;

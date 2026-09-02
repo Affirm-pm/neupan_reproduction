@@ -21,7 +21,6 @@
 #include "finenav_interfaces/msg/task_feedback.hpp"
 #include "finenav_interfaces/msg/trajectory.hpp"
 #include "finenav_util/ros/node_thread.hpp"
-#include "geometry_msgs/msg/pose.hpp"
 
 namespace finenav::core {
 
@@ -86,10 +85,12 @@ protected:
 
     /**
      * @brief Run one planning step: pre-cb → read-lock MapView → plan() → post-cb.
+     *
+     * The goal is read from the stashed reference trajectory
+     * (`ref_traj.poses.back()`), so no goal argument is needed.
      * @return The output trajectory on success, nullopt otherwise.
      */
-    std::optional<finenav_interfaces::msg::Trajectory> planOnce(
-        geometry_msgs::msg::Pose goal_pose);
+    std::optional<finenav_interfaces::msg::Trajectory> planOnce();
 
     // ── ROS infrastructure ─────────────────────────────────────────────────
 

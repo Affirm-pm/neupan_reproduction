@@ -18,7 +18,6 @@ void TaskMaster::manageLayer(const std::string& name) {
 
     Channel ch;
     ch.cmd_pub  = node_->create_publisher<CmdMsg>(TaskChannel::cmdTopic(name), 10);
-    ch.stop_pub = node_->create_publisher<StopMsg>(TaskChannel::stopTopic(name), 10);
     ch.feedback_sub = node_->create_subscription<FeedbackMsg>(
         TaskChannel::feedbackTopic(name), 10,
         [this, name](std::shared_ptr<const FeedbackMsg> msg) {
@@ -33,19 +32,25 @@ void TaskMaster::unmanageLayer(const std::string& name) {
     channels_.erase(name);
 }
 
-void TaskMaster::start(const std::string& name, CmdMsg&& cmd) {
+void TaskMaster::start(const std::string& name) {
     auto& ch = getOrThrow(name);
-    ch.cmd_pub->publish(std::make_unique<CmdMsg>(std::move(cmd)));
+    auto msg = std::make_unique<CmdMsg>();
+    msg->cmd = CmdMsg::START;
+    ch.cmd_pub->publish(std::move(msg));
 }
 
 void TaskMaster::stop(const std::string& name) {
     auto& ch = getOrThrow(name);
-    ch.stop_pub->publish(std::make_unique<StopMsg>());
+    auto msg = std::make_unique<CmdMsg>();
+    msg->cmd = CmdMsg::STOP;
+    ch.cmd_pub->publish(std::move(msg));
 }
 
 void TaskMaster::stopAll() {
     for (auto& [name, ch] : channels_) {
-        ch.stop_pub->publish(std::make_unique<StopMsg>());
+        auto msg = std::make_unique<CmdMsg>();
+        msg->cmd = CmdMsg::STOP;
+        ch.cmd_pub->publish(std::move(msg));
     }
 }
 
@@ -86,31 +91,24 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
     cmd_sub_ = node_->create_subscription<CmdMsg>(
         TaskChannel::cmdTopic(channel_name), 10,
         [this](std::shared_ptr<const CmdMsg> msg) {
-            latest_goal_ = std::move(msg);
-            new_goal_.store(true, std::memory_order_release);
-        });
-
-    stop_sub_ = node_->create_subscription<StopMsg>(
-        TaskChannel::stopTopic(channel_name), 10,
-        [this](std::shared_ptr<const StopMsg> /*msg*/) {
-            should_stop_.store(true, std::memory_order_release);
+            if (msg->cmd == CmdMsg::START) {
+                start_.store(true, std::memory_order_release);
+            } else if (msg->cmd == CmdMsg::STOP) {
+                should_stop_.store(true, std::memory_order_release);
+            }
         });
 }
 
-bool TaskWorker::hasNewGoal() const {
-    return new_goal_.load(std::memory_order_acquire);
-}
-
-std::shared_ptr<const CmdMsg> TaskWorker::latestGoal() const {
-    return latest_goal_;
+bool TaskWorker::hasStart() const {
+    return start_.load(std::memory_order_acquire);
 }
 
 bool TaskWorker::shouldStop() const {
     return should_stop_.load(std::memory_order_acquire);
 }
 
-void TaskWorker::ackGoal() {
-    new_goal_.store(false, std::memory_order_release);
+void TaskWorker::ackStart() {
+    start_.store(false, std::memory_order_release);
     // A Start naturally supersedes any previous Stop — the worker is
     // about to begin a new episode.
     should_stop_.store(false, std::memory_order_release);
