@@ -4,48 +4,45 @@
 
 #pragma once
 
-#include "finenav_motion_decorator/i_motion_decorator.hpp"
-#include <Eigen/Geometry>
+#include "finenav_core/plan/planner_concept.hpp"
+#include "finenav_motion_decorator/trim_by_aabb_params.hpp"
 
-namespace finenav {
+namespace finenav::motion_decorator {
 
 /**
- * @brief Stateless decorator that trims a trajectory by discarding all waypoints
+ * @brief Map-less planner that trims a trajectory by discarding all waypoints
  *        that lie outside an axis-aligned bounding box (AABB).
  *
- * The decorator scans the trajectory from the front and retains only the
+ * The planner scans the trajectory from the front and retains only the
  * contiguous prefix of waypoints that are contained within the box.
  * The first waypoint found outside the box — and all following waypoints —
  * are removed.
  *
- * Although the bounding box is 3-D (Eigen::AlignedBox3d), a 2-D XY-only
- * check can be achieved by passing infinite Z extents:
- * @code
- *   Eigen::AlignedBox3d box;
- *   box.min() = {map_min_x, map_min_y, -std::numeric_limits<double>::infinity()};
- *   box.max() = {map_max_x, map_max_y,  std::numeric_limits<double>::infinity()};
- * @endcode
- *
- * Requires TRAJ_POSE to be populated.
+ * The box is configured entirely via parameters (min_* / max_*), so it needs no
+ * map.  Default extents are huge (±1e9), making the planner a no-op until the
+ * box is narrowed via parameters.
  *
  * - Silently no-ops if all waypoints are inside the box.
- * - Throws std::runtime_error if TRAJ_POSE is not set (programmer error).
  */
-class TrimByAABB : public IMotionDecorator {
+class TrimByAABB {
 public:
-    /**
-     * @brief Construct a TrimByAABB decorator.
-     * @param bounds  3-D axis-aligned bounding box. Waypoints outside this box
-     *                (first occurrence onwards) are removed.
-     * @throws std::invalid_argument if bounds is empty (min > max on any axis).
-     */
-    explicit TrimByAABB(Eigen::AlignedBox3d bounds);
+    using ConfigType = trim_by_aabb::Params;
 
-    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
+    static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
+    static constexpr finenav::core::IOProfile OutputProfile{true, false, false, false};
+
+    TrimByAABB();
+    void configure(const ConfigType& cfg);
+    void reset();
+
+    using Context = finenav::core::PlanningContext<TrimByAABB>;
+    using Result  = std::optional<finenav::core::OutputTrajectoryT<TrimByAABB>>;
+
+    Result plan(const Context& ctx);
 
 private:
-    Eigen::AlignedBox3d bounds_;
+    double min_x_{-1e9}, min_y_{-1e9}, min_z_{-1e9};
+    double max_x_{1e9},  max_y_{1e9},  max_z_{1e9};
 };
 
-} // namespace finenav
-
+}  // namespace finenav::motion_decorator

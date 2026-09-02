@@ -20,7 +20,7 @@
 
 #include "finenav_core/map/map_server.hpp"
 #include "finenav_core/plan/control_layer.hpp"
-#include "finenav_core/plan/i_control_layer.hpp"
+#include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/navigator.hpp"
@@ -87,7 +87,7 @@ public:
     // getMapServer<T>() (for typed operations).
 
     /// Create a ControlLayer for a planner registered under @p algo_name.
-    std::shared_ptr<finenav::core::IControlLayer> createLayerByName(
+    std::shared_ptr<finenav::core::IPipelineNode> createLayerByName(
         const std::string& algo_name, const std::string& layer_name,
         finenav::core::ExecutionPolicyVariant policy);
 
@@ -100,7 +100,7 @@ public:
     /// resolves those types back to registered algo names, (re)uses dedup'd
     /// MapServer(s), builds the IMapView and attaches it to a freshly created
     /// layer.  The end user names ONLY the MapView — never a planner/map name.
-    std::shared_ptr<finenav::core::IControlLayer> createLayerByMapView(
+    std::shared_ptr<finenav::core::IPipelineNode> createLayerByMapView(
         const std::string& mapview_name,
         const std::string& layer_name,
         finenav::core::ExecutionPolicyVariant policy = finenav::core::SingleShotPolicy{});
@@ -132,7 +132,7 @@ public:
 private:
     void connectEdge(const std::string& from, const std::string& to);
     void connectEdge(const std::string& from,
-                     std::shared_ptr<finenav::core::IControlLayer> to);
+                     std::shared_ptr<finenav::core::IPipelineNode> to);
 
     /// Return the MapServer already created under @p algo_name, or create one
     /// (server name == algo name) on first use — so multiple MapViews sharing a
@@ -144,7 +144,7 @@ private:
     std::shared_ptr<rclcpp::Node> node_;
 
     std::unordered_map<std::string, std::shared_ptr<finenav::core::IMapResource>> maps_;
-    std::unordered_map<std::string, std::shared_ptr<finenav::core::IControlLayer>> layers_;
+    std::unordered_map<std::string, std::shared_ptr<finenav::core::IPipelineNode>> layers_;
 
     std::unique_ptr<finenav::localizer::FineNavLocalizer> localizer_;
     std::unique_ptr<finenav::navigator::BtNavigator>      navigator_;

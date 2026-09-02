@@ -53,10 +53,14 @@ bool FineNavEngine::removeControlLayer(const std::string& name) {
 //  Factory by name (runtime reflection via PlanRegistry / MapRegistry)
 // ══════════════════════════════════════════════════════════════════════════════
 
-std::shared_ptr<finenav::core::IControlLayer> FineNavEngine::createLayerByName(
+std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByName(
     const std::string& algo_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
+    // A reactive layer is data-driven: it is not commanded by the navigator, so
+    // it must NOT be registered with the TaskMaster (no __cmd/__stop topics).
+    const bool reactive = std::holds_alternative<finenav::core::ReactivePolicy>(policy);
+
     auto layer = finenav::core::PlanRegistry::instance().createLayer(
         node_, algo_name, layer_name, std::move(policy), localizer_.get());
     if (!layer) {
@@ -66,7 +70,9 @@ std::shared_ptr<finenav::core::IControlLayer> FineNavEngine::createLayerByName(
             algo_name, layer_name);
         return nullptr;
     }
-    navigator_->master().manageLayer(layer_name);
+    if (!reactive) {
+        navigator_->master().manageLayer(layer_name);
+    }
     layers_[layer_name] = layer;
     FINENAV_LOG_INFO(node_->get_logger(),
         "createLayerByName('{}', '{}'): layer created.", algo_name, layer_name);
@@ -103,7 +109,7 @@ std::shared_ptr<finenav::core::IMapResource> FineNavEngine::ensureMapServer(
     return createMapServerByName(algo_name, algo_name);
 }
 
-std::shared_ptr<finenav::core::IControlLayer> FineNavEngine::createLayerByMapView(
+std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByMapView(
     const std::string& mapview_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
@@ -227,7 +233,7 @@ bool FineNavEngine::loadAlgoPlugins(const std::vector<std::string>& plugins)
 // ══════════════════════════════════════════════════════════════════════════════
 
 void FineNavEngine::connectEdge(const std::string& from,
-                                std::shared_ptr<finenav::core::IControlLayer> to) {
+                                std::shared_ptr<finenav::core::IPipelineNode> to) {
     // Root connection (_root >> layer): no upstream node exists, nothing to
     // subscribe to.  Subscribing results in a dead /__feedback topic.
     if (!from.empty()) {

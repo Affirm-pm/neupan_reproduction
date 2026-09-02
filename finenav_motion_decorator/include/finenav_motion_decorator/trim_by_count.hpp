@@ -4,33 +4,35 @@
 
 #pragma once
 
-#include "finenav_motion_decorator/i_motion_decorator.hpp"
-#include <cstddef>
+#include "finenav_core/plan/planner_concept.hpp"
+#include "finenav_motion_decorator/trim_by_count_params.hpp"
 
-namespace finenav {
+namespace finenav::motion_decorator {
 
 /**
- * @brief Stateless decorator that trims a trajectory to at most `max_points`
+ * @brief Map-less planner that trims a trajectory to at most `max_points`
  *        waypoints, counting from the beginning of the path.
  *
- * All populated fields (poses, twists, accels, time_from_start) are resized
- * consistently according to the trajectory's valid_fields mask.
- *
  * - Silently no-ops when the trajectory already has <= max_points waypoints.
- * - Throws std::invalid_argument if max_points == 0 at construction time.
  */
-class TrimByCount : public IMotionDecorator {
+class TrimByCount {
 public:
-    /** @brief Construct a TrimByCount decorator.
-     *  @param max_points  Maximum number of waypoints to keep (must be > 0).
-     *  @throws std::invalid_argument if max_points == 0.
-     */
-    explicit TrimByCount(std::size_t max_points);
+    using ConfigType = trim_by_count::Params;
 
-    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
+    static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
+    static constexpr finenav::core::IOProfile OutputProfile{true, false, false, false};
+
+    TrimByCount();
+    void configure(const ConfigType& cfg);
+    void reset();
+
+    using Context = finenav::core::PlanningContext<TrimByCount>;
+    using Result  = std::optional<finenav::core::OutputTrajectoryT<TrimByCount>>;
+
+    Result plan(const Context& ctx);
 
 private:
-    std::size_t max_points_;
+    std::size_t max_points_{100};
 };
 
-} // namespace finenav
+}  // namespace finenav::motion_decorator

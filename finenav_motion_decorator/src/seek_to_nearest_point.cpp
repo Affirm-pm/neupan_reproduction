@@ -3,38 +3,41 @@
 // All rights reserved.
 
 #include "finenav_motion_decorator/seek_to_nearest_point.hpp"
-#include "finenav_motion_decorator/detail/trim_utils.hpp"
-#include <stdexcept>
-#include <limits>
+
 #include <cstddef>
+#include <limits>
 
-namespace finenav {
+#include "finenav_core/common/algo_register_macros.hpp"
 
-SeekToNearestPoint::SeekToNearestPoint(Eigen::Vector3d reference, bool use_2d)
-    : reference_(std::move(reference)), use_2d_(use_2d)
-{}
+namespace finenav::motion_decorator {
 
-void SeekToNearestPoint::operator()(finenav_interfaces::msg::Trajectory& traj) const
-{
-    using T = finenav_interfaces::msg::Trajectory;
+SeekToNearestPoint::SeekToNearestPoint() = default;
 
-    if (!(traj.valid_fields & T::TRAJ_POSE)) {
-        throw std::runtime_error(
-            "SeekToNearestPoint: trajectory does not have TRAJ_POSE populated");
+void SeekToNearestPoint::configure(const ConfigType& cfg) {
+    use_2d_ = cfg.use_2d;
+}
+
+void SeekToNearestPoint::reset() {}
+
+SeekToNearestPoint::Result SeekToNearestPoint::plan(const Context& ctx) {
+    using Trajectory = finenav::core::Trajectory<OutputProfile>;
+
+    Trajectory result;
+    result.poses = ctx.ref_traj.poses;
+
+    if (result.poses.empty()) {
+        return result;
     }
 
-    if (traj.poses.empty()) {
-        return;
-    }
+    const auto& ref = ctx.robot_state.pose.position;
 
     std::size_t nearest_idx = 0;
     double min_dist_sq = std::numeric_limits<double>::max();
-
-    for (std::size_t i = 0; i < traj.poses.size(); ++i) {
-        const auto& p = traj.poses[i].position;
-        const double dx = p.x - reference_.x();
-        const double dy = p.y - reference_.y();
-        const double dz = use_2d_ ? 0.0 : (p.z - reference_.z());
+    for (std::size_t i = 0; i < result.poses.size(); ++i) {
+        const auto& p = result.poses[i].position;
+        const double dx = p.x - ref.x;
+        const double dy = p.y - ref.y;
+        const double dz = use_2d_ ? 0.0 : (p.z - ref.z);
         const double dist_sq = dx * dx + dy * dy + dz * dz;
         if (dist_sq < min_dist_sq) {
             min_dist_sq = dist_sq;
@@ -42,13 +45,17 @@ void SeekToNearestPoint::operator()(finenav_interfaces::msg::Trajectory& traj) c
         }
     }
 
-    // Silently no-op: nearest point is already the first waypoint
+    // Silently no-op: nearest point is already the first waypoint.
     if (nearest_idx == 0) {
-        return;
+        return result;
     }
 
-    motion_decorator::detail::erase_front(traj, nearest_idx);
+    result.poses.erase(
+        result.poses.begin(),
+        result.poses.begin() + static_cast<std::ptrdiff_t>(nearest_idx));
+    return result;
 }
 
-} // namespace finenav
+}  // namespace finenav::motion_decorator
 
+FINENAV_REGISTER_PLANNER(finenav::motion_decorator::SeekToNearestPoint, seek_to_nearest_point)

@@ -3,48 +3,57 @@
 // All rights reserved.
 
 #include "finenav_motion_decorator/trim_by_duration.hpp"
-#include "finenav_motion_decorator/detail/trim_utils.hpp"
-#include <stdexcept>
-#include <algorithm>
 
-namespace finenav {
+#include "builtin_interfaces/msg/duration.hpp"
+#include "finenav_core/common/algo_register_macros.hpp"
 
-TrimByDuration::TrimByDuration(double max_duration_sec) : max_duration_sec_(max_duration_sec)
-{
-    if (max_duration_sec_ <= 0.0) {
-        throw std::invalid_argument("TrimByDuration: max_duration_sec must be > 0");
-    }
+namespace finenav::motion_decorator {
+
+namespace {
+
+double duration_to_sec(const builtin_interfaces::msg::Duration& d) {
+    return static_cast<double>(d.sec) + static_cast<double>(d.nanosec) * 1e-9;
 }
 
-void TrimByDuration::operator()(finenav_interfaces::msg::Trajectory& traj) const
-{
-    using T = finenav_interfaces::msg::Trajectory;
+}  // namespace
 
-    if (!(traj.valid_fields & T::TRAJ_TIME)) {
-        throw std::runtime_error(
-            "TrimByDuration: trajectory does not have TRAJ_TIME populated");
+TrimByDuration::TrimByDuration() = default;
+
+void TrimByDuration::configure(const ConfigType& cfg) {
+    max_duration_sec_ = cfg.max_duration_sec;
+}
+
+void TrimByDuration::reset() {}
+
+TrimByDuration::Result TrimByDuration::plan(const Context& ctx) {
+    using Trajectory = finenav::core::Trajectory<OutputProfile>;
+
+    Trajectory result;
+    result.poses = ctx.ref_traj.poses;
+    result.times = ctx.ref_traj.times;
+
+    if (result.times.empty()) {
+        return result;  // nothing to trim.
     }
 
-    if (traj.time_from_start.empty()) {
-        return;  // nothing to trim
-    }
-
-    // Find the first index whose time_from_start exceeds the limit
-    std::size_t keep = traj.time_from_start.size();
-    for (std::size_t i = 0; i < traj.time_from_start.size(); ++i) {
-        if (motion_decorator::detail::duration_to_sec(traj.time_from_start[i]) > max_duration_sec_) {
+    // Find the first index whose time_from_start exceeds the limit.
+    std::size_t keep = result.times.size();
+    for (std::size_t i = 0; i < result.times.size(); ++i) {
+        if (duration_to_sec(result.times[i]) > max_duration_sec_) {
             keep = i;
             break;
         }
     }
 
-    // Silently no-op: all points are already within the limit
-    if (keep >= traj.time_from_start.size()) {
-        return;
+    // Silently no-op: all points are already within the limit.
+    if (keep < result.times.size()) {
+        result.poses.resize(keep);
+        result.times.resize(keep);
     }
 
-    motion_decorator::detail::resize_trajectory(traj, keep);
+    return result;
 }
 
-} // namespace finenav
+}  // namespace finenav::motion_decorator
 
+FINENAV_REGISTER_PLANNER(finenav::motion_decorator::TrimByDuration, trim_by_duration)

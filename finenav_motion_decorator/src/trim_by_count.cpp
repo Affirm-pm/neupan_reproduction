@@ -3,34 +3,34 @@
 // All rights reserved.
 
 #include "finenav_motion_decorator/trim_by_count.hpp"
-#include "finenav_motion_decorator/detail/trim_utils.hpp"
-#include <stdexcept>
 
-namespace finenav {
+#include "finenav_core/common/algo_register_macros.hpp"
 
-TrimByCount::TrimByCount(std::size_t max_points) : max_points_(max_points)
-{
-    if (max_points_ == 0) {
-        throw std::invalid_argument("TrimByCount: max_points must be > 0");
-    }
+namespace finenav::motion_decorator {
+
+TrimByCount::TrimByCount() = default;
+
+void TrimByCount::configure(const ConfigType& cfg) {
+    max_points_ = static_cast<std::size_t>(cfg.max_points);
 }
 
-void TrimByCount::operator()(finenav_interfaces::msg::Trajectory& traj) const
-{
-    using T = finenav_interfaces::msg::Trajectory;
+void TrimByCount::reset() {}
 
-    // Determine current size from the first populated field
-    std::size_t current_size = 0;
-    if      (traj.valid_fields & T::TRAJ_POSE) current_size = traj.poses.size();
-    else if (traj.valid_fields & T::TRAJ_VEL)  current_size = traj.twists.size();
-    else if (traj.valid_fields & T::TRAJ_TIME) current_size = traj.time_from_start.size();
+TrimByCount::Result TrimByCount::plan(const Context& ctx) {
+    using Trajectory = finenav::core::Trajectory<OutputProfile>;
 
-    // Silently no-op: already within the limit or trajectory is empty
-    if (current_size <= max_points_) {
-        return;
+    Trajectory result;
+    result.poses = ctx.ref_traj.poses;
+
+    // Silently no-op: already within the limit or trajectory is empty.
+    if (result.poses.size() <= max_points_) {
+        return result;
     }
 
-    motion_decorator::detail::resize_trajectory(traj, max_points_);
+    result.poses.resize(max_points_);
+    return result;
 }
 
-} // namespace finenav
+}  // namespace finenav::motion_decorator
+
+FINENAV_REGISTER_PLANNER(finenav::motion_decorator::TrimByCount, trim_by_count)

@@ -4,33 +4,37 @@
 
 #pragma once
 
-#include "finenav_motion_decorator/i_motion_decorator.hpp"
+#include "finenav_core/plan/planner_concept.hpp"
+#include "finenav_motion_decorator/trim_by_duration_params.hpp"
 
-namespace finenav {
+namespace finenav::motion_decorator {
 
 /**
- * @brief Stateless decorator that trims a trajectory to only waypoints whose
+ * @brief Map-less planner that trims a trajectory to only waypoints whose
  *        time_from_start is strictly less than or equal to `max_duration_sec`.
  *
- * Requires the trajectory to have TRAJ_TIME populated.
+ * Consumes and produces both pose and time fields; they are trimmed consistently.
  *
  * - Silently no-ops if the trajectory is already within the limit.
- * - Throws std::invalid_argument if max_duration_sec <= 0 at construction time.
- * - Throws std::runtime_error if TRAJ_TIME is not set on the trajectory (programmer error).
  */
-class TrimByDuration : public IMotionDecorator {
+class TrimByDuration {
 public:
-    /** @brief Construct a TrimByDuration decorator.
-     *  @param max_duration_sec  Maximum time-from-start to keep (seconds, must be > 0).
-     *  @throws std::invalid_argument if max_duration_sec <= 0.
-     */
-    explicit TrimByDuration(double max_duration_sec);
+    using ConfigType = trim_by_duration::Params;
 
-    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
+    static constexpr finenav::core::IOProfile InputProfile{true, false, false, true};
+    static constexpr finenav::core::IOProfile OutputProfile{true, false, false, true};
+
+    TrimByDuration();
+    void configure(const ConfigType& cfg);
+    void reset();
+
+    using Context = finenav::core::PlanningContext<TrimByDuration>;
+    using Result  = std::optional<finenav::core::OutputTrajectoryT<TrimByDuration>>;
+
+    Result plan(const Context& ctx);
 
 private:
-    double max_duration_sec_;
+    double max_duration_sec_{10.0};
 };
 
-} // namespace finenav
-
+}  // namespace finenav::motion_decorator

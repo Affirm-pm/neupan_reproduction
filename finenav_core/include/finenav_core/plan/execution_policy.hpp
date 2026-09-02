@@ -51,6 +51,18 @@ struct ContinuousPolicy {
     }
 };
 
-using ExecutionPolicyVariant = std::variant<SingleShotPolicy, ContinuousPolicy>;
+/**
+ * @brief ReactivePolicy — data-driven execution: no BT goal, no TaskWorker.
+ *
+ * Re-plans on every upstream reference trajectory (the __feedback subscription)
+ * and forwards the result downstream.  Used by map-less trajectory decorators
+ * (seek / smooth / trim) wired as intermediate pipeline stages.
+ */
+struct ReactivePolicy {
+    static void declare_parameters(rclcpp::Node&) {}
+};
+
+using ExecutionPolicyVariant =
+    std::variant<SingleShotPolicy, ContinuousPolicy, ReactivePolicy>;
 
 } // namespace finenav::core

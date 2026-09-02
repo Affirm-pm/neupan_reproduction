@@ -4,12 +4,13 @@
 
 #pragma once
 
-#include "finenav_motion_decorator/i_motion_decorator.hpp"
+#include "finenav_core/plan/planner_concept.hpp"
+#include "finenav_motion_decorator/smooth_path_params.hpp"
 
-namespace finenav {
+namespace finenav::motion_decorator {
 
 /**
- * @brief 无状态路径平滑装饰器，参照 Nav2 SimpleSmoother 的迭代梯度下降平滑算法。
+ * @brief 无状态路径平滑 planner（map-less），参照 Nav2 SimpleSmoother 的迭代梯度下降平滑算法。
  *
  * 核心公式（对每个内部点 i，固定首尾不动）：
  *   y_i += data_w * (x_i - y_i) + smooth_w * (y_{i-1} + y_{i+1} - 2 * y_i)
@@ -24,35 +25,28 @@ namespace finenav {
  *   - 仅修改 poses 中的 position（x, y），不修改 z 和 orientation
  *   - 首尾点固定不动（保证起点终点不变）
  *   - 少于 3 个点时静默跳过（无法平滑）
- *   - 支持最大迭代次数和收敛容差控制
- *   - 需要 TRAJ_POSE 已填充，否则抛出 std::runtime_error
- *
- * 用法：
- *   ctx.ref_traj | finenav::SmoothPath();                    // 默认参数
- *   ctx.ref_traj | finenav::SmoothPath(0.2, 0.3, 1e-4, 500); // 自定义参数
  */
-class SmoothPath : public IMotionDecorator {
+class SmoothPath {
 public:
-    /**
-     * @brief 构造路径平滑装饰器
-     * @param data_weight    数据项权重，控制平滑后路径对原始路径的贴合度 (默认 0.2)
-     * @param smooth_weight  平滑项权重，控制路径光滑程度 (默认 0.3)
-     * @param tolerance      收敛容差，所有点单次迭代的累计位移 < 此值则停止 (默认 1e-4)
-     * @param max_iterations 最大迭代次数 (默认 1000)
-     */
-    explicit SmoothPath(
-        double data_weight    = 0.2,
-        double smooth_weight  = 0.3,
-        double tolerance      = 1e-4,
-        int    max_iterations = 1000);
+    using ConfigType = smooth_path::Params;
 
-    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
+    static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
+    static constexpr finenav::core::IOProfile OutputProfile{true, false, false, false};
+
+    SmoothPath();
+    void configure(const ConfigType& cfg);
+    void reset();
+
+    using Context = finenav::core::PlanningContext<SmoothPath>;
+    using Result  = std::optional<finenav::core::OutputTrajectoryT<SmoothPath>>;
+
+    Result plan(const Context& ctx);
 
 private:
-    double data_w_;
-    double smooth_w_;
-    double tolerance_;
-    int    max_iterations_;
+    double data_w_{0.2};
+    double smooth_w_{0.3};
+    double tolerance_{1e-4};
+    int    max_iterations_{1000};
 };
 
-} // namespace finenav
+}  // namespace finenav::motion_decorator

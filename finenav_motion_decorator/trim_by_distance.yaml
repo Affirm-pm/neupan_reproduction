@@ -1,0 +1,7 @@
+trim_by_distance:
+  max_distance_m:
+    type: double
+    default_value: 5.0
+    description: "Maximum cumulative arc-length to keep (metres)."
+    validation:
+      gt<>: [0.0]

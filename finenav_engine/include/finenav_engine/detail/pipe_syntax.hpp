@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "finenav_core/plan/i_control_layer.hpp"
+#include "finenav_core/plan/i_pipeline_node.hpp"
 
 namespace finenav {
 
@@ -19,14 +19,14 @@ struct ControlPipeEdge {
 };
 
 inline ControlPipeEdge operator>>(const std::string& from,
-                                  std::shared_ptr<finenav::core::IControlLayer> to) {
+                                  std::shared_ptr<finenav::core::IPipelineNode> to) {
     ControlPipeEdge e;
     e.chain = {from, to->layerName()};
     return e;
 }
 
 inline ControlPipeEdge operator>>(ControlPipeEdge&& e,
-                                  std::shared_ptr<finenav::core::IControlLayer> to) {
+                                  std::shared_ptr<finenav::core::IPipelineNode> to) {
     e.chain.push_back(to->layerName());
     return std::move(e);
 }

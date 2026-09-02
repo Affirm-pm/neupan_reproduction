@@ -14,7 +14,7 @@
 
 #include "finenav_core/common/named_registry.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
-#include "finenav_core/plan/i_control_layer.hpp"
+#include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 
@@ -24,10 +24,10 @@ template <Planner PlannerT> class ControlLayer;  // full definition in control_l
 
 /// One planner's registry row: name → { factory, config loader, type }.
 struct PlanEntry {
-    using Factory = std::function<std::shared_ptr<IControlLayer>(
+    using Factory = std::function<std::shared_ptr<IPipelineNode>(
         rclcpp::Node::SharedPtr, const std::string&, ExecutionPolicyVariant, RobotStateProvider*)>;
 
-    Factory      factory;  ///< (node, layer_name, policy, state) → IControlLayer
+    Factory      factory;  ///< (node, layer_name, policy, state) → IPipelineNode
     ConfigLoader loader;   ///< (node, void* planner) → IParamPollable
     std::string  type;     ///< typeid(PlannerT).name()
 };
@@ -53,7 +53,7 @@ public:
 
     /// Build a ControlLayer for the planner registered under @p algo_name.
     /// Returns nullptr + ERROR log on unknown name.
-    std::shared_ptr<IControlLayer> createLayer(
+    std::shared_ptr<IPipelineNode> createLayer(
         rclcpp::Node::SharedPtr node,
         const std::string& algo_name, const std::string& layer_name,
         ExecutionPolicyVariant policy, RobotStateProvider* state);
@@ -78,7 +78,7 @@ void PlanRegistry::registerPlanner(std::string name, ConfigLoader loader) {
         name,
         [name](rclcpp::Node::SharedPtr node, const std::string& layer_name,
                ExecutionPolicyVariant policy, RobotStateProvider* state)
-            -> std::shared_ptr<IControlLayer> {
+            -> std::shared_ptr<IPipelineNode> {
             return std::make_shared<ControlLayer<PlannerT>>(
                 node, name, layer_name, std::move(policy), state);
         },

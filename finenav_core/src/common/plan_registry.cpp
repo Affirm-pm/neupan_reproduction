@@ -27,7 +27,7 @@ void PlanRegistry::registerPlannerImpl(std::string name, Factory factory,
     }
 }
 
-std::shared_ptr<IControlLayer> PlanRegistry::createLayer(
+std::shared_ptr<IPipelineNode> PlanRegistry::createLayer(
     rclcpp::Node::SharedPtr node,
     const std::string& algo_name, const std::string& layer_name,
     ExecutionPolicyVariant policy, RobotStateProvider* state)

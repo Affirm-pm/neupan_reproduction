@@ -5,59 +5,57 @@
 #include "finenav_motion_decorator/smooth_path.hpp"
 
 #include <cmath>
-#include <stdexcept>
 #include <vector>
 
-namespace finenav {
+#include "finenav_core/common/algo_register_macros.hpp"
 
-SmoothPath::SmoothPath(
-    double data_weight,
-    double smooth_weight,
-    double tolerance,
-    int    max_iterations)
-    : data_w_(data_weight)
-    , smooth_w_(smooth_weight)
-    , tolerance_(tolerance)
-    , max_iterations_(max_iterations)
-{}
+namespace finenav::motion_decorator {
 
-void SmoothPath::operator()(finenav_interfaces::msg::Trajectory& traj) const
-{
-    using T = finenav_interfaces::msg::Trajectory;
+SmoothPath::SmoothPath() = default;
 
-    if (!(traj.valid_fields & T::TRAJ_POSE)) {
-        throw std::runtime_error(
-            "SmoothPath: trajectory does not have TRAJ_POSE populated");
-    }
+void SmoothPath::configure(const ConfigType& cfg) {
+    data_w_          = cfg.data_weight;
+    smooth_w_        = cfg.smooth_weight;
+    tolerance_       = cfg.tolerance;
+    max_iterations_  = cfg.max_iterations;
+}
 
-    const std::size_t n = traj.poses.size();
+void SmoothPath::reset() {}
 
-    // 少于 3 个点无法平滑，静默跳过
+SmoothPath::Result SmoothPath::plan(const Context& ctx) {
+    using Trajectory = finenav::core::Trajectory<OutputProfile>;
+
+    Trajectory result;
+    result.poses = ctx.ref_traj.poses;
+
+    const std::size_t n = result.poses.size();
+
+    // 少于 3 个点无法平滑，静默跳过。
     if (n < 3) {
-        return;
+        return result;
     }
 
-    // 保存原始路径作为锚定参考（仅 x, y）
+    // 保存原始路径作为锚定参考（仅 x, y）。
     struct Point2D { double x; double y; };
     std::vector<Point2D> original(n);
     for (std::size_t i = 0; i < n; ++i) {
-        original[i].x = traj.poses[i].position.x;
-        original[i].y = traj.poses[i].position.y;
+        original[i].x = result.poses[i].position.x;
+        original[i].y = result.poses[i].position.y;
     }
 
-    // 迭代拉普拉斯平滑（首尾固定）
+    // 迭代拉普拉斯平滑（首尾固定）。
     for (int iter = 0; iter < max_iterations_; ++iter) {
         double change = 0.0;
 
         for (std::size_t i = 1; i < n - 1; ++i) {
-            auto& p   = traj.poses[i].position;
-            auto& pm1 = traj.poses[i - 1].position;
-            auto& pp1 = traj.poses[i + 1].position;
+            auto& p   = result.poses[i].position;
+            auto& pm1 = result.poses[i - 1].position;
+            auto& pp1 = result.poses[i + 1].position;
 
             const double x_i = original[i].x;
             const double y_i = original[i].y;
 
-            // 拉普拉斯平滑 + 数据锚定
+            // 拉普拉斯平滑 + 数据锚定。
             const double new_x = p.x
                 + data_w_   * (x_i - p.x)
                 + smooth_w_ * (pm1.x + pp1.x - 2.0 * p.x);
@@ -73,11 +71,15 @@ void SmoothPath::operator()(finenav_interfaces::msg::Trajectory& traj) const
             p.y = new_y;
         }
 
-        // 收敛判断
+        // 收敛判断。
         if (change < tolerance_) {
             break;
         }
     }
+
+    return result;
 }
 
-} // namespace finenav
+}  // namespace finenav::motion_decorator
+
+FINENAV_REGISTER_PLANNER(finenav::motion_decorator::SmoothPath, smooth_path)

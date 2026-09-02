@@ -12,9 +12,17 @@
 
 namespace finenav::core {
 
-class IControlLayer {
+/**
+ * @brief IPipelineNode — the type-erased base of every pipeline stage.
+ *
+ * This is the non-template interface the engine and registry use to hold and
+ * wire heterogeneous PipelineNode<PlannerT> instances (whose concrete PlannerT
+ * lives inside a plugin DSO).  It carries only the shape-independent operations:
+ * topic wiring and MapView attachment.
+ */
+class IPipelineNode {
 public:
-    virtual ~IControlLayer() = default;
+    virtual ~IPipelineNode() = default;
     virtual void connectFrom(const std::string& parent_topic) = 0;
 
     /**
@@ -31,7 +39,7 @@ public:
     std::string layerName() const { return name_; }
 
 protected:
-    explicit IControlLayer(std::string name) : name_(std::move(name)) {}
+    explicit IPipelineNode(std::string name) : name_(std::move(name)) {}
     std::string name_;
 };
 

@@ -4,34 +4,38 @@
 
 #pragma once
 
-#include "finenav_motion_decorator/i_motion_decorator.hpp"
+#include "finenav_core/plan/planner_concept.hpp"
+#include "finenav_motion_decorator/trim_by_distance_params.hpp"
 
-namespace finenav {
+namespace finenav::motion_decorator {
 
 /**
- * @brief Stateless decorator that trims a trajectory so that the cumulative
+ * @brief Map-less planner that trims a trajectory so that the cumulative
  *        arc-length along the path does not exceed `max_distance_m`.
  *
  * Distance is computed as the sum of consecutive Euclidean distances between
- * pose positions (x, y, z). Requires the trajectory to have TRAJ_POSE populated.
+ * pose positions (x, y, z).
  *
  * - Silently no-ops if the total path length is already within the limit.
- * - Throws std::invalid_argument if max_distance_m <= 0 at construction time.
- * - Throws std::runtime_error if TRAJ_POSE is not set on the trajectory (programmer error).
  */
-class TrimByDistance : public IMotionDecorator {
+class TrimByDistance {
 public:
-    /** @brief Construct a TrimByDistance decorator.
-     *  @param max_distance_m  Maximum cumulative arc-length to keep (metres, must be > 0).
-     *  @throws std::invalid_argument if max_distance_m <= 0.
-     */
-    explicit TrimByDistance(double max_distance_m);
+    using ConfigType = trim_by_distance::Params;
 
-    void operator()(finenav_interfaces::msg::Trajectory& trajectory) const override;
+    static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
+    static constexpr finenav::core::IOProfile OutputProfile{true, false, false, false};
+
+    TrimByDistance();
+    void configure(const ConfigType& cfg);
+    void reset();
+
+    using Context = finenav::core::PlanningContext<TrimByDistance>;
+    using Result  = std::optional<finenav::core::OutputTrajectoryT<TrimByDistance>>;
+
+    Result plan(const Context& ctx);
 
 private:
-    double max_distance_m_;
+    double max_distance_m_{5.0};
 };
 
-} // namespace finenav
-
+}  // namespace finenav::motion_decorator
