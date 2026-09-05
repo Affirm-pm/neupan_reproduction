@@ -264,18 +264,36 @@ inline finenav::AstarPathSearch makePlanner()
     return planner;
 }
 
+// PlanningContext stores const references into owned storage, so the owned
+// RobotState / ref_traj must outlive every plan() call.  Keep them in a bundle
+// that converts to `const PlanningContext&`; the bundle is a temporary living
+// for the whole plan() call, so call sites (`planner.plan(makeCtx(...), view)`)
+// stay unchanged.
+struct AstarTestCtx {
+    finenav::core::RobotState robot_state;
+    finenav::core::InputTrajectoryT<finenav::AstarPathSearch> ref_traj;
+    finenav::PlanningContext<finenav::AstarPathSearch> ctx{robot_state, ref_traj};
+
+    AstarTestCtx(double sx, double sy, double gx, double gy)
+    {
+        robot_state.position.x() = sx;
+        robot_state.position.y() = sy;
+        ref_traj.poses.resize(1);
+        ref_traj.poses[0].position.x     = gx;
+        ref_traj.poses[0].position.y     = gy;
+        ref_traj.poses[0].orientation.w  = 1.0;
+    }
+
+    operator const finenav::PlanningContext<finenav::AstarPathSearch>&() const
+    {
+        return ctx;
+    }
+};
+
 // Helper: build a PlanningContext from cell centres
-inline finenav::PlanningContext<finenav::AstarPathSearch>
-makeCtx(double sx, double sy, double gx, double gy)
+inline AstarTestCtx makeCtx(double sx, double sy, double gx, double gy)
 {
-    finenav::PlanningContext<finenav::AstarPathSearch> ctx;
-    ctx.robot_state.position.x() = sx;
-    ctx.robot_state.position.y() = sy;
-    ctx.ref_traj.poses.resize(1);
-    ctx.ref_traj.poses[0].position.x     = gx;
-    ctx.ref_traj.poses[0].position.y     = gy;
-    ctx.ref_traj.poses[0].orientation.w  = 1.0;
-    return ctx;
+    return AstarTestCtx{sx, sy, gx, gy};
 }
 
 TEST(AstarPathSearch, PlanSucceeds_OpenGrid)

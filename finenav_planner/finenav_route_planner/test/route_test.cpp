@@ -97,18 +97,37 @@ finenav::RoutePathSearch makePlanner(const std::string& graph_file, double path_
     return planner;
 }
 
-finenav::PlanningContext<finenav::RoutePathSearch>
+// PlanningContext stores const references into owned storage, so the owned
+// RobotState / ref_traj must outlive every plan() call.  Keep them in a bundle
+// that converts to `const PlanningContext&`; the bundle is a temporary living
+// for the whole plan() call, so call sites (`planner.plan(makeCtx(...), view)`)
+// stay unchanged.
+struct RouteTestCtx {
+    finenav::core::RobotState robot_state;
+    finenav::core::InputTrajectoryT<finenav::RoutePathSearch> ref_traj;
+    finenav::PlanningContext<finenav::RoutePathSearch> ctx{robot_state, ref_traj};
+
+    RouteTestCtx(double sx, double sy, double gx, double gy)
+    {
+        robot_state.position.x() = sx;
+        robot_state.position.y() = sy;
+        robot_state.orientation.w() = 1.0;
+        ref_traj.poses.resize(1);
+        ref_traj.poses[0].position.x    = gx;
+        ref_traj.poses[0].position.y    = gy;
+        ref_traj.poses[0].orientation.w = 1.0;
+    }
+
+    operator const finenav::PlanningContext<finenav::RoutePathSearch>&() const
+    {
+        return ctx;
+    }
+};
+
+RouteTestCtx
 makeCtx(double sx, double sy, double gx, double gy)
 {
-    finenav::PlanningContext<finenav::RoutePathSearch> ctx;
-    ctx.robot_state.position.x() = sx;
-    ctx.robot_state.position.y() = sy;
-    ctx.robot_state.orientation.w() = 1.0;
-    ctx.ref_traj.poses.resize(1);
-    ctx.ref_traj.poses[0].position.x    = gx;
-    ctx.ref_traj.poses[0].position.y    = gy;
-    ctx.ref_traj.poses[0].orientation.w = 1.0;
-    return ctx;
+    return RouteTestCtx{sx, sy, gx, gy};
 }
 
 double dist(double x0, double y0, double x1, double y1)

@@ -121,6 +121,12 @@ protected:
     std::mutex                       plan_ref_mutex_;
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;
 
+    /// Converted reference (msg → planner InputTrajectoryT), rebuilt only when a
+    /// new upstream reference arrives.  planOnce() hands the planner a const view
+    /// into this, so the per-tick deep copy of the reference is eliminated.
+    InputTrajectoryT<PlannerT> cached_ref_;
+    const void*                cached_ref_src_{nullptr};  ///< identity of plan_ref_msg_ at last conversion
+
     ParamPollableKeeper param_keeper_;
 };
 

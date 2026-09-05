@@ -19,9 +19,9 @@ namespace finenav::core {
  */
 
 struct PrePlanContext {
-    const std::string&           active_planner_id;  ///< ID of the planner that is about to run (const)
-    RobotState&                  robot_state;        ///< Current robot state
-    finenav_interfaces::msg::Trajectory& ref_traj;   ///< Reference trajectory for the current planning episode
+    const std::string&                     active_planner_id;  ///< ID of the planner that is about to run (const) // TODO: 要删掉
+    const RobotState&                      robot_state;        ///< Current robot state (read-only view)
+    const finenav_interfaces::msg::Trajectory& ref_traj;       ///< Reference trajectory (read-only view)
 };
 
 /**
@@ -29,12 +29,17 @@ struct PrePlanContext {
  *
  * The goal of an episode is carried as the last pose of the reference
  * trajectory (`ref_traj.poses.back()`), not as a separate field.
+ *
+ * Both fields are **read-only views** into framework-owned storage.  A planner
+ * that needs to mutate or retain the reference must copy it itself — the
+ * framework never hands ownership of the input to the planner.
+ *
  * @tparam PlannerT Planner type
  */
 template <typename PlannerT>
 struct PlanningContext {
-    RobotState                    robot_state;      ///< Current robot state
-    InputTrajectoryT<PlannerT>    ref_traj;         ///< Reference trajectory for the current planning episode
+    const RobotState&                    robot_state;  ///< Current robot state (read-only view)
+    const InputTrajectoryT<PlannerT>&    ref_traj;     ///< Reference trajectory (read-only view)
 };
 
 /**

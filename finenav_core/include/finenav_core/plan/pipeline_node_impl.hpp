@@ -163,19 +163,24 @@ PipelineNode<PlannerT>::planOnce() {
     }
     RobotState current_robot_state = *maybe_state;
 
-    finenav_interfaces::msg::Trajectory current_ref_msg;
-    bool has_ref = false;
+    // ── Reference trajectory (read-only view) ──────────────────────────────
+    // The upstream reference arrives as a const shared_ptr (zero-copy IPC), so it
+    // cannot be moved out of.  Convert it to the planner's InputTrajectoryT only
+    // when a *new* reference arrives (copy-on-change), then hand the planner a
+    // const view — a planner that must mutate/retain it copies it itself.
+    std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> ref_holder;
     {
         std::lock_guard<std::mutex> lock(plan_ref_mutex_);
-        if (plan_ref_msg_) {
-            current_ref_msg = plan_ref_msg_->trajectory;  // copy only the trajectory
-            has_ref = true;
-        }
+        ref_holder = plan_ref_msg_;  // copy the shared_ptr; the only step needing the lock
+    }
+    const bool has_ref = static_cast<bool>(ref_holder);
+    if (has_ref && ref_holder.get() != cached_ref_src_) {
+        fromROSMsg(ref_holder->trajectory, cached_ref_);
+        cached_ref_src_ = ref_holder.get();
     }
 
     // A pose-reading planner derives its goal from the reference trajectory
     // (`ref_traj.poses.back()`), so a missing reference means "no goal yet".
-    // Fail gracefully instead of letting fromROSMsg throw in the worker thread.
     if constexpr (PlannerT::InputProfile.pose) {
         if (!has_ref) {
             FINENAV_LOG_WARN(pnode_->get_logger(),
@@ -190,16 +195,16 @@ PipelineNode<PlannerT>::planOnce() {
     bool plan_success = false;
     finenav_interfaces::msg::Trajectory output_traj_msg;
 
+    const finenav_interfaces::msg::Trajectory empty_ref;  // fallback when no reference yet
     PrePlanContext pre_ctx{
-        planner_name_, current_robot_state, current_ref_msg};
+        planner_name_, current_robot_state,
+        has_ref ? ref_holder->trajectory : empty_ref};
 
     if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
         return std::nullopt;
     }
 
-    PlanningContext<PlannerT> ctx;
-    ctx.robot_state = current_robot_state;
-    fromROSMsg(std::move(pre_ctx.ref_traj), ctx.ref_traj);
+    PlanningContext<PlannerT> ctx{current_robot_state, cached_ref_};
 
     // Acquire read locks on every map this view reads, held until plan() returns.
     std::vector<std::shared_ptr<void>> map_locks;
