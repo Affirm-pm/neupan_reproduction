@@ -52,11 +52,14 @@ struct ContinuousPolicy {
 };
 
 /**
- * @brief ReactivePolicy — data-driven execution: no BT goal, no TaskWorker.
+ * @brief ReactivePolicy — command-controlled listening transform.
  *
- * Re-plans on every upstream reference trajectory (the __feedback subscription)
- * and forwards the result downstream.  Used by map-less trajectory decorators
- * (seek / smooth / trim) wired as intermediate pipeline stages.
+ * Controlled by TaskCmd START/STOP like the other policies.  While STARTed it
+ * continuously listens for an upstream reference trajectory (the __feedback
+ * subscription) and reacts immediately — one planOnce() + RUNNING publish —
+ * for every incoming reference; while STOPped it only stashes the reference.
+ * Used by map-less trajectory decorators (seek / smooth / trim) wired as
+ * intermediate pipeline stages.
  */
 struct ReactivePolicy {
     static void declare_parameters(rclcpp::Node&) {}

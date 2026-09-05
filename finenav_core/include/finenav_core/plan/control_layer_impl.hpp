@@ -45,7 +45,7 @@ ControlLayer<PlannerT>::ControlLayer(
         } else if constexpr (std::is_same_v<P, ContinuousPolicy>) {
             startWorker([this] { runContinuous(); });
         } else if constexpr (std::is_same_v<P, ReactivePolicy>) {
-            startReactive();
+            startWorker([this] { runReactive(); });
         }
     }, policy_);
 }
@@ -77,12 +77,6 @@ void ControlLayer<PlannerT>::startWorker(std::function<void()> episode_body) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     });
-}
-
-template <Planner PlannerT>
-void ControlLayer<PlannerT>::startReactive() {
-    feedback_pub_ = this->pnode_->template create_publisher<finenav_interfaces::msg::TaskFeedback>(
-        finenav::util::TaskChannel::feedbackTopic(this->layer_name_), 10);
 }
 
 template <Planner PlannerT>
@@ -153,22 +147,30 @@ void ControlLayer<PlannerT>::onPlanRef(
     std::visit([this](auto& p) {
         using P = std::decay_t<decltype(p)>;
         if constexpr (std::is_same_v<P, ReactivePolicy>) {
-            react();
+            if (started_.load()) react();
         }
     }, policy_);
 }
 
 template <Planner PlannerT>
+void ControlLayer<PlannerT>::runReactive() {
+    // While STARTed, keep listening; the subscription callback (onPlanRef)
+    // fires react() for every incoming reference.  STOP flips started_ off so
+    // later references are only stashed until the next START.
+    started_.store(true);
+    while (rclcpp::ok() && !worker_->shouldStop()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    started_.store(false);
+}
+
+template <Planner PlannerT>
 void ControlLayer<PlannerT>::react() {
-    // A reactive node is data-driven: the upstream reference trajectory alone
-    // drives planning (the goal is its last pose).
+    // A reactive node reacts to the upstream reference trajectory alone (the
+    // goal is its last pose).  Runs on the subscription callback thread.
     auto out = this->planOnce();
     if (!out) return;
-
-    auto fb = std::make_unique<finenav_interfaces::msg::TaskFeedback>();
-    fb->status     = finenav_interfaces::msg::TaskFeedback::RUNNING;
-    fb->trajectory = std::move(*out);
-    feedback_pub_->publish(std::move(fb));
+    worker_->publishRunning(std::move(*out));
 }
 
 } // namespace finenav::core

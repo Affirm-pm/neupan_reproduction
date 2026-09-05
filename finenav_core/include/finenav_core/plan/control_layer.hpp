@@ -26,7 +26,7 @@ namespace finenav::core {
  * how the node is triggered and where its output goes:
  *   - SingleShotPolicy  → commanded: one plan() per goal
  *   - ContinuousPolicy  → commanded: plan() loop at N Hz
- *   - ReactivePolicy    → data-driven: plan() on every upstream reference
+ *   - ReactivePolicy    → commanded: listen for refs; plan() on each while STARTed
  *
  * @tparam PlannerT  The planner type owned by this layer.
  */
@@ -47,24 +47,24 @@ protected:
 
 private:
     // ── construction: one policy → one plumbing set + one episode body ──────
-    void startWorker(std::function<void()> episode_body);   // Single / Continuous
-    void startReactive();                                   // Reactive
+    void startWorker(std::function<void()> episode_body);   // all three policies
     bool waitForState();
 
     // ── episode bodies ──────────────────────────────────────────────────────
     void runSingleShot();
     void runContinuous();
+    void runReactive();
     void react();
 
     ExecutionPolicyVariant policy_;
 
-    // commanded plumbing (Single / Continuous)
+    // commanded plumbing (shared by all three policies)
     std::unique_ptr<finenav::util::TaskWorker> worker_;
     std::thread        worker_thread_;
     std::atomic<bool>  stop_{false};
 
-    // reactive plumbing (Reactive)
-    rclcpp::Publisher<finenav_interfaces::msg::TaskFeedback>::SharedPtr feedback_pub_;
+    // reactive gating: true while the layer is STARTed and listening
+    std::atomic<bool>  started_{false};
 };
 
 } // namespace finenav::core
