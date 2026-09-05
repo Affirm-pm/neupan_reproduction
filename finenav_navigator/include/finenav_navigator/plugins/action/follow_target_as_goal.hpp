@@ -6,24 +6,29 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-#include "behaviortree_cpp/decorator_node.h"
+#include "behaviortree_cpp/action_node.h"
 
 namespace finenav::navigator
 {
 
 /**
- * @brief DynamicGoalFollower — 动态目标跟随装饰器节点。
+ * @brief FollowTargetAsGoal — 动态目标跟随 Action 节点。
  *
- * 该节点订阅一个 PoseStamped 话题获取动态目标位姿，每次 tick 时计算跟随目标点
- * （在 target 后方的 follow_distance 处），写入 blackboard 的 {goal} 端口，
- * 然后 tick 子节点（通常为 ComputePlan），透传子节点状态。
+ * StatefulActionNode：onStart 创建 /target_pose 订阅（独立 callback_group +
+ * 独立 executor spin_some），此后每次 onRunning 处理 ROS 回调并计算跟随目标点
+ * （在 target 后方的 follow_distance 处），把单元素向量写入 blackboard 的
+ * {goal_poses}，同时经 _pipeline 的 publishNavigationGoal({follow_goal})
+ * 重新注入 _root/__feedback，驱动下游控制层以新的 ref_traj 重新规划。
+ * 本节点始终返回 RUNNING；被 halt 时通过 onHalted 复位订阅状态。
  *
- * 典型用法：包裹 ComputePlan 实现持续动态跟随导航。
+ * 典型用法：与 ExecuteControlLayer 放在 ReactiveSequence 中并发执行，
+ * 由 ExecuteControlLayer 跑控制层、本节点持续喂入最新跟随目标。
  *
  * 输入端口:
  *   - topic_name      (string, 默认 "/target_pose"):  订阅的目标话题名称
@@ -32,47 +37,37 @@ namespace finenav::navigator
  *   - update_distance (double, 默认 0.05):             最小位移阈值，新 goal 与上次距离低于此值时不更新
  *
  * 输出端口:
- *   - goal (Pose):                                      计算出的跟随目标位姿
+ *   - goal_poses (std::vector<geometry_msgs::msg::Pose>, 默认 "{goal_poses}"):
+ *                 计算出的跟随目标（单元素向量），供 IsGoalReached 等条件节点
+ *                 读取，作为"终点"（.back()）判定。
  *
  * Usage in XML:
  * @code
- * <DynamicGoalFollower topic_name="/target_pose"
- *                      robot_pose="{robot_pose}"
- *                      goal="{goal}"
- *                      follow_distance="1.0"
- *                      update_distance="0.1">
- *     <ComputePlan action_name="/hello_finenav/mppi_layer"
- *                  goal="{goal}"
- *                  planner_id="finenav_mppi_controller"/>
- * </DynamicGoalFollower>
+ * <FollowTargetAsGoal topic_name="/target_pose"
+ *                     robot_pose="{robot_pose}"
+ *                     goal_poses="{goal_poses}"
+ *                     follow_distance="0.5"
+ *                     update_distance="0.1"/>
  * @endcode
  */
-class DynamicGoalFollower : public BT::DecoratorNode
+class FollowTargetAsGoal : public BT::StatefulActionNode
 {
 public:
-  DynamicGoalFollower(
+  FollowTargetAsGoal(
     const std::string & name,
     const BT::NodeConfig & conf);
 
-  ~DynamicGoalFollower() override = default;
+  ~FollowTargetAsGoal() override = default;
 
-  static BT::PortsList providedPorts()
-  {
-    return {
-      BT::InputPort<std::string>("topic_name", "/target_pose", "Target pose topic"),
-      BT::InputPort<geometry_msgs::msg::Pose>("robot_pose", "{robot_pose}", "Current robot pose"),
-      BT::OutputPort<geometry_msgs::msg::Pose>("goal", "Computed follow goal"),
-      BT::InputPort<double>("follow_distance", 0.0, "Distance behind target to follow [m]"),
-      BT::InputPort<double>("update_distance", 0.05, "Min displacement to trigger update [m]"),
-    };
-  }
+  static BT::PortsList providedPorts();
+
+  BT::NodeStatus onStart() override;
+  BT::NodeStatus onRunning() override;
+  void onHalted() override;
 
 private:
-  BT::NodeStatus tick() override;
-  void halt() override;
-
   /**
-   * @brief 创建 ROS 订阅，在首次 tick 或重新激活时调用
+   * @brief 创建 ROS 订阅（独立 callback_group + 独立 executor），在 onStart 时调用
    */
   void initialize();
 
@@ -87,7 +82,7 @@ private:
     const geometry_msgs::msg::Pose & target_pose) const;
 
   /**
-   * @brief 判断是否需要更新 blackboard goal
+   * @brief 判断是否需要更新 blackboard goal_poses
    * @param new_goal 新计算的跟随目标
    * @return true 若与上次 goal 距离超过 update_distance
    */

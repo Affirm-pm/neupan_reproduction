@@ -77,13 +77,13 @@ ament_target_dependencies(finenav_start_control_pipeline_branch_behavior
 )
 target_compile_definitions(finenav_start_control_pipeline_branch_behavior PRIVATE BT_PLUGIN_EXPORT)
 
-add_library(finenav_start_control_layer_behavior SHARED
-        src/plugins/action/start_control_layer.cpp
+add_library(finenav_execute_control_layer_behavior SHARED
+        src/plugins/action/execute_control_layer.cpp
 )
-ament_target_dependencies(finenav_start_control_layer_behavior
+ament_target_dependencies(finenav_execute_control_layer_behavior
         ${dependencies}
 )
-target_compile_definitions(finenav_start_control_layer_behavior PRIVATE BT_PLUGIN_EXPORT)
+target_compile_definitions(finenav_execute_control_layer_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 add_library(finenav_stop_control_layer_behavior SHARED
         src/plugins/action/stop_control_layer.cpp
@@ -99,6 +99,12 @@ add_library(finenav_is_goal_reached_condition SHARED
 )
 ament_target_dependencies(finenav_is_goal_reached_condition ${dependencies})
 target_compile_definitions(finenav_is_goal_reached_condition PRIVATE BT_PLUGIN_EXPORT)
+
+add_library(finenav_is_waypoint_reached_condition SHARED
+        src/plugins/condition/is_waypoint_reached.cpp
+)
+ament_target_dependencies(finenav_is_waypoint_reached_condition ${dependencies})
+target_compile_definitions(finenav_is_waypoint_reached_condition PRIVATE BT_PLUGIN_EXPORT)
 
 add_library(finenav_is_stuck_condition SHARED
         src/plugins/condition/is_stuck.cpp
@@ -155,14 +161,14 @@ ament_target_dependencies(finenav_keep_for_duration
 )
 target_compile_definitions(finenav_keep_for_duration PRIVATE BT_PLUGIN_EXPORT)
 
-# DynamicGoalFollower Plugin (ROS node params needed)
-add_library(finenav_dynamic_goal_follower SHARED
-        src/plugins/decorator/dynamic_goal_follower.cpp
+# FollowTargetAsGoal Plugin (ROS node params needed)
+add_library(finenav_follow_target_as_goal SHARED
+        src/plugins/action/follow_target_as_goal.cpp
 )
-ament_target_dependencies(finenav_dynamic_goal_follower
+ament_target_dependencies(finenav_follow_target_as_goal
         ${dependencies}
 )
-target_compile_definitions(finenav_dynamic_goal_follower PRIVATE BT_PLUGIN_EXPORT)
+target_compile_definitions(finenav_follow_target_as_goal PRIVATE BT_PLUGIN_EXPORT)
 
 # Install — main library
 install(TARGETS finenav_navigator navigator_params
@@ -176,13 +182,14 @@ install(TARGETS finenav_navigator navigator_params
 install(TARGETS
         finenav_publish_navigation_goal_behavior
         finenav_start_control_pipeline_branch_behavior
-        finenav_start_control_layer_behavior
+        finenav_execute_control_layer_behavior
         finenav_stop_control_layer_behavior
         finenav_stop_chassis_motion_behavior
         finenav_is_goal_reached_condition
+        finenav_is_waypoint_reached_condition
         finenav_is_stuck_condition
         finenav_is_near_point_condition
-        finenav_dynamic_goal_follower
+        finenav_follow_target_as_goal
         finenav_recovery_node
         finenav_round_robin_node
         finenav_rate_controller
@@ -193,7 +200,6 @@ install(TARGETS
 )
 
 install(DIRECTORY include/ DESTINATION include/${PROJECT_NAME})
-install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME})
 
 # Export
 ament_export_include_directories(include/${PROJECT_NAME})

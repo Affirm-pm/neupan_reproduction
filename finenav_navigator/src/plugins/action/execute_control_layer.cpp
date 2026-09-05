@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_navigator/plugins/action/start_control_layer.hpp"
+#include "finenav_navigator/plugins/action/execute_control_layer.hpp"
 
 #include <behaviortree_cpp/bt_factory.h>
 
@@ -11,7 +11,7 @@
 
 namespace finenav::navigator {
 
-BT::NodeStatus StartControlLayer::onStart() {
+BT::NodeStatus ExecuteControlLayer::onStart() {
     PipelineController* pipeline = nullptr;
     if (!config().blackboard->get("_pipeline", pipeline) || !pipeline) {
         return BT::NodeStatus::FAILURE;
@@ -22,7 +22,7 @@ BT::NodeStatus StartControlLayer::onStart() {
     return BT::NodeStatus::RUNNING;
 }
 
-BT::NodeStatus StartControlLayer::onRunning() {
+BT::NodeStatus ExecuteControlLayer::onRunning() {
     using Status = finenav_interfaces::msg::TaskFeedback;
 
     PipelineController* pipeline = nullptr;
@@ -37,7 +37,7 @@ BT::NodeStatus StartControlLayer::onRunning() {
     return BT::NodeStatus::RUNNING;
 }
 
-void StartControlLayer::onHalted() {
+void ExecuteControlLayer::onHalted() {
     PipelineController* pipeline = nullptr;
     if (config().blackboard->get("_pipeline", pipeline) && pipeline) {
         pipeline->stopLayer(layer_);
@@ -47,5 +47,5 @@ void StartControlLayer::onHalted() {
 }  // namespace finenav::navigator
 
 BT_REGISTER_NODES(factory) {
-    factory.registerNodeType<finenav::navigator::StartControlLayer>("StartControlLayer");
+    factory.registerNodeType<finenav::navigator::ExecuteControlLayer>("ExecuteControlLayer");
 }

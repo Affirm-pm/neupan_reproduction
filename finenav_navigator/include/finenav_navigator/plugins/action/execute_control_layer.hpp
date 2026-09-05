@@ -9,14 +9,14 @@
 namespace finenav::navigator {
 
 /**
- * @brief StartControlLayer — 手动启动单个 control layer 并监控其完成。
+ * @brief ExecuteControlLayer — 手动启动单个 control layer 并监控其完成。
  *
  * 端口 `layer`（层名）。onStart 启动层；onRunning 轮询该层反馈，
  * COMPLETED→SUCCESS / FAILED→FAILURE；onHalted 停止该层。StatefulActionNode。
  */
-class StartControlLayer : public BT::StatefulActionNode {
+class ExecuteControlLayer : public BT::StatefulActionNode {
 public:
-    StartControlLayer(const std::string& name, const BT::NodeConfig& config)
+    ExecuteControlLayer(const std::string& name, const BT::NodeConfig& config)
         : BT::StatefulActionNode(name, config) {}
 
     static BT::PortsList providedPorts() {

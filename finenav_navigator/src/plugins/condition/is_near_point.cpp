@@ -15,7 +15,7 @@ IsNearPoint::IsNearPoint(const std::string& name, const BT::NodeConfig& config)
 BT::PortsList IsNearPoint::providedPorts() {
     return {
         BT::InputPort<geometry_msgs::msg::Pose>("point_a",           "{robot_pose}", "First pose"),
-        BT::InputPort<geometry_msgs::msg::Pose>("point_b",           "{goal}",       "Second pose"),
+        BT::InputPort<geometry_msgs::msg::Pose>("point_b",           "",             "Second pose (explicitly provided by user)"),
         BT::InputPort<double>("distance_threshold", 3.0, "Distance threshold [m]"),
     };
 }

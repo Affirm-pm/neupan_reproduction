@@ -5,24 +5,38 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <vector>
 
-#include "finenav_navigator/plugins/decorator/dynamic_goal_follower.hpp"
+#include "finenav_navigator/plugins/action/follow_target_as_goal.hpp"
+#include "finenav_navigator/pipeline_controller.hpp"
 
 namespace finenav::navigator
 {
 
-DynamicGoalFollower::DynamicGoalFollower(
+FollowTargetAsGoal::FollowTargetAsGoal(
   const std::string & name,
   const BT::NodeConfig & conf)
-: BT::DecoratorNode(name, conf)
+: BT::StatefulActionNode(name, conf)
 {
 }
 
-void DynamicGoalFollower::initialize()
+BT::PortsList FollowTargetAsGoal::providedPorts()
+{
+  return {
+    BT::InputPort<std::string>("topic_name", "/target_pose", "Target pose topic"),
+    BT::InputPort<geometry_msgs::msg::Pose>("robot_pose", "{robot_pose}", "Current robot pose"),
+    BT::OutputPort<std::vector<geometry_msgs::msg::Pose>>(
+      "goal_poses", "{goal_poses}", "Computed follow goal as single-element pose vector"),
+    BT::InputPort<double>("follow_distance", 0.0, "Distance behind target to follow [m]"),
+    BT::InputPort<double>("update_distance", 0.05, "Min displacement to trigger update [m]"),
+  };
+}
+
+void FollowTargetAsGoal::initialize()
 {
   auto node = config().blackboard->get<rclcpp::Node::SharedPtr>("_node");
   if (!node) {
-    throw BT::RuntimeError("DynamicGoalFollower: _node not found on blackboard.");
+    throw BT::RuntimeError("FollowTargetAsGoal: _node not found on blackboard.");
   }
 
   std::string topic_name = "/target_pose";
@@ -45,18 +59,20 @@ void DynamicGoalFollower::initialize()
     options);
 }
 
-BT::NodeStatus DynamicGoalFollower::tick()
+BT::NodeStatus FollowTargetAsGoal::onStart()
 {
-  // 首次进入或重新激活时初始化订阅
-  if (!BT::isStatusActive(status())) {
-    initialize();
-  }
+  // 首次启动时创建订阅：单独 callback_group + 独立 executor spin_some。
+  initialize();
+  return BT::NodeStatus::RUNNING;
+}
 
+BT::NodeStatus FollowTargetAsGoal::onRunning()
+{
   // 处理积压的 ROS 回调，获取最新目标位姿
   callback_executor_.spin_some();
 
   // 从 blackboard 获取机器人当前位姿
-  geometry_msgs::msg::Pose robot_pose;
+  geometry_msgs::msg::Pose robot_pose{};
   getInput("robot_pose", robot_pose);
 
   // 如果有新目标且能获取机器人位姿，计算跟随目标
@@ -64,27 +80,31 @@ BT::NodeStatus DynamicGoalFollower::tick()
     const auto follow_goal = computeFollowGoal(robot_pose, last_msg_.pose);
 
     if (shouldUpdate(follow_goal)) {
-      setOutput("goal", follow_goal);
+      setOutput("goal_poses", std::vector<geometry_msgs::msg::Pose>{follow_goal});
       last_goal_ = follow_goal;
       has_last_goal_ = true;
+
+      // 将跟随点重新注入 _root/__feedback，驱动下游层以新 ref_traj 重新规划。
+      // （否则层里存储的 ref_traj 仍是初始静态 goal，机器人不会跟着移动目标走。）
+      PipelineController* pipeline = nullptr;
+      if (config().blackboard->get("_pipeline", pipeline) && pipeline) {
+        pipeline->publishNavigationGoal({follow_goal});
+      }
     }
   }
 
-  // 透传子节点状态
-  setStatus(BT::NodeStatus::RUNNING);
-  const BT::NodeStatus child_status = child_node_->executeTick();
-  return child_status;
+  // 动态跟随不自行结束 —— 始终 RUNNING，直到被外部 halt。
+  return BT::NodeStatus::RUNNING;
 }
 
-void DynamicGoalFollower::halt()
+void FollowTargetAsGoal::onHalted()
 {
-  // 重置状态，但保留订阅（下次 tick 会重新激活）
+  // 复位订阅状态（保留订阅，节点重启时会重新 initialize 或重新开始接收）
   last_msg_received_ = false;
   has_last_goal_ = false;
-  DecoratorNode::halt();
 }
 
-geometry_msgs::msg::Pose DynamicGoalFollower::computeFollowGoal(
+geometry_msgs::msg::Pose FollowTargetAsGoal::computeFollowGoal(
   const geometry_msgs::msg::Pose & robot_pose,
   const geometry_msgs::msg::Pose & target_pose) const
 {
@@ -115,7 +135,7 @@ geometry_msgs::msg::Pose DynamicGoalFollower::computeFollowGoal(
   return goal;
 }
 
-bool DynamicGoalFollower::shouldUpdate(
+bool FollowTargetAsGoal::shouldUpdate(
   const geometry_msgs::msg::Pose & new_goal) const
 {
   if (!has_last_goal_) {
@@ -132,7 +152,7 @@ bool DynamicGoalFollower::shouldUpdate(
   return (dx * dx + dy * dy + dz * dz) >= update_distance * update_distance;
 }
 
-void DynamicGoalFollower::onTargetPose(
+void FollowTargetAsGoal::onTargetPose(
   const geometry_msgs::msg::PoseStamped::ConstSharedPtr & msg)
 {
   last_msg_ = *msg;
@@ -144,5 +164,5 @@ void DynamicGoalFollower::onTargetPose(
 #include <behaviortree_cpp/bt_factory.h>
 
 BT_REGISTER_NODES(factory) {
-    factory.registerNodeType<finenav::navigator::DynamicGoalFollower>("DynamicGoalFollower");
+    factory.registerNodeType<finenav::navigator::FollowTargetAsGoal>("FollowTargetAsGoal");
 }
