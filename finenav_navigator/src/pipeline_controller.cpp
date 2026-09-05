@@ -21,14 +21,14 @@ PipelineController::PipelineController(
         finenav::util::TaskChannel::feedbackTopic("_root"), 10);
 }
 
-void PipelineController::publishNavigationGoal(const std::vector<Pose>& poses) {
-    FeedbackMsg fb;
-    fb.status = FeedbackMsg::RUNNING;
-    fb.trajectory.header.stamp = node_->now();
-    fb.trajectory.header.frame_id = "map";
-    fb.trajectory.valid_fields = finenav_interfaces::msg::Trajectory::TRAJ_POSE;
-    fb.trajectory.poses = poses;
-    root_feedback_pub_->publish(fb);
+void PipelineController::publishNavigationGoal(std::vector<Pose> poses) {
+    auto fb = std::make_unique<FeedbackMsg>();
+    fb->status = FeedbackMsg::RUNNING;
+    fb->trajectory.header.stamp = node_->now();
+    fb->trajectory.header.frame_id = "map";
+    fb->trajectory.valid_fields = finenav_interfaces::msg::Trajectory::TRAJ_POSE;
+    fb->trajectory.poses = std::move(poses);
+    root_feedback_pub_->publish(std::move(fb));
 }
 
 void PipelineController::startBranch(const std::string& to) {

@@ -34,6 +34,7 @@ PipelineNode<PlannerT>::PipelineNode(
     pnode_opts.append_parameter_override(
         "use_sim_time",
         node_->get_parameter("use_sim_time").as_bool());
+    pnode_opts.use_intra_process_comms(true);
     pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 

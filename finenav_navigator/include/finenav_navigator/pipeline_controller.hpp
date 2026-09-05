@@ -33,7 +33,7 @@ public:
                        finenav::core::ControlPipelineTree* pipe);
 
     /// 注入导航目标：把 goal_poses[] 发布到 _root/__feedback（开始导航）。
-    void publishNavigationGoal(const std::vector<Pose>& poses);
+    void publishNavigationGoal(std::vector<Pose> poses);
 
     /// 一键启动支路：停 off-path 层，再按拓扑序（root→leaf）启动 on-path 层。
     void startBranch(const std::string& to);

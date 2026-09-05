@@ -23,7 +23,7 @@ BT::NodeStatus PublishNavigationGoal::tick() {
         return BT::NodeStatus::FAILURE;
     }
 
-    pipeline->publishNavigationGoal(poses);
+    pipeline->publishNavigationGoal(std::move(poses));
     return BT::NodeStatus::SUCCESS;
 }
 

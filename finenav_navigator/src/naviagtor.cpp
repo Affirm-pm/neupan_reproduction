@@ -21,6 +21,7 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
     pnode_opts.append_parameter_override(
         "use_sim_time",
         parent_node->get_parameter("use_sim_time").as_bool());
+    pnode_opts.use_intra_process_comms(true);
     pnode_ = rclcpp::Node::make_shared(
         "finenav_navigator",            // 节点名称，与 yaml 顶层 key 一致
         parent_node->get_name(),        // 命名空间继承宿主节点名
