@@ -13,12 +13,12 @@ namespace finenav::navigator {
 
 PipelineController::PipelineController(
     rclcpp::Node::SharedPtr node,
-    finenav::util::TaskMaster* master,
+    finenav::core::TaskMaster* master,
     finenav::core::ControlPipelineTree* pipe)
     : node_(std::move(node)), master_(master), pipe_(pipe)
 {
     root_feedback_pub_ = node_->create_publisher<FeedbackMsg>(
-        finenav::util::TaskChannel::feedbackTopic("_root"), 10);
+        finenav::core::TaskChannel::feedbackTopic("_root"), 10);
 }
 
 void PipelineController::publishNavigationGoal(std::vector<Pose> poses) {

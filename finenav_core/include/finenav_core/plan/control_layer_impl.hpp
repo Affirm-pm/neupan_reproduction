@@ -62,13 +62,12 @@ ControlLayer<PlannerT>::~ControlLayer() {
 
 template <Planner PlannerT>
 void ControlLayer<PlannerT>::startWorker(std::function<void()> episode_body) {
-    worker_ = std::make_unique<finenav::util::TaskWorker>(this->pnode_, this->layer_name_);
     worker_thread_ = std::thread([this, episode_body = std::move(episode_body)]() {
         while (rclcpp::ok() && !stop_) {
-            if (worker_->hasStart()) {
-                worker_->ackStart();
+            if (this->worker_->hasStart()) {
+                this->worker_->ackStart();
                 if (!waitForState()) {
-                    worker_->publishFailed();
+                    this->worker_->publishFailed();
                     continue;
                 }
                 this->resetPlanner();
@@ -81,7 +80,7 @@ void ControlLayer<PlannerT>::startWorker(std::function<void()> episode_body) {
 
 template <Planner PlannerT>
 bool ControlLayer<PlannerT>::waitForState() {
-    while (rclcpp::ok() && !worker_->shouldStop()) {
+    while (rclcpp::ok() && !this->worker_->shouldStop()) {
         if (this->state_provider_ && this->state_provider_->getRobotState().has_value()) {
             return true;
         }
@@ -96,20 +95,20 @@ bool ControlLayer<PlannerT>::waitForState() {
 
 template <Planner PlannerT>
 void ControlLayer<PlannerT>::runSingleShot() {
-    if (worker_->shouldStop()) {
-        worker_->publishFailed();
+    if (this->worker_->shouldStop()) {
+        this->worker_->publishFailed();
         return;
     }
 
     auto out = this->planOnce();
     if (!out) {
         FINENAV_LOG_ERROR(this->pnode_->get_logger(), "SingleShot: plan() failed.");
-        worker_->publishFailed();
+        this->worker_->publishFailed();
         return;
     }
 
-    worker_->publishRunning(std::move(*out));
-    worker_->publishCompleted({});
+    this->worker_->publishRunning(std::move(*out));
+    this->worker_->publishCompleted({});
     FINENAV_LOG_INFO(this->pnode_->get_logger(), "SingleShot: goal succeeded.");
 }
 
@@ -118,18 +117,18 @@ void ControlLayer<PlannerT>::runContinuous() {
     rclcpp::Rate rate(std::get<ContinuousPolicy>(policy_).frequency_hz);
 
     while (rclcpp::ok()) {
-        if (worker_->shouldStop()) {
-            worker_->publishFailed();
+        if (this->worker_->shouldStop()) {
+            this->worker_->publishFailed();
             return;
         }
 
         auto out = this->planOnce();
         if (!out) {
             FINENAV_LOG_ERROR(this->pnode_->get_logger(), "Tracking: plan() failed — aborting.");
-            worker_->publishFailed();
+            this->worker_->publishFailed();
             return;
         }
-        worker_->publishRunning(std::move(*out));
+        this->worker_->publishRunning(std::move(*out));
         rate.sleep();
     }
 }
@@ -158,7 +157,7 @@ void ControlLayer<PlannerT>::runReactive() {
     // fires react() for every incoming reference.  STOP flips started_ off so
     // later references are only stashed until the next START.
     started_.store(true);
-    while (rclcpp::ok() && !worker_->shouldStop()) {
+    while (rclcpp::ok() && !this->worker_->shouldStop()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     started_.store(false);
@@ -170,7 +169,7 @@ void ControlLayer<PlannerT>::react() {
     // goal is its last pose).  Runs on the subscription callback thread.
     auto out = this->planOnce();
     if (!out) return;
-    worker_->publishRunning(std::move(*out));
+    this->worker_->publishRunning(std::move(*out));
 }
 
 } // namespace finenav::core

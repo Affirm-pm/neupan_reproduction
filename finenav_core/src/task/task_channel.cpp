@@ -2,9 +2,9 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_util/ros/task_channel.hpp"
+#include "finenav_core/task/task_channel.hpp"
 
-namespace finenav::util {
+namespace finenav::core {
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  TaskMaster
@@ -99,6 +99,16 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
         });
 }
 
+void TaskWorker::connectFrom(
+    const std::string& parent_name,
+    std::function<void(std::shared_ptr<const FeedbackMsg>)> on_ref) {
+    ref_sub_ = node_->create_subscription<FeedbackMsg>(
+        TaskChannel::feedbackTopic(parent_name), 10,
+        [on_ref = std::move(on_ref)](std::shared_ptr<const FeedbackMsg> msg) {
+            on_ref(std::move(msg));
+        });
+}
+
 bool TaskWorker::hasStart() const {
     return start_.load(std::memory_order_acquire);
 }
@@ -134,4 +144,4 @@ void TaskWorker::publishFailed() {
     feedback_pub_->publish(std::move(msg));
 }
 
-}  // namespace finenav::util
+}  // namespace finenav::core

@@ -20,7 +20,7 @@
 #include "finenav_interfaces/msg/task_cmd.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
 
-namespace finenav::util {
+namespace finenav::core {
 
 inline rclcpp::NodeOptions intra_options() {
     auto opts = rclcpp::NodeOptions();
@@ -111,6 +111,14 @@ public:
                const std::string& channel_name);
 
     /**
+     * @brief Subscribe to a parent layer's __feedback (the reference input).
+     * @param parent_name  Name of the upstream layer whose feedback to consume.
+     * @param on_ref       Invoked with each new reference (zero-copy shared_ptr).
+     */
+    void connectFrom(const std::string& parent_name,
+                     std::function<void(std::shared_ptr<const FeedbackMsg>)> on_ref);
+
+    /**
      * @brief Worker loop helpers
      * @details
      * hasStart()  - Check if a START control has been received from the master.
@@ -137,10 +145,11 @@ private:
     std::shared_ptr<rclcpp::Node> node_;
 
     std::shared_ptr<rclcpp::Subscription<CmdMsg>>    cmd_sub_;
+    std::shared_ptr<rclcpp::Subscription<FeedbackMsg>> ref_sub_;
     std::shared_ptr<rclcpp::Publisher<FeedbackMsg>>  feedback_pub_;
 
     std::atomic<bool> start_{false};
     std::atomic<bool> should_stop_{false};
 };
 
-}  // namespace finenav::util
+}  // namespace finenav::core

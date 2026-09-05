@@ -29,7 +29,7 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
 
     // TaskMaster on pnode_ so its topics share the /hello_finenav namespace
     // with every ControlLayer's TaskWorker (also under /hello_finenav).
-    master_ = std::make_unique<finenav::util::TaskMaster>(pnode_);
+    master_ = std::make_unique<finenav::core::TaskMaster>(pnode_);
 
     // PipelineController: BT nodes drive the control_pipeline through this.
     pipeline_ = std::make_unique<PipelineController>(pnode_, master_.get(), &pipe_);

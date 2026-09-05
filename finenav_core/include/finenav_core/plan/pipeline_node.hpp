@@ -18,6 +18,7 @@
 #include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
+#include "finenav_core/task/task_channel.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
 #include "finenav_interfaces/msg/trajectory.hpp"
 #include "finenav_util/ros/node_thread.hpp"
@@ -48,7 +49,7 @@ public:
 
     // ── IPipelineNode ─────────────────────────────────────────────────────
 
-    void connectFrom(const std::string& parent_topic) override;
+    void connectFrom(const std::string& parent_name) override;
 
     /// IPipelineNode — attach a pre-built MapView plus its backing map resources.
     void attachMapView(
@@ -68,9 +69,6 @@ protected:
         RobotStateProvider* state_provider);
 
     ~PipelineNode() override;
-
-    void setInputTopic(const std::string& topic);
-    void setupDataPorts();
 
     /// React to an upstream reference-trajectory message.  Default (commanded)
     /// behaviour is to stash it for the next planOnce(); the reactive subclass
@@ -98,8 +96,6 @@ protected:
     rclcpp::Node::SharedPtr      pnode_;
     std::unique_ptr<finenav::util::NodeThread> pnode_thread_;
 
-    rclcpp::Subscription<finenav_interfaces::msg::TaskFeedback>::SharedPtr plan_ref_sub_;
-
     // ── Planner state ──────────────────────────────────────────────────────
 
     PlannerT      planner_instance_;
@@ -116,7 +112,10 @@ protected:
     // ── Data ───────────────────────────────────────────────────────────────
 
     std::string layer_name_;
-    std::string input_topic_;
+
+    /// The TaskChannel worker for this stage: owns all three channel endpoints
+    /// (cmd_sub_, feedback_pub_ and, after connectFrom(), ref_sub_).
+    std::unique_ptr<finenav::core::TaskWorker> worker_;
 
     std::mutex                       plan_ref_mutex_;
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;

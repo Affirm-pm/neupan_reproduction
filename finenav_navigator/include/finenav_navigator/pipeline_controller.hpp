@@ -13,7 +13,7 @@
 
 #include "finenav_core/plan/control_pipeline_tree.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
-#include "finenav_util/ros/task_channel.hpp"
+#include "finenav_core/task/task_channel.hpp"
 
 namespace finenav::navigator {
 
@@ -29,7 +29,7 @@ public:
     using Pose = geometry_msgs::msg::Pose;
 
     PipelineController(rclcpp::Node::SharedPtr node,
-                       finenav::util::TaskMaster* master,
+                       finenav::core::TaskMaster* master,
                        finenav::core::ControlPipelineTree* pipe);
 
     /// 注入导航目标：把 goal_poses[] 发布到 _root/__feedback（开始导航）。
@@ -54,7 +54,7 @@ public:
 
 private:
     rclcpp::Node::SharedPtr node_;
-    finenav::util::TaskMaster* master_;
+    finenav::core::TaskMaster* master_;
     finenav::core::ControlPipelineTree* pipe_;
     rclcpp::Publisher<FeedbackMsg>::SharedPtr root_feedback_pub_;
 };

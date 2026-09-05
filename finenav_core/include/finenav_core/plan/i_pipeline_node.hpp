@@ -23,7 +23,11 @@ namespace finenav::core {
 class IPipelineNode {
 public:
     virtual ~IPipelineNode() = default;
-    virtual void connectFrom(const std::string& parent_topic) = 0;
+
+    /// Connect this stage to its upstream stage, given the upstream **layer
+    /// name** (not a topic string).  The stage subscribes to the upstream
+    /// layer's feedback topic and consumes it as the reference input.
+    virtual void connectFrom(const std::string& parent_name) = 0;
 
     /**
      * @brief Attach a pre-built MapView plus the map resources it reads.

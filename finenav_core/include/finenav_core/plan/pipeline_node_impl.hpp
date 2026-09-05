@@ -38,6 +38,10 @@ PipelineNode<PlannerT>::PipelineNode(
     pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
+    // ── Task channel worker: owns cmd_sub_/feedback_pub_ (+ ref_sub_ after
+    //    connectFrom) on the private node. ─────────────────────────────────
+    worker_ = std::make_unique<finenav::core::TaskWorker>(pnode_, layer_name_);
+
     // ── Planner instance + parameter wiring ───────────────────────────────
     planner_name_ = algo_name;
     auto pollable = PlanRegistry::instance().loadPlannerParams(
@@ -63,9 +67,11 @@ PipelineNode<PlannerT>::~PipelineNode() = default;
 // ==============================================================================
 
 template <Planner PlannerT>
-void PipelineNode<PlannerT>::connectFrom(const std::string& parent_topic) {
-    setInputTopic(parent_topic);
-    setupDataPorts();
+void PipelineNode<PlannerT>::connectFrom(const std::string& parent_name) {
+    worker_->connectFrom(parent_name,
+        [this](std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg) {
+            onPlanRef(std::move(msg));
+        });
 }
 
 template <Planner PlannerT>
@@ -91,24 +97,8 @@ void PipelineNode<PlannerT>::attachMapView(
 }
 
 // ==============================================================================
-// Topic / Port Setup
+// Reference handling
 // ==============================================================================
-
-template <Planner PlannerT>
-void PipelineNode<PlannerT>::setInputTopic(const std::string& topic) {
-    input_topic_ = topic;
-}
-
-template <Planner PlannerT>
-void PipelineNode<PlannerT>::setupDataPorts() {
-    if (!input_topic_.empty()) {
-        plan_ref_sub_ = pnode_->create_subscription<finenav_interfaces::msg::TaskFeedback>(
-            input_topic_, 10,
-            [this](std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg) {
-                onPlanRef(std::move(msg));
-            });
-    }
-}
 
 template <Planner PlannerT>
 void PipelineNode<PlannerT>::onPlanRef(

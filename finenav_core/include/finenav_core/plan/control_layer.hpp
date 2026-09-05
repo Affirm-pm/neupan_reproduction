@@ -12,7 +12,7 @@
 
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/pipeline_node.hpp"
-#include "finenav_util/ros/task_channel.hpp"
+#include "finenav_core/task/task_channel.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 namespace finenav::core {
@@ -58,8 +58,8 @@ private:
 
     ExecutionPolicyVariant policy_;
 
-    // commanded plumbing (shared by all three policies)
-    std::unique_ptr<finenav::util::TaskWorker> worker_;
+    // commanded plumbing (shared by all three policies); worker_ itself is
+    // inherited from PipelineNode.
     std::thread        worker_thread_;
     std::atomic<bool>  stop_{false};
 

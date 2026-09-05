@@ -13,7 +13,7 @@
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/pipeline_controller.hpp"
 
-#include "finenav_util/ros/task_channel.hpp"
+#include "finenav_core/task/task_channel.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
 #include "finenav_util/ros/simple_action_server.hpp"
 #include "finenav_util/ros/node_thread.hpp"
@@ -54,7 +54,7 @@ public:
     }
 
     // ── IPC + topology (public for FineNavEngine wiring) ────────────────────
-    finenav::util::TaskMaster&       master()       { return *master_; } // TODO: 如果没人用，就去掉
+    finenav::core::TaskMaster&       master()       { return *master_; } // TODO: 如果没人用，就去掉
     finenav::core::ControlPipelineTree& pipe()       { return pipe_; }
 
     void setChassisCommand(std::shared_ptr<IChassisCommand> cmd) {
@@ -77,7 +77,7 @@ private:
     finenav_navigator::Params                         params_;
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;
 
-    std::unique_ptr<finenav::util::TaskMaster> master_;
+    std::unique_ptr<finenav::core::TaskMaster> master_;
     finenav::core::ControlPipelineTree pipe_;
     std::unique_ptr<PipelineController> pipeline_;
     using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
