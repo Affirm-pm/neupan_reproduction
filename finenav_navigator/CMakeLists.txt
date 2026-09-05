@@ -44,6 +44,7 @@ generate_parameter_library(
 add_library(finenav_navigator SHARED
         src/naviagtor.cpp
         src/behavior_tree_engine.cpp
+        src/pipeline_controller.cpp
         src/chassis_command/chassis_cmd_vel.cpp
         src/chassis_command/chassis_cmd_vel_stamped.cpp
 )
@@ -60,22 +61,37 @@ target_link_libraries(finenav_navigator
 )
 
 # Action Plugins
-# StopPlan Plugin
-add_library(finenav_stop_plan_behavior SHARED
-        src/plugins/action/stop_plan.cpp
+add_library(finenav_publish_navigation_goal_behavior SHARED
+        src/plugins/action/publish_navigation_goal.cpp
 )
-ament_target_dependencies(finenav_stop_plan_behavior
+ament_target_dependencies(finenav_publish_navigation_goal_behavior
         ${dependencies}
 )
-target_compile_definitions(finenav_stop_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
+target_compile_definitions(finenav_publish_navigation_goal_behavior PRIVATE BT_PLUGIN_EXPORT)
 
-add_library(finenav_compute_plan_behavior SHARED
-        src/plugins/action/compute_plan.cpp
+add_library(finenav_start_control_pipeline_branch_behavior SHARED
+        src/plugins/action/start_control_pipeline_branch.cpp
 )
-ament_target_dependencies(finenav_compute_plan_behavior
+ament_target_dependencies(finenav_start_control_pipeline_branch_behavior
         ${dependencies}
 )
-target_compile_definitions(finenav_compute_plan_behavior PRIVATE BT_PLUGIN_EXPORT)
+target_compile_definitions(finenav_start_control_pipeline_branch_behavior PRIVATE BT_PLUGIN_EXPORT)
+
+add_library(finenav_start_control_layer_behavior SHARED
+        src/plugins/action/start_control_layer.cpp
+)
+ament_target_dependencies(finenav_start_control_layer_behavior
+        ${dependencies}
+)
+target_compile_definitions(finenav_start_control_layer_behavior PRIVATE BT_PLUGIN_EXPORT)
+
+add_library(finenav_stop_control_layer_behavior SHARED
+        src/plugins/action/stop_control_layer.cpp
+)
+ament_target_dependencies(finenav_stop_control_layer_behavior
+        ${dependencies}
+)
+target_compile_definitions(finenav_stop_control_layer_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Condition Plugins
 add_library(finenav_is_goal_reached_condition SHARED
@@ -158,8 +174,10 @@ install(TARGETS finenav_navigator navigator_params
 
 # Install — BT plugins (separate subdirectory so the scanner doesn't pick up non-plugin .so)
 install(TARGETS
-        finenav_compute_plan_behavior
-        finenav_stop_plan_behavior
+        finenav_publish_navigation_goal_behavior
+        finenav_start_control_pipeline_branch_behavior
+        finenav_start_control_layer_behavior
+        finenav_stop_control_layer_behavior
         finenav_stop_chassis_motion_behavior
         finenav_is_goal_reached_condition
         finenav_is_stuck_condition

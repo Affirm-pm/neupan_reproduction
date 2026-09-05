@@ -8,9 +8,12 @@
 
 namespace finenav::navigator {
 
-class StopPlan : public BT::SyncActionNode {
+/**
+ * @brief StopControlLayer — 停止单个 control layer。
+ */
+class StopControlLayer : public BT::SyncActionNode {
 public:
-    StopPlan(const std::string& name, const BT::NodeConfig& config)
+    StopControlLayer(const std::string& name, const BT::NodeConfig& config)
         : BT::SyncActionNode(name, config) {}
 
     static BT::PortsList providedPorts() {

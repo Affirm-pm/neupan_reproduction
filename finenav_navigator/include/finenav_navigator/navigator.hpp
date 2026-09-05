@@ -11,6 +11,7 @@
 #include "finenav_core/plan/control_pipeline_tree.hpp"
 #include "finenav_navigator/behavior_tree_engine.hpp"
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
+#include "finenav_navigator/pipeline_controller.hpp"
 
 #include "finenav_util/ros/task_channel.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
@@ -78,16 +79,12 @@ private:
 
     std::unique_ptr<finenav::util::TaskMaster> master_;
     finenav::core::ControlPipelineTree pipe_;
+    std::unique_ptr<PipelineController> pipeline_;
     using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
 
     std::shared_ptr<IChassisCommand>   chassis_cmd_;
     std::unordered_map<std::string, std::shared_ptr<const FeedbackMsg>> last_consumed_fb_;
     rclcpp::Time last_feedback_time_{0, 0, RCL_ROS_TIME};
-
-    /// Publishes the episode goal (a reference trajectory) on the _root goal-source
-    /// channel (`_root/__feedback`) so downstream ControlLayers fed by `_root >> …`
-    /// receive it as their ref_traj.
-    rclcpp::Publisher<FeedbackMsg>::SharedPtr root_feedback_pub_;
 
     BT::Tree tree_;
 };

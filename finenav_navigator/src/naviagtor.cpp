@@ -30,10 +30,8 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
     // with every ControlLayer's TaskWorker (also under /hello_finenav).
     master_ = std::make_unique<finenav::util::TaskMaster>(pnode_);
 
-    // _root goal-source channel: downstream ControlLayers wired with `_root >> …`
-    // subscribe here to receive the episode goal list as their ref_traj.
-    root_feedback_pub_ = pnode_->create_publisher<FeedbackMsg>(
-        finenav::util::TaskChannel::feedbackTopic("_root"), 10);
+    // PipelineController: BT nodes drive the control_pipeline through this.
+    pipeline_ = std::make_unique<PipelineController>(pnode_, master_.get(), &pipe_);
 
     // ── 读取参数 ──────────────────────────────────────────────────────────────
     param_listener_ = std::make_unique<finenav_navigator::ParamListener>(pnode_);
@@ -89,19 +87,10 @@ void BtNavigator::execute()
 
     auto blackboard = tree_.rootBlackboard();
     blackboard->set("goal", goal->poses.back());
+    blackboard->set("goal_poses", goal->poses);
+    blackboard->set("_pipeline", pipeline_.get());
     blackboard->set("_node", parent_node_);
-    blackboard->set("_nav_task_master", master_.get());
     blackboard->set("_chassis_cmd", chassis_cmd_.get());
-
-    // Publish the goal list onto the _root goal-source channel as a reference
-    // trajectory, so layers wired `_root >> …` receive it as their ref_traj.
-    FeedbackMsg root_fb;
-    root_fb.status = FeedbackMsg::RUNNING;
-    root_fb.trajectory.header.stamp = pnode_->now();
-    root_fb.trajectory.header.frame_id = "map";
-    root_fb.trajectory.valid_fields = finenav_interfaces::msg::Trajectory::TRAJ_POSE;
-    root_fb.trajectory.poses = goal->poses;
-    root_feedback_pub_->publish(root_fb);
 
     auto episode_start = pnode_->now();
     rclcpp::WallRate loop_rate(params_.tick_frequency);
