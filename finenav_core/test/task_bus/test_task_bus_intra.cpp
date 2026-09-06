@@ -9,7 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 
-#include "finenav_core/task_bus/task_channel.hpp"
+#include "finenav_core/task_bus/task_bus.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
 
 using finenav::core::TaskMaster;
@@ -22,7 +22,7 @@ using finenav_interfaces::msg::Trajectory;
 // shared_ptr.  If anyone reverts the publish to a by-value publish, or disables
 // intra-process comms, the received poses vector is a fresh allocation and this
 // address assertion fails.
-TEST(TaskChannelIntra, FeedbackIsZeroCopy)
+TEST(TaskBusIntra, FeedbackIsZeroCopy)
 {
     rclcpp::init(0, nullptr);
 

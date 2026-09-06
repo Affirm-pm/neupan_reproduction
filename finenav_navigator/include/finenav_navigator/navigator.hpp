@@ -13,7 +13,7 @@
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/pipeline_controller.hpp"
 
-#include "finenav_core/task_bus/task_channel.hpp"
+#include "finenav_core/task_bus/task_bus.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
 #include "finenav_util/ros/simple_action_server.hpp"
 #include "finenav_util/ros/node_thread.hpp"

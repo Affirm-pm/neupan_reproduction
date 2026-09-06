@@ -13,7 +13,7 @@
 
 #include "finenav_core/plan/control_pipeline_tree.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
-#include "finenav_core/task_bus/task_channel.hpp"
+#include "finenav_core/task_bus/task_bus.hpp"
 
 namespace finenav::navigator {
 

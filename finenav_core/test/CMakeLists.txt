@@ -31,8 +31,8 @@ target_include_directories(test_map_server PRIVATE ${MAP_HELPERS_DIR} ${CORE_INC
 target_link_libraries(test_map_server ${PROJECT_NAME})
 ament_target_dependencies(test_map_server rclcpp rclcpp_lifecycle finenav_util)
 
-# --- test_task_channel_intra ---
-ament_add_gtest(test_task_channel_intra task_bus/test_task_channel_intra.cpp)
-target_include_directories(test_task_channel_intra PRIVATE ${CORE_INCLUDE_DIRS})
-target_link_libraries(test_task_channel_intra ${PROJECT_NAME})
-ament_target_dependencies(test_task_channel_intra rclcpp finenav_interfaces)
+# --- test_task_bus_intra ---
+ament_add_gtest(test_task_bus_intra task_bus/test_task_bus_intra.cpp)
+target_include_directories(test_task_bus_intra PRIVATE ${CORE_INCLUDE_DIRS})
+target_link_libraries(test_task_bus_intra ${PROJECT_NAME})
+ament_target_dependencies(test_task_bus_intra rclcpp finenav_interfaces)
