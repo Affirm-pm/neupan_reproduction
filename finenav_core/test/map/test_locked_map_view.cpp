@@ -16,8 +16,8 @@ TEST(LockedMapRO, AccessibleViaOperatorArrow) {
 
     {
         LockedMapRO<SmokeMap> view(map, mtx);
-        EXPECT_TRUE(view->isInside(Position3D::Zero()));
-        EXPECT_TRUE(view.get().isInside(Position3D(10, 10, 0)));
+        EXPECT_TRUE(view->isInside(Position3D{}));
+        EXPECT_TRUE(view.get().isInside(Position3D{10, 10, 0}));
     }
     // Lock released, can re-lock:
     {
@@ -32,9 +32,9 @@ TEST(LockedMapRW, AccessibleViaOperatorArrow) {
 
     {
         LockedMapRW<SmokeMap> view(map, mtx);
-        EXPECT_TRUE(view->isInside(Position3D::Zero()));
-        view->shiftWindowTo(Position3D(10, 0, 0));
-        EXPECT_TRUE(view->isInside(Position3D(10, 0, 0)));
+        EXPECT_TRUE(view->isInside(Position3D{}));
+        view->shiftWindowTo(Position3D{10, 0, 0});
+        EXPECT_TRUE(view->isInside(Position3D{10, 0, 0}));
     }
 }
 

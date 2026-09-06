@@ -193,13 +193,13 @@ public:
 
     bool isWalkable(const finenav::Position3D& p) const override {
         return grid_.isWalkableCell(
-            static_cast<int>(std::floor(p.x() / step_)),
-            static_cast<int>(std::floor(p.y() / step_)));
+            static_cast<int>(std::floor(p.x / step_)),
+            static_cast<int>(std::floor(p.y / step_)));
     }
     double getCost(const finenav::Position3D& p) const override {
         return grid_.getCostCell(
-            static_cast<int>(std::floor(p.x() / step_)),
-            static_cast<int>(std::floor(p.y() / step_)));
+            static_cast<int>(std::floor(p.x / step_)),
+            static_cast<int>(std::floor(p.y / step_)));
     }
     double getStepSize() const override { return step_; }
 

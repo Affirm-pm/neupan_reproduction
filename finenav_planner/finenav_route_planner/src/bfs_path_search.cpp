@@ -87,9 +87,9 @@ BfsPathSearch::Result BfsPathSearch::plan(
     for (const auto& cell : *cell_path) {
         const Position3D w = cellCentre(cell);
         geometry_msgs::msg::Pose p;
-        p.position.x    = w.x();
-        p.position.y    = w.y();
-        p.position.z    = w.z();
+        p.position.x    = w.x;
+        p.position.y    = w.y;
+        p.position.z    = w.z;
         p.orientation.w = 1.0;
         output.poses.push_back(p);
     }

@@ -302,11 +302,11 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
             return;
         }
         const auto& pt = maybe_state->pose.position;
-        const Position3D robot_pose(pt.x, pt.y, pt.z);
+        const Position3D robot_pose{pt.x, pt.y, pt.z};
         if (!map_instance_->isInside(robot_pose)) {
             const auto bounds = map_instance_->getWindowBounds();
             const auto center = map_instance_->getWindowCenter();
-            const auto extent = bounds.sizes();
+            const auto extent = sizes(bounds);
 
             FINENAV_LOG_ERROR_THROTTLE(node_->get_logger(), 3000,
                 "\n[MapServer: {}] ROBOT OUTSIDE MAP WINDOW - HARD FAULT\n"
@@ -316,11 +316,11 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
                 "  Window max       : ({:.2f}, {:.2f}, {:.2f})\n"
                 "  Window extent    : ({:.1f}, {:.1f}, {:.1f}) m",
                 server_name_,
-                robot_pose.x(), robot_pose.y(), robot_pose.z(),
-                center.x(), center.y(), center.z(),
-                bounds.min().x(), bounds.min().y(), bounds.min().z(),
-                bounds.max().x(), bounds.max().y(), bounds.max().z(),
-                extent.x(), extent.y(), extent.z());
+                robot_pose.x, robot_pose.y, robot_pose.z,
+                center.x, center.y, center.z,
+                bounds.min.x, bounds.min.y, bounds.min.z,
+                bounds.max.x, bounds.max.y, bounds.max.z,
+                extent.x, extent.y, extent.z);
         }
     }
 
@@ -337,7 +337,7 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
         if (!maybe_state) return;
 
         const auto& pt = maybe_state->pose.position;
-        const Position3D robot_pose(pt.x, pt.y, pt.z);
+        const Position3D robot_pose{pt.x, pt.y, pt.z};
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
         if (!map_instance_->isInside(robot_pose)) {
@@ -350,14 +350,14 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
 
         const auto center      = map_instance_->getWindowCenter();
         const auto bounds      = map_instance_->getWindowBounds();
-        const auto half_extent = (bounds.max() - bounds.min()) * 0.5;
+        const auto half_extent = sizes(bounds) * 0.5;
 
-        if (half_extent.x() > 0.0 && half_extent.y() > 0.0 && half_extent.z() > 0.0) {
-            const auto offset = (robot_pose - center).cwiseAbs();
+        if (half_extent.x > 0.0 && half_extent.y > 0.0 && half_extent.z > 0.0) {
+            const auto offset = abs(robot_pose - center);
             const bool near_edge =
-                (offset.x() / half_extent.x() > shift_margin_ratio_) ||
-                (offset.y() / half_extent.y() > shift_margin_ratio_) ||
-                (offset.z() / half_extent.z() > shift_margin_ratio_);
+                (offset.x / half_extent.x > shift_margin_ratio_) ||
+                (offset.y / half_extent.y > shift_margin_ratio_) ||
+                (offset.z / half_extent.z > shift_margin_ratio_);
 
             if (!near_edge) return;
         }
@@ -366,7 +366,7 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
 
         FINENAV_LOG_DEBUG(pnode_->get_logger(),
             "MapServer window shifted to ({:.2f}, {:.2f}, {:.2f})",
-            robot_pose.x(), robot_pose.y(), robot_pose.z());
+            robot_pose.x, robot_pose.y, robot_pose.z);
     }
 
     sw.warn_if_over(1000.0 / shift_rate_hz_);

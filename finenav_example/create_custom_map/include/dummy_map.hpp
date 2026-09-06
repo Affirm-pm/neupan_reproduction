@@ -5,7 +5,7 @@
 #pragma once
 
 #include "finenav_core/map/map_concept.hpp"
-#include "finenav_core/math_def.hpp"
+#include "finenav_core/common/geometry_types.hpp"
 
 #include "finenav_example/dummy_map_params.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"

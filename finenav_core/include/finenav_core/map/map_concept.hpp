@@ -7,7 +7,7 @@
 #include <concepts>
 #include <utility>
 
-#include "finenav_core/math_def.hpp"
+#include "finenav_core/common/geometry_types.hpp"
 
 namespace finenav::core {
 

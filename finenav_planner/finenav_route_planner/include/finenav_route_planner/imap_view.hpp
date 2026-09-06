@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 #pragma once
-#include "finenav_core/math_def.hpp"   // Position3D
+#include "finenav_core/common/geometry_types.hpp"   // Position3D
 
 namespace astar {
 using finenav::core::Position3D;

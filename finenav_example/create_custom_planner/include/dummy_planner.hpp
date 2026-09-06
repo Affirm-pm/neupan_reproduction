@@ -8,7 +8,7 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 
-#include "finenav_core/math_def.hpp" // TODO： 应该丢掉
+#include "finenav_core/common/geometry_types.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/plan/trajectory.hpp" // TODO： 应该合并
 

@@ -62,7 +62,7 @@ TEST_F(MapServerTest, GetLockedReadView) {
         node, "smoke_map", "test_server", &provider);
 
     auto view = server->getLockedReadView();
-    EXPECT_TRUE(view->isInside(Position3D::Zero()));
+    EXPECT_TRUE(view->isInside(Position3D{}));
 }
 
 TEST_F(MapServerTest, GetLockedWriteView) {
@@ -72,8 +72,8 @@ TEST_F(MapServerTest, GetLockedWriteView) {
         node, "smoke_map", "test_server", &provider);
 
     auto view = server->getLockedWriteView();
-    EXPECT_TRUE(view->isInside(Position3D::Zero()));
-    view->shiftWindowTo(Position3D(10, 0, 0));
+    EXPECT_TRUE(view->isInside(Position3D{}));
+    view->shiftWindowTo(Position3D{10, 0, 0});
 }
 
 TEST_F(MapServerTest, AddObservationSourceManualInjector) {
