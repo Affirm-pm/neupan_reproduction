@@ -9,7 +9,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 
-#include "finenav_core/task/task_channel.hpp"
+#include "finenav_core/task_bus/task_channel.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
 
 using finenav::core::TaskMaster;

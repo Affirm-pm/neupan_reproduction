@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_core/task/task_channel.hpp"
+#include "finenav_core/task_bus/task_channel.hpp"
 
 namespace finenav::core {
 

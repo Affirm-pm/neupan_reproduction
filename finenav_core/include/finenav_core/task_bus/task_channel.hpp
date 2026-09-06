@@ -22,20 +22,6 @@
 
 namespace finenav::core {
 
-inline rclcpp::NodeOptions intra_options() {
-    auto opts = rclcpp::NodeOptions();
-    opts.use_intra_process_comms(true);
-    return opts;
-}
-
-inline std::shared_ptr<rclcpp::Node> make_intra_node(
-    const std::string& name,
-    const rclcpp::NodeOptions& extra = rclcpp::NodeOptions()) {
-    auto opts = intra_options();
-    opts.arguments(extra.arguments());
-    return std::make_shared<rclcpp::Node>(name, opts);
-}
-
 struct TaskChannel {
     static std::string cmdTopic(const std::string& name)      { return name + "/__cmd"; }
     static std::string feedbackTopic(const std::string& name) { return name + "/__feedback"; }

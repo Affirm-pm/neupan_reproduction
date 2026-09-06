@@ -12,7 +12,7 @@
 
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/pipeline_node.hpp"
-#include "finenav_core/task/task_channel.hpp"
+#include "finenav_core/task_bus/task_channel.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 namespace finenav::core {

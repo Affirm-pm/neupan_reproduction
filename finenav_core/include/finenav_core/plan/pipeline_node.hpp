@@ -18,7 +18,7 @@
 #include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
-#include "finenav_core/task/task_channel.hpp"
+#include "finenav_core/task_bus/task_channel.hpp"
 #include "finenav_interfaces/msg/task_feedback.hpp"
 #include "finenav_interfaces/msg/trajectory.hpp"
 #include "finenav_util/ros/node_thread.hpp"
