@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include <rclcpp/rclcpp.hpp>
+
 #include "finenav_core/map/i_map_resource.hpp"
 
 namespace finenav::core {
@@ -39,6 +41,10 @@ public:
     virtual void attachMapView(
         std::shared_ptr<void> view,
         std::vector<std::shared_ptr<IMapResource>> maps) = 0;
+
+    /// The stage's private sub-node (pnode).  Handed to MapView build so a
+    /// subscribing MapView shares the layer's node/executor.
+    virtual rclcpp::Node::SharedPtr getPrivateNode() const = 0;
 
     std::string layerName() const { return name_; }
 

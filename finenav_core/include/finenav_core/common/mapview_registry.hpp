@@ -10,6 +10,8 @@
 #include <typeinfo>
 #include <vector>
 
+#include <rclcpp/rclcpp.hpp>
+
 #include "finenav_core/common/named_registry.hpp"
 #include "finenav_core/map/map_access.hpp"
 
@@ -18,11 +20,11 @@ namespace finenav::core {
 /// One MapView's registry row: name → { planner type, map types, build }.
 /// (No config loader — a MapView is not an algorithm, so it carries no params.)
 struct MapViewEntry {
-    using BuildFn = std::function<std::shared_ptr<void>(MapAccess&)>;
+    using BuildFn = std::function<std::shared_ptr<void>(MapAccess&, rclcpp::Node::SharedPtr)>;
 
     std::string              planner_type;  ///< typeid(PlannerT).name()
     std::vector<std::string> map_types;     ///< typeid(MapT).name() per depended map
-    BuildFn                  build;         ///< (MapAccess&) → erased IMapView
+    BuildFn                  build;         ///< (MapAccess&, node) → erased IMapView
 };
 
 /**
@@ -70,16 +72,19 @@ std::vector<std::string> typeNames() {
 
 /**
  * @brief Auto-build a MapView from its typed constructor
- *        ViewT(const Map1&, const Map2&, ...).
+ *        ViewT(rclcpp::Node::SharedPtr, const Map1&, const Map2&, ...).
+ *
+ * The layer's private sub-node is handed in first (node-first convention); the
+ * resolved maps follow as the constructor's map arguments.
  *
  * Upcasts to PlannerT::IMapView BEFORE erasing to void*, so the erased pointer
  * already points at the base subobject — ControlLayer's static cast back to
  * PlannerT::IMapView is then an identity cast (no undefined pointer adjustment).
  */
 template <typename ViewT, typename PlannerT, typename... MapTs>
-std::shared_ptr<void> makeMapView(MapAccess& maps) {
+std::shared_ptr<void> makeMapView(MapAccess& maps, rclcpp::Node::SharedPtr node) {
     std::shared_ptr<typename PlannerT::IMapView> view =
-        std::make_shared<ViewT>(maps.get<MapTs>()...);
+        std::make_shared<ViewT>(node, maps.get<MapTs>()...);
     return view;
 }
 

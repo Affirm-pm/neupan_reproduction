@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <rclcpp/rclcpp.hpp>
+
 #include "dummy_map.hpp"
 #include "dummy_planner.hpp"
 
@@ -17,13 +19,16 @@ namespace finenav::example {
  * the end user then assembles the ControlLayer by NAME without ever seeing
  * either DummyMap or DummyPlanner.
  *
- * The constructor convention (ViewT(const Map1&, const Map2&, ...)) is what the
+ * The constructor convention
+ * (ViewT(rclcpp::Node::SharedPtr, const Map1&, const Map2&, ...)) is what the
  * framework uses to auto-build the view from the maps it resolved at assembly
  * time — the author only declares the map types in the registration macro.
  */
 class SimpleMapView : public DummyPlanner::IMapView {
 public:
-    explicit SimpleMapView(const DummyMap& map) : map_(map) {}
+    explicit SimpleMapView(rclcpp::Node::SharedPtr node, const DummyMap& map) : map_(map) {
+        (void)node;  // node 保留备用；纯只读桥当前不需要订阅
+    }
 
     bool isWalkable(const finenav::core::Position3D& p) const override {
         return !map_.isOccupied(p);

@@ -13,7 +13,9 @@
  * @param VIEW_TYPE     Concrete class deriving PlannerT::IMapView.
  * @param PLANNER_TYPE  The planner whose IMapView this view implements.
  * @param ...           One or more map types the view's constructor reads.
- *                      The constructor must be ViewType(const Map1&, const Map2&, ...).
+ *                      The constructor must be
+ *                      ViewType(rclcpp::Node::SharedPtr, const Map1&, const Map2&, ...)
+ *                      — the layer's private sub-node comes FIRST, then the maps.
  *
  * The macro records only TYPES (not names) and a generated build function.  At
  * assembly time the framework resolves each type → algorithm name through
@@ -29,8 +31,8 @@
             MapViewRegistry::Entry{ \
                 detail::typeName<PLANNER_TYPE>(), \
                 detail::typeNames<__VA_ARGS__>(), \
-                [](MapAccess& maps) -> std::shared_ptr<void> { \
-                    return detail::makeMapView<VIEW_TYPE, PLANNER_TYPE, __VA_ARGS__>(maps); \
+                [](MapAccess& maps, rclcpp::Node::SharedPtr node) -> std::shared_ptr<void> { \
+                    return detail::makeMapView<VIEW_TYPE, PLANNER_TYPE, __VA_ARGS__>(maps, node); \
                 }}}; \
     }; \
     }

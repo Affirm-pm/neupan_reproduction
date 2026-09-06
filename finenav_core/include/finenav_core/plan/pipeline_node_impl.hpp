@@ -75,6 +75,9 @@ void PipelineNode<PlannerT>::connectFrom(const std::string& parent_name) {
 }
 
 template <Planner PlannerT>
+rclcpp::Node::SharedPtr PipelineNode<PlannerT>::getPrivateNode() const { return pnode_; }
+
+template <Planner PlannerT>
 void PipelineNode<PlannerT>::attachMapView(
     std::shared_ptr<void> view,
     std::vector<std::shared_ptr<IMapResource>> maps)

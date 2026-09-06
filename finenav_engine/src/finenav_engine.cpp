@@ -142,23 +142,30 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByMapVie
         map_resources.push_back(ensureMapServer(*map_name));
     }
 
-    // Build the view: hand build() a MapAccess carrying the resolved maps.
+    // 1) create the layer FIRST — its pnode must exist before build
+    auto layer = createLayerByName(*planner_name, layer_name, std::move(policy));
+    if (!layer) return nullptr;
+
+    // 2) build MapAccess carrying the resolved maps
     std::vector<finenav::core::MapHandle> handles;
     handles.reserve(map_resources.size());
     for (const auto& res : map_resources) {
         handles.push_back({res->mapTypeId(), res->mapData()});
     }
     finenav::core::MapAccess access(std::move(handles));
-    auto view = entry->build(access);
+
+    // 3) build the view, injecting the layer's pnode
+    auto view = entry->build(access, layer->getPrivateNode());
     if (!view) {
+        // The layer was already registered in layers_/navigator master by
+        // createLayerByName(); reclaim it so no orphan layer is left behind.
+        removeControlLayer(layer_name);
         FINENAV_LOG_ERROR(node_->get_logger(),
             "createLayerByMapView('{}'): build() returned null.", mapview_name);
         return nullptr;
     }
 
-    // Create the layer for the resolved planner and attach the built view.
-    auto layer = createLayerByName(*planner_name, layer_name, std::move(policy));
-    if (!layer) return nullptr;
+    // 4) attach
     layer->attachMapView(std::move(view), std::move(map_resources));
     FINENAV_LOG_INFO(node_->get_logger(),
         "createLayerByMapView('{}', '{}'): assembled layer over planner '{}'.",

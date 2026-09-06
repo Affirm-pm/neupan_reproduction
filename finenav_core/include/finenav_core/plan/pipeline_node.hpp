@@ -51,6 +51,8 @@ public:
 
     void connectFrom(const std::string& parent_name) override;
 
+    rclcpp::Node::SharedPtr getPrivateNode() const override;
+
     /// IPipelineNode — attach a pre-built MapView plus its backing map resources.
     void attachMapView(
         std::shared_ptr<void> view,
