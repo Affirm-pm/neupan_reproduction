@@ -12,7 +12,6 @@
   <depend>rclcpp</depend>
   <depend>geometry_msgs</depend>
   <depend>finenav_core</depend>
-  <depend>finenav_mppi_controller</depend>
   <depend>generate_parameter_library</depend>
 
   <export>

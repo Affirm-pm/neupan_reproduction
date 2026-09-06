@@ -6,15 +6,13 @@
 
 #include <optional>
 #include <string>
-#include <mutex>
-#include <std_msgs/msg/string.hpp>
 
 #include "finenav_core/plan/planner_concept.hpp"
-#include "finenav_core/algo_configurator.hpp"
 #include "finenav_route_planner/route_params.hpp"
 
 #include "finenav_route_planner/astar_algorithm.hpp"
 #include "finenav_route_planner/imap_view.hpp"
+#include "finenav_route_planner/route_imap_view.hpp"
 #include "finenav_route_planner/route/route_graph.hpp"
 #include "finenav_route_planner/route/route_search.hpp"
 
@@ -76,7 +74,7 @@ public:
     // Same map interface as AstarPathSearch and BfsPathSearch.
     // isWalkable / getCost are used during the BFS that snaps poses to
     // the nearest route node so that the connector path avoids obstacles.
-    using IMapView = astar::IMapView;
+    using IMapView = finenav::IRouteMapView;
 
     using Context = PlanningContext<RoutePathSearch>;
     using Result  = std::optional<OutputTrajectoryT<RoutePathSearch>>;
@@ -86,12 +84,6 @@ public:
     void reset() {}
 
     Result plan(const Context& ctx, const IMapView& map_view);
-
-    /**
-     * @brief 从 GeoJSON 格式的字符串更新缓存的路网图
-     * @param geojson_str GeoJSON 格式的数据内容
-     */
-    void updateGraph(const std::string& geojson_str);
 
     // Result of snapping a world pose to the nearest reachable route graph point
     // (either a node or an intermediate point on an edge polyline).
@@ -142,10 +134,6 @@ private:
         const SnapResult&     snap,
         size_t                virtual_idx) const;
 
-    // ── Cached graph & Mutex ──────────────────────────────────
-    mutable std::unique_ptr<std::mutex> graph_mutex_ = std::make_unique<std::mutex>();
-    std::optional<route::Graph> cached_graph_;
-
     // ── Parameters ────────────────────────────────────────────
     double path_density_ = 0.05;
     double min_approach_angle_deg_ = 0.0;
@@ -153,36 +141,3 @@ private:
 
 } // namespace finenav
 
-//TODO: 不用 FINENAV_REGISTER_ALGO_CONFIG(finenav::RoutePathSearch, route_planner) 的做法有待商榷
-namespace finenav::core {
-
-template <>
-struct AlgoConfigurator<finenav::RoutePathSearch> {
-    static constexpr std::string_view name = "route_planner";
-    static std::shared_ptr<void> load(rclcpp::Node::SharedPtr node, finenav::RoutePathSearch& algo) {
-        auto listener = std::make_shared<route_planner::ParamListener>(node, "route_planner");
-        algo.configure(listener->get_params());
-        listener->setUserCallback([&algo](const auto& params) {
-            algo.configure(params);
-        });
-
-        struct LifetimeKeeper {
-            std::shared_ptr<route_planner::ParamListener> listener;
-            rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub;
-        };
-
-        auto keeper = std::make_shared<LifetimeKeeper>();
-        keeper->listener = listener;
-        keeper->sub = node->create_subscription<std_msgs::msg::String>(
-            "/geojson",
-            rclcpp::QoS(1).transient_local(),
-            [&algo](const std_msgs::msg::String::SharedPtr msg) {
-                algo.updateGraph(msg->data);
-            }
-        );
-
-        return keeper;
-    }
-};
-
-} // namespace finenav::core

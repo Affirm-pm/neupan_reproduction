@@ -7,6 +7,8 @@
 #include <cmath>
 #include <geometry_msgs/msg/pose.hpp>
 
+#include "finenav_core/common/algo_register_macros.hpp"
+
 using finenav::core::Position3D;
 using finenav::core::Region3D;
 using finenav::core::IOProfile;
@@ -59,10 +61,10 @@ BfsPathSearch::Result BfsPathSearch::plan(
 
     if (ctx.ref_traj.poses.empty()) return std::nullopt;
 
-    const auto& sp = ctx.robot_state.position;
+    const auto& sp = ctx.robot_state.pose.position;
     const auto& gp = ctx.ref_traj.poses.back().position;
 
-    const astar::Vec3 start = worldToCell(sp.x(), sp.y(), sp.z());
+    const astar::Vec3 start = worldToCell(sp.x, sp.y, sp.z);
     const astar::Vec3 goal  = worldToCell(gp.x, gp.y, gp.z);
 
     // BFS = A* with Heuristic::Zero (h=0 → pure cost-based Dijkstra expansion)
@@ -96,4 +98,6 @@ BfsPathSearch::Result BfsPathSearch::plan(
 }
 
 } // namespace finenav
+
+FINENAV_REGISTER_PLANNER(finenav::BfsPathSearch, bfs_planner)
 

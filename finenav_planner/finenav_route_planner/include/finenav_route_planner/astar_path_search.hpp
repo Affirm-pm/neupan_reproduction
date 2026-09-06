@@ -8,7 +8,6 @@
 #include <cmath>
 
 #include "finenav_core/plan/planner_concept.hpp"
-#include "finenav_core/algo_configurator.hpp"
 #include "finenav_route_planner/astar_params.hpp"
 
 #include "finenav_route_planner/astar_algorithm.hpp"
@@ -71,6 +70,4 @@ private:
 };
 
 } // namespace finenav
-
-FINENAV_REGISTER_ALGO_CONFIG(finenav::AstarPathSearch, astar_planner)
 

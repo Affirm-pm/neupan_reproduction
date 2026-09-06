@@ -7,6 +7,8 @@
 #include <cmath>
 #include <geometry_msgs/msg/pose.hpp>
 
+#include "finenav_core/common/algo_register_macros.hpp"
+
 using finenav::core::Position3D;
 using finenav::core::Region3D;
 using finenav::core::IOProfile;
@@ -62,10 +64,10 @@ AstarPathSearch::Result AstarPathSearch::plan(
 
     if (ctx.ref_traj.poses.empty()) return std::nullopt;
 
-    const auto& sp = ctx.robot_state.position;
+    const auto& sp = ctx.robot_state.pose.position;
     const auto& gp = ctx.ref_traj.poses.back().position;
 
-    astar::Vec3 start = worldToCell(sp.x(), sp.y(), sp.z());
+    astar::Vec3 start = worldToCell(sp.x, sp.y, sp.z);
     astar::Vec3 goal  = worldToCell(gp.x, gp.y, gp.z);
 
     astar::AStarAlgorithm algo(is_walkable, get_cost);
@@ -98,4 +100,6 @@ AstarPathSearch::Result AstarPathSearch::plan(
 }
 
 } // namespace finenav
+
+FINENAV_REGISTER_PLANNER(finenav::AstarPathSearch, astar_planner)
 

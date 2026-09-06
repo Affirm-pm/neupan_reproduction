@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "finenav_core/common/algo_register_macros.hpp"
+
 namespace finenav {
 
 // ==============================================================================
@@ -31,8 +33,7 @@ void RotateShim::reset()
 // Plan
 // ==============================================================================
 std::optional<Trajectory<RotateShim::OutputProfile>> RotateShim::plan(
-    const Context& ctx,
-    const IMapView& /*map_view*/)
+    const Context& ctx)
 {
   const auto& ref_traj = ctx.ref_traj;
 
@@ -40,13 +41,13 @@ std::optional<Trajectory<RotateShim::OutputProfile>> RotateShim::plan(
   if (ref_traj.poses.empty()) {
     Trajectory<RotateShim::OutputProfile> output;
     geometry_msgs::msg::Pose p;
-    p.position.x = ctx.robot_state.position.x();
-    p.position.y = ctx.robot_state.position.y();
-    p.position.z = ctx.robot_state.position.z();
-    p.orientation.w = ctx.robot_state.orientation.w();
-    p.orientation.x = ctx.robot_state.orientation.x();
-    p.orientation.y = ctx.robot_state.orientation.y();
-    p.orientation.z = ctx.robot_state.orientation.z();
+    p.position.x = ctx.robot_state.pose.position.x;
+    p.position.y = ctx.robot_state.pose.position.y;
+    p.position.z = ctx.robot_state.pose.position.z;
+    p.orientation.w = ctx.robot_state.pose.orientation.w;
+    p.orientation.x = ctx.robot_state.pose.orientation.x;
+    p.orientation.y = ctx.robot_state.pose.orientation.y;
+    p.orientation.z = ctx.robot_state.pose.orientation.z;
     output.poses.push_back(p);
     output.twists.push_back(geometry_msgs::msg::Twist{});
     return output;
@@ -56,15 +57,15 @@ std::optional<Trajectory<RotateShim::OutputProfile>> RotateShim::plan(
   const auto sampled_pt = getSampledPathPt(ref_traj.poses, forward_sampling_distance_);
 
   // 2. 计算采样点在机器人坐标系下的方向
-  const double dx = sampled_pt.x - ctx.robot_state.position.x();
-  const double dy = sampled_pt.y - ctx.robot_state.position.y();
+  const double dx = sampled_pt.x - ctx.robot_state.pose.position.x;
+  const double dy = sampled_pt.y - ctx.robot_state.pose.position.y;
 
   // 3. 计算当前朝向
   geometry_msgs::msg::Quaternion q;
-  q.w = ctx.robot_state.orientation.w();
-  q.x = ctx.robot_state.orientation.x();
-  q.y = ctx.robot_state.orientation.y();
-  q.z = ctx.robot_state.orientation.z();
+  q.w = ctx.robot_state.pose.orientation.w;
+  q.x = ctx.robot_state.pose.orientation.x;
+  q.y = ctx.robot_state.pose.orientation.y;
+  q.z = ctx.robot_state.pose.orientation.z;
   const double current_yaw = yawFromQuat(q);
 
   // 4. 采用机器人当前位姿 yaw 对路径方向的角度差
@@ -82,13 +83,13 @@ std::optional<Trajectory<RotateShim::OutputProfile>> RotateShim::plan(
 
   // 仅输出一个点（当前位姿 + 旋转 twist）
   geometry_msgs::msg::Pose p;
-  p.position.x = ctx.robot_state.position.x();
-  p.position.y = ctx.robot_state.position.y();
-  p.position.z = ctx.robot_state.position.z();
-  p.orientation.w = ctx.robot_state.orientation.w();
-  p.orientation.x = ctx.robot_state.orientation.x();
-  p.orientation.y = ctx.robot_state.orientation.y();
-  p.orientation.z = ctx.robot_state.orientation.z();
+  p.position.x = ctx.robot_state.pose.position.x;
+  p.position.y = ctx.robot_state.pose.position.y;
+  p.position.z = ctx.robot_state.pose.position.z;
+  p.orientation.w = ctx.robot_state.pose.orientation.w;
+  p.orientation.x = ctx.robot_state.pose.orientation.x;
+  p.orientation.y = ctx.robot_state.pose.orientation.y;
+  p.orientation.z = ctx.robot_state.pose.orientation.z;
   output.poses.push_back(p);
 
   geometry_msgs::msg::Twist twist;
@@ -150,3 +151,5 @@ double RotateShim::normalizeAngle(double angle)
 }
 
 }  // namespace finenav
+
+FINENAV_REGISTER_PLANNER(finenav::RotateShim, finenav_rotate_shim)

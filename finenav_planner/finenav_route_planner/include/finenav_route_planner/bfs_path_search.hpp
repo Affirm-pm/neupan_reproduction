@@ -7,7 +7,6 @@
 #include <optional>
 
 #include "finenav_core/plan/planner_concept.hpp"
-#include "finenav_core/algo_configurator.hpp"
 #include "finenav_route_planner/bfs_params.hpp"
 
 #include "finenav_route_planner/astar_algorithm.hpp"   // BFS is A* with Heuristic::Zero
@@ -77,5 +76,3 @@ private:
 };
 
 } // namespace finenav
-
-FINENAV_REGISTER_ALGO_CONFIG(finenav::BfsPathSearch, bfs_planner)

@@ -233,8 +233,8 @@ struct BfsTestCtx {
 
     BfsTestCtx(double sx, double sy, double gx, double gy)
     {
-        robot_state.position.x() = sx;
-        robot_state.position.y() = sy;
+        robot_state.pose.position.x = sx;
+        robot_state.pose.position.y = sy;
         ref_traj.poses.resize(1);
         ref_traj.poses[0].position.x    = gx;
         ref_traj.poses[0].position.y    = gy;

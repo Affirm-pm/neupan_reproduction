@@ -13,7 +13,6 @@ set(dependencies
   rclcpp
   geometry_msgs
   finenav_core
-  finenav_mppi_controller
   generate_parameter_library
 )
 

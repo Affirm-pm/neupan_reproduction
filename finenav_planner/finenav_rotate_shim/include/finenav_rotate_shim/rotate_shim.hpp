@@ -13,8 +13,6 @@
 
 #include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/plan/trajectory.hpp"
-#include "finenav_core/algo_configurator.hpp"
-#include "finenav_mppi_controller/map_view_def.hpp"
 #include "finenav_rotate_shim/finenav_rotate_shim_params.hpp"
 
 namespace finenav {
@@ -37,7 +35,6 @@ public:
   RotateShim() = default;
 
   using ConfigType = finenav_rotate_shim::Params;
-  using IMapView   = nav2_mppi_controller::IMapView;  // 与 MPPI 相同类型，plan() 中忽略
   using Context    = PlanningContext<RotateShim>;
 
   static constexpr IOProfile InputProfile  = { .pose = true, .vel = false, .accel = false, .time = false };
@@ -49,10 +46,9 @@ public:
   /**
    * @brief 执行一次旋转规划。
    * @param ctx 包含 robot_state 和 ref_traj
-   * @param map_view 忽略（旋转不查地图）
    * @return 若已对齐返回 nullopt；否则返回纯旋转角速度的轨迹
    */
-  std::optional<Trajectory<OutputProfile>> plan(const Context& ctx, const IMapView& map_view);
+  std::optional<Trajectory<OutputProfile>> plan(const Context& ctx);
 
 private:
   /**
@@ -82,6 +78,3 @@ private:
 };
 
 }  // namespace finenav
-
-// Register with generate_parameter_library
-FINENAV_REGISTER_ALGO_CONFIG(finenav::RotateShim, finenav_rotate_shim)

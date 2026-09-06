@@ -7,9 +7,10 @@
 #include <cmath>
 #include <limits>
 #include <unordered_map>
-#include <mutex>
 
 #include <geometry_msgs/msg/pose.hpp>
+
+#include "finenav_core/common/algo_register_macros.hpp"
 
 namespace finenav {
 
@@ -24,47 +25,27 @@ void RoutePathSearch::configure(const ConfigType& params)
     min_approach_angle_deg_   = params.min_approach_angle_deg;
 }
 
-// ── updateGraph ────────────────────────────────────────────────────────────
-
-void RoutePathSearch::updateGraph(const std::string& geojson_str)
-{
-    std::lock_guard<std::mutex> lock(*graph_mutex_);
-    cached_graph_ = route::loadFromJson(geojson_str);
-
-    if (!cached_graph_) {
-        RCLCPP_ERROR(
-            rclcpp::get_logger("RoutePathSearch"),
-            "Failed to parse route graph from /geojson topic.");
-    } else {
-        RCLCPP_INFO(
-            rclcpp::get_logger("RoutePathSearch"),
-            "Successfully loaded route graph from /geojson topic with %zu nodes.",
-            cached_graph_->nodes.size());
-    }
-}
-
 // ── plan ───────────────────────────────────────────────────────────────────
 
 RoutePathSearch::Result RoutePathSearch::plan(
     const Context&  ctx,
     const IMapView& map_view)
 {
-    std::lock_guard<std::mutex> lock(*graph_mutex_);
-
-    if (!cached_graph_ || cached_graph_->nodes.empty()) return std::nullopt;
+    const auto* graph_ptr = map_view.getGraph();
+    if (!graph_ptr || graph_ptr->nodes.empty()) return std::nullopt;
     if (ctx.ref_traj.poses.empty()) return std::nullopt;
-    const auto& orig_graph = *cached_graph_;
+    const auto& orig_graph = *graph_ptr;
 
     // Obstacle-aware BFS to snap start and goal to nearest reachable
     // graph points (nodes or intermediate path points).
     geometry_msgs::msg::Pose start_pose;
-    start_pose.position.x = ctx.robot_state.position.x();
-    start_pose.position.y = ctx.robot_state.position.y();
-    start_pose.position.z = ctx.robot_state.position.z();
-    start_pose.orientation.w = ctx.robot_state.orientation.w();
-    start_pose.orientation.x = ctx.robot_state.orientation.x();
-    start_pose.orientation.y = ctx.robot_state.orientation.y();
-    start_pose.orientation.z = ctx.robot_state.orientation.z();
+    start_pose.position.x = ctx.robot_state.pose.position.x;
+    start_pose.position.y = ctx.robot_state.pose.position.y;
+    start_pose.position.z = ctx.robot_state.pose.position.z;
+    start_pose.orientation.w = ctx.robot_state.pose.orientation.w;
+    start_pose.orientation.x = ctx.robot_state.pose.orientation.x;
+    start_pose.orientation.y = ctx.robot_state.pose.orientation.y;
+    start_pose.orientation.z = ctx.robot_state.pose.orientation.z;
     const auto start_snap = findNearestGraphPoint(orig_graph, start_pose, map_view);
     if (!start_snap.isNode() && !start_snap.isPath()) return std::nullopt;
 
@@ -513,4 +494,6 @@ void RoutePathSearch::splitEdgeForSnap(
 }
 
 } // namespace finenav
+
+FINENAV_REGISTER_PLANNER(finenav::RoutePathSearch, route_planner)
 
