@@ -17,15 +17,13 @@ namespace finenav {
  * GridMap is a foundational utility (like std::vector).  It does NOT go through
  * AlgoConfigurator or generate_parameter_library.  Higher-level map types
  * (TemporalVoxelMap, OccupancyGrid2D, etc.) wrap GridMap internally and register
- * themselves via FINENAV_REGISTER_ALGO_CONFIG.
+ * themselves via FINENAV_REGISTER_MAP.
  */
 struct GridMapConfig {
     Length   length     = Length(6.0, 6.0, 6.0);
     double   resolution = 0.1;
     Position origin     = Position::Zero();
 };
-using finenav::core::Position3D;
-using finenav::core::Region3D;
 // TODO: 架构大改造，嵌套命名空间
 
 /**

@@ -15,7 +15,6 @@
 #include <pcl/point_types.h>
 
 #include "finenav_core/map/map_concept.hpp"
-#include "finenav_core/algo_configurator.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
 #include "finenav_map_grid_map/grid_map.hpp"
 #include "finenav_map_temporal_voxel_map/temporal_voxel_map_params.hpp"
@@ -52,13 +51,25 @@ public:
 
     void configure(const ConfigType& cfg);
 
-    bool isInside(const Position3D& pos) const { return grid_.isInside(pos); }
+    bool isInside(const finenav::core::Position3D& pos) const {
+        return grid_.isInside(Position{pos.x, pos.y, pos.z});
+    }
 
-    Region3D getWindowBounds() const { return grid_.getWindowBounds(); }
+    finenav::core::Region3D getWindowBounds() const {
+        const auto b = grid_.getWindowBounds();  // internal Eigen::AlignedBox3d
+        return finenav::core::Region3D{
+            finenav::core::Position3D{b.min().x(), b.min().y(), b.min().z()},
+            finenav::core::Position3D{b.max().x(), b.max().y(), b.max().z()}};
+    }
 
-    Position3D getWindowCenter() const { return grid_.getWindowCenter(); }
+    finenav::core::Position3D getWindowCenter() const {
+        const Position c = grid_.getWindowCenter();  // internal Eigen::Vector3d
+        return finenav::core::Position3D{c.x(), c.y(), c.z()};
+    }
 
-    void shiftWindowTo(const Position3D& pos) { grid_.shiftWindowTo(pos); }
+    void shiftWindowTo(const finenav::core::Position3D& pos) {
+        grid_.shiftWindowTo(Position{pos.x, pos.y, pos.z});
+    }
 
     void selfManage(finenav::core::MapRuntime&) {}
 
@@ -115,5 +126,3 @@ private:
 };
 
 }  // namespace finenav
-
-FINENAV_REGISTER_ALGO_CONFIG(finenav::TemporalVoxelMap, temporal_voxel_map)

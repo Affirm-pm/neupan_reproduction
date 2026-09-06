@@ -6,6 +6,8 @@
 
 #include <limits>
 
+#include "finenav_core/common/algo_register_macros.hpp"
+
 namespace finenav {
 
 // ── MapConcept 接口实现 ────────────────────────────────────────────────
@@ -17,30 +19,30 @@ void OccupancyGrid2D::configure(const ConfigType& params) {
 bool OccupancyGrid2D::isInside(const Position3D& pos) const {
     if (!grid_) return false;
     const auto& info = grid_->info;
-    const double wx = pos.x() - info.origin.position.x;
-    const double wy = pos.y() - info.origin.position.y;
+    const double wx = pos.x - info.origin.position.x;
+    const double wy = pos.y - info.origin.position.y;
     return wx >= 0.0 && wx < info.width  * info.resolution &&
            wy >= 0.0 && wy < info.height * info.resolution;
 }
 
 Region3D OccupancyGrid2D::getWindowBounds() const {
-    if (!grid_) return Region3D(Position3D::Zero(), Position3D::Zero());
+    if (!grid_) return Region3D{Position3D{}, Position3D{}};
     const auto& info = grid_->info;
     constexpr double inf = std::numeric_limits<double>::infinity();
-    return Region3D(
-        Position3D(info.origin.position.x,
-                   info.origin.position.y, -inf),
-        Position3D(info.origin.position.x + info.width  * info.resolution,
-                   info.origin.position.y + info.height * info.resolution, inf));
+    return Region3D{
+        Position3D{info.origin.position.x,
+                   info.origin.position.y, -inf},
+        Position3D{info.origin.position.x + info.width  * info.resolution,
+                   info.origin.position.y + info.height * info.resolution, inf}};
 }
 
 Position3D OccupancyGrid2D::getWindowCenter() const {
-    if (!grid_) return Position3D::Zero();
+    if (!grid_) return Position3D{};
     const auto& info = grid_->info;
-    return Position3D(
+    return Position3D{
         info.origin.position.x + info.width  * info.resolution * 0.5,
         info.origin.position.y + info.height * info.resolution * 0.5,
-        0.0);
+        0.0};
 }
 
 // ── 数据注入 ───────────────────────────────────────────────────────────
@@ -58,3 +60,7 @@ const nav_msgs::msg::OccupancyGrid& OccupancyGrid2D::grid() const {
 }
 
 } // namespace finenav
+
+// One-line registration: parameter wiring + map self-registration.
+// "occupancy_grid_2d" must match the top-level key in occupancy_grid_2d.yaml.
+FINENAV_REGISTER_MAP(finenav::OccupancyGrid2D, occupancy_grid_2d)

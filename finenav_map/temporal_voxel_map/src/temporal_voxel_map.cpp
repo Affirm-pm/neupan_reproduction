@@ -6,6 +6,8 @@
 
 #include <cmath>
 
+#include "finenav_core/common/algo_register_macros.hpp"
+
 namespace finenav {
 
 // ==============================================================================
@@ -165,3 +167,7 @@ void TemporalVoxelMap::pruneExpiredCells(const Eigen::Isometry3d& T_map_body)
 }
 
 }  // namespace finenav
+
+// One-line registration: parameter wiring + map self-registration.
+// "temporal_voxel_map" must match the top-level key in temporal_voxel_map.yaml.
+FINENAV_REGISTER_MAP(finenav::TemporalVoxelMap, temporal_voxel_map)
