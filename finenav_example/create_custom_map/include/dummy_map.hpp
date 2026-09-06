@@ -40,7 +40,7 @@ public:
 
     // ── Framework injectors ─────────────────────────────────────────
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
-    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; }
+    void setVisualizer(const finenav::viz::FineNavVisualizer& viz) { viz_ = viz; }
 
     bool isInside(const finenav::core::Position3D& p) const;
     finenav::core::Region3D   getWindowBounds()  const;
@@ -56,7 +56,7 @@ private:
     double window_size_ = 50.0;
     finenav::core::Region3D bounds_;
     rclcpp::Logger                logger_{rclcpp::get_logger("DummyMap")};
-    finenav::viz::FineNavVisualizer* viz_ = nullptr;
+    finenav::viz::FineNavVisualizer viz_;
 };
 
 }  // namespace finenav::example

@@ -64,7 +64,7 @@ public:
     // Declare these to receive the logger and visualizer automatically.
     // The framework detects them via if constexpr — no extra registration needed.
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
-    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; } // TODO：这里的签名怎么不是const
+    void setVisualizer(const finenav::viz::FineNavVisualizer& viz) { viz_ = viz; }
 
     void reset();
 
@@ -77,7 +77,7 @@ private:
     double linear_speed_  = 0.5;
     double angular_speed_ = 1.0;
     rclcpp::Logger                logger_{rclcpp::get_logger("DummyPlanner")};
-    finenav::viz::FineNavVisualizer* viz_ = nullptr;
+    finenav::viz::FineNavVisualizer viz_;
 };
 
 }  // namespace finenav::example
