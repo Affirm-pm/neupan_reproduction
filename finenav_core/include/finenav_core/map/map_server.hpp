@@ -150,6 +150,11 @@ private:
     rclcpp::Node::SharedPtr     pnode_;
     std::unique_ptr<finenav::util::NodeThread> pnode_thread_;
 
+    // ---- Framework resource (visualizer lives here) ----
+    // Declared BEFORE map_instance_ so it is destroyed AFTER it: the map holds
+    // a raw pointer into the visualizer, so it must die first.
+    ParamPollableKeeper param_keeper_;
+
     // ---- Map data & lock ----
     std::unique_ptr<MapT> map_instance_;
     std::shared_mutex     rw_mutex_;
@@ -165,7 +170,6 @@ private:
     PreUpdateHook                                    pre_update_hook_;
     PostUpdateHook                                   post_update_hook_;
 
-    ParamPollableKeeper                              param_keeper_;
     double                                           update_rate_hz_{10.0};
     double                                           shift_rate_hz_{50.0};
     double                                           shift_margin_ratio_{0.5};

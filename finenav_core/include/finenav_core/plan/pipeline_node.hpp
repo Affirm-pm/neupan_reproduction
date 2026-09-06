@@ -96,6 +96,11 @@ protected:
     rclcpp::Node::SharedPtr      pnode_;
     std::unique_ptr<finenav::util::NodeThread> pnode_thread_;
 
+    // ── Framework resource (visualizer lives here) ─────────────────────────
+    // Declared BEFORE planner_instance_ so it is destroyed AFTER it: the
+    // planner holds a raw pointer into the visualizer, so it must die first.
+    ParamPollableKeeper param_keeper_;
+
     // ── Planner state ──────────────────────────────────────────────────────
 
     PlannerT      planner_instance_;
@@ -125,8 +130,6 @@ protected:
     /// into this, so the per-tick deep copy of the reference is eliminated.
     InputTrajectoryT<PlannerT> cached_ref_;
     const void*                cached_ref_src_{nullptr};  ///< identity of plan_ref_msg_ at last conversion
-
-    ParamPollableKeeper param_keeper_;
 };
 
 } // namespace finenav::core

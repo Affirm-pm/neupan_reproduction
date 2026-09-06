@@ -53,14 +53,15 @@ std::shared_ptr<finenav::viz::FineNavVisualizer> injectVisualizer(
 template <typename AlgoT, typename ParamsT, typename ListenerT>
 std::shared_ptr<IParamPollable> makeParamPollable(
     rclcpp::Node::SharedPtr node, AlgoT& algo, std::string_view algo_name) {
-    // Configure parameters
+    // Inject framework resources FIRST — configure() may already rely on the
+    // logger / visualizer being present.
+    injectLogger(node, algo, algo_name);
+    auto viz = injectVisualizer(node, algo);
+
+    // Then run the parameter configuration.
     auto listener = std::make_shared<ListenerT>(node, std::string{algo_name});
     auto params = listener->get_params();
     algo.configure(params);
-
-    // Inject resource to algo class
-    injectLogger(node, algo, algo_name);
-    auto viz = injectVisualizer(node, algo);
 
     struct ParamPollable : public IParamPollable {
         std::shared_ptr<ListenerT> listener;
@@ -74,6 +75,11 @@ std::shared_ptr<IParamPollable> makeParamPollable(
                       AlgoT* a, ParamsT p, std::string n)
             : listener(std::move(l)), viz(std::move(v)),
               algo_ptr(a), params(std::move(p)), algo_name(std::move(n)) {}
+
+        // algo_ptr is a non-owning borrow of the algorithm.  The keeper may
+        // outlive the algorithm (it also owns the visualizer), so clear it here
+        // to never leave a dangling pointer behind.
+        ~ParamPollable() { algo_ptr = nullptr; }
 
         void poll() override {
             if (listener->is_old(params)) {
