@@ -3,7 +3,7 @@
 // All rights reserved.
 
 #pragma once
-
+#include <memory>
 #include <string>
 
 namespace finenav::core {
@@ -12,6 +12,14 @@ class IMapResource {
 public:
     virtual ~IMapResource() = default;
     std::string resourceName() const { return name_; }
+
+    // ── Type-erased introspection for MapView assembly ─────────────────────
+    /// Concrete map type carried by this server (typeid(MapT).name()).
+    virtual std::string mapTypeId() const = 0;
+    /// Raw pointer to the map instance (used to build a MapView).
+    virtual const void* mapData() const = 0;
+    /// Acquire a read lock on the map; the returned guard releases it on destruction.
+    virtual std::shared_ptr<void> lockRead() = 0;
 
 protected:
     explicit IMapResource(std::string name) : name_(std::move(name)) {}

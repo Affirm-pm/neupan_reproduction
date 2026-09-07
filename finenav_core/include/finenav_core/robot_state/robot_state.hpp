@@ -4,27 +4,18 @@
 
 #pragma once
 
-#include <algorithm>
 #include <deque>
 #include <mutex>
 #include <optional>
 
-#include <Eigen/Core>
-#include <Eigen/Geometry>
 #include <rclcpp/time.hpp>
 #include <rclcpp/duration.hpp>
 
+#include "finenav_interfaces/msg/robot_state.hpp"
+
 namespace finenav::core {
 
-/**
- *  @brief RobotState — the canonical robot state representation in FineNav-Engine.
- */
-struct RobotState {
-    Eigen::Vector3d    position{0, 0, 0};                ///< world-frame position (m)
-    Eigen::Quaterniond orientation{1, 0, 0, 0};          ///< world ← body rotation
-    Eigen::Vector3d    linear_velocity{0, 0, 0};         ///< body-frame linear velocity (m/s)
-    Eigen::Vector3d    angular_velocity{0, 0, 0};        ///< body-frame angular velocity (rad/s)
-};
+using RobotState = finenav_interfaces::msg::RobotState;
 
 /**
  * @brief RobotStateProvider — pull-based robot-state source with a rolling history.
@@ -42,121 +33,22 @@ public:
 
     virtual ~RobotStateProvider() = default;
 
-    /**
-     * @brief Return the latest available robot state.
-     * @return std::nullopt if no state has been pushed yet.
-     */
-    [[nodiscard]] virtual std::optional<RobotState> getRobotState() const
-    {
-        std::lock_guard<std::mutex> lk(history_mutex_);
-        if (history_.empty()) {
-            return std::nullopt;
-        }
-        return history_.back().state;
-    }
-
-    /**
-     * @brief Return the interpolated robot state at timestamp @p t.
-     * @return std::nullopt if the history is empty, @p t is in the future, or @p t is
-     *         older than the retained window.
-     */
-    [[nodiscard]] virtual std::optional<RobotState> getRobotState(const rclcpp::Time & t) const
-    {
-        const rclcpp::Time t_ros(t.nanoseconds(), RCL_ROS_TIME);  // normalize to internal clock type
-
-        std::lock_guard<std::mutex> lk(history_mutex_);
-        if (history_.empty()) {
-            return std::nullopt;
-        }
-        if (t_ros > history_.back().stamp || t_ros < history_.front().stamp) {
-            return std::nullopt;  // outside the retained window
-        }
-
-        // First entry with stamp >= t_ros.
-        auto it = std::lower_bound(
-            history_.begin(), history_.end(), t_ros,
-            [](const StampedState & s, const rclcpp::Time & q) { return s.stamp < q; });
-
-        if (it->stamp == t_ros) {
-            return it->state;
-        }
-
-        const StampedState & s2 = *it;
-        const StampedState & s1 = *(it - 1);
-        const double span = (s2.stamp - s1.stamp).seconds();
-        if (span <= 0.0) {
-            return s1.state;  // degenerate: identical stamps
-        }
-        const double alpha = (t_ros - s1.stamp).seconds() / span;
-        return interpolate(s1.state, s2.state, alpha);
-    }
+    [[nodiscard]] virtual std::optional<RobotState> getRobotState() const;
+    [[nodiscard]] virtual std::optional<RobotState> getRobotState(const rclcpp::Time & t) const;
 
 protected:
-    /**
-     * @brief Append the latest state; prunes samples older than the window.
-     * @note Out-of-order pushes (stamp < newest) are silently ignored.
-     */
-    void pushState(const rclcpp::Time & stamp, const RobotState & s)
-    {
-        const rclcpp::Time stamp_ros(stamp.nanoseconds(), RCL_ROS_TIME);  // normalize to internal clock type
-        std::lock_guard<std::mutex> lk(history_mutex_);
-        if (!history_.empty() && stamp_ros < history_.back().stamp) {
-            return;
-        }
-        history_.push_back({stamp_ros, s});
-        prune(stamp_ros);
-    }
-
-    /**
-     * @brief Drop all history (e.g. on re-initialisation).
-     */
-    void resetHistory()
-    {
-        std::lock_guard<std::mutex> lk(history_mutex_);
-        history_.clear();
-    }
-
-    void setHistoryDuration(double sec)
-    {
-        std::lock_guard<std::mutex> lk(history_mutex_);
-        history_duration_sec_ = sec;
-        if (!history_.empty()) {
-            prune(history_.back().stamp);
-        }
-    }
+    void pushState(const RobotState & s);
+    void resetHistory();
+    void setHistoryDuration(double sec);
 
 private:
-    struct StampedState { // Explicitly use RCL_ROS_TIME to prevent time source mismatch
-        rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
-        RobotState   state;
-    };
-
-    /// Prune entries older than (newest − window).  Must hold history_mutex_.
-    void prune(const rclcpp::Time & newest)
-    {
-        if (history_duration_sec_ <= 0.0) {
-            while (history_.size() > 1) history_.pop_front();
-            return;
-        }
-        const rclcpp::Time cutoff = newest - rclcpp::Duration::from_seconds(history_duration_sec_);
-        while (history_.size() > 1 && history_.front().stamp < cutoff) {
-            history_.pop_front();
-        }
-    }
-
-    static RobotState interpolate(const RobotState & a, const RobotState & b, double alpha)
-    {
-        RobotState out;
-        out.position         = a.position         + alpha * (b.position         - a.position);
-        out.linear_velocity  = a.linear_velocity  + alpha * (b.linear_velocity  - a.linear_velocity);
-        out.angular_velocity = a.angular_velocity + alpha * (b.angular_velocity - a.angular_velocity);
-        out.orientation      = a.orientation.slerp(alpha, b.orientation);
-        return out;
-    }
+    void prune(const rclcpp::Time & newest);
+    static rclcpp::Time stampOf(const RobotState & s);
+    static RobotState interpolate(const RobotState & a, const RobotState & b, double alpha);
 
     double                   history_duration_sec_;
     mutable std::mutex       history_mutex_;
-    std::deque<StampedState> history_;
+    std::deque<RobotState>   history_;
 };
 
 }  // namespace finenav::core

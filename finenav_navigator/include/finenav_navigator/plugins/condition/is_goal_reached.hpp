@@ -11,7 +11,11 @@
 namespace finenav::navigator {
 
 /**
- * @brief Per-axis goal-reached checker (2D/3D).
+ * @brief Per-axis goal-reached checker (2D/3D) for the terminal goal.
+ *
+ * Reads the full `goal_poses[]` vector and judges against its **last**
+ * element (goal_poses.back()). This is the "final destination" check —
+ * use IsWaypointReached to check an intermediate k-th waypoint.
  *
  * Each axis is controlled by its own tolerance port.  A tolerance of 0.0
  * disables that axis entirely, so it never blocks SUCCESS.
@@ -27,7 +31,8 @@ namespace finenav::navigator {
  * Blackboard inputs:
  *   robot_pose   (geometry_msgs::msg::Pose)
  *   robot_twist  (geometry_msgs::msg::Twist)  — optional, used only for speed.
- *   goal         (geometry_msgs::msg::Pose)
+ *   goal_poses   (std::vector<geometry_msgs::msg::Pose>) — last element is the
+ *                terminal goal being checked.
  *
  * Returns SUCCESS when all enabled checks pass simultaneously.
  */

@@ -5,6 +5,7 @@
 #include "finenav_navigator/plugins/condition/is_goal_reached.hpp"
 
 #include <cmath>
+#include <vector>
 #include <behaviortree_cpp/bt_factory.h>
 
 namespace finenav::navigator {
@@ -16,7 +17,8 @@ BT::PortsList IsGoalReached::providedPorts() {
     return {
         BT::InputPort<geometry_msgs::msg::Pose>("robot_pose",  "{robot_pose}",  "Current robot pose"),
         BT::InputPort<geometry_msgs::msg::Twist>("robot_twist", "{robot_twist}", "Current robot twist"),
-        BT::InputPort<geometry_msgs::msg::Pose>("goal",         "{goal}",        "Goal pose"),
+        BT::InputPort<std::vector<geometry_msgs::msg::Pose>>(
+            "goal_poses", "{goal_poses}", "Goal poses; last element is the terminal goal"),
 
         BT::InputPort<double>("xy_tolerance",    0.25, "Horizontal distance [m]; 0 = skip"),
         BT::InputPort<double>("z_tolerance",     0.0,  "Vertical   distance [m]; 0 = skip"),
@@ -28,10 +30,14 @@ BT::PortsList IsGoalReached::providedPorts() {
 }
 
 BT::NodeStatus IsGoalReached::tick() {
-    geometry_msgs::msg::Pose robot_pose, goal;
-    if (!getInput("robot_pose", robot_pose) || !getInput("goal", goal)) {
+    geometry_msgs::msg::Pose robot_pose;
+    std::vector<geometry_msgs::msg::Pose> goal_poses;
+    if (!getInput("robot_pose", robot_pose) || !getInput("goal_poses", goal_poses) ||
+        goal_poses.empty()) {
         return BT::NodeStatus::FAILURE;
     }
+    // 判定目标是航点序列的最后一个点（终点）。
+    const auto& goal = goal_poses.back();
 
     double xy_tol = 0.25, z_tol  = 0.0;
     double yaw_tol = 0.0, roll_tol = 0.0, pitch_tol = 0.0;

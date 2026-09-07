@@ -4,7 +4,11 @@
 
 #pragma once
 
+#include <variant>
+
 #include <rclcpp/rclcpp.hpp>
+
+#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::core {
 
@@ -46,5 +50,22 @@ struct ContinuousPolicy {
         }
     }
 };
+
+/**
+ * @brief ReactivePolicy — command-controlled listening transform.
+ *
+ * Controlled by TaskCmd START/STOP like the other policies.  While STARTed it
+ * continuously listens for an upstream reference trajectory (the __feedback
+ * subscription) and reacts immediately — one planOnce() + RUNNING publish —
+ * for every incoming reference; while STOPped it only stashes the reference.
+ * Used by map-less trajectory decorators (seek / smooth / trim) wired as
+ * intermediate pipeline stages.
+ */
+struct ReactivePolicy {
+    static void declare_parameters(rclcpp::Node&) {}
+};
+
+using ExecutionPolicyVariant =
+    std::variant<SingleShotPolicy, ContinuousPolicy, ReactivePolicy>;
 
 } // namespace finenav::core

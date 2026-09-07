@@ -21,6 +21,7 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
     pnode_opts.append_parameter_override(
         "use_sim_time",
         parent_node->get_parameter("use_sim_time").as_bool());
+    pnode_opts.use_intra_process_comms(true);
     pnode_ = rclcpp::Node::make_shared(
         "finenav_navigator",            // 节点名称，与 yaml 顶层 key 一致
         parent_node->get_name(),        // 命名空间继承宿主节点名
@@ -28,7 +29,10 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
 
     // TaskMaster on pnode_ so its topics share the /hello_finenav namespace
     // with every ControlLayer's TaskWorker (also under /hello_finenav).
-    master_ = std::make_unique<finenav::util::TaskMaster>(pnode_);
+    master_ = std::make_unique<finenav::core::TaskMaster>(pnode_);
+
+    // PipelineController: BT nodes drive the control_pipeline through this.
+    pipeline_ = std::make_unique<PipelineController>(pnode_, master_.get(), &pipe_);
 
     // ── 读取参数 ──────────────────────────────────────────────────────────────
     param_listener_ = std::make_unique<finenav_navigator::ParamListener>(pnode_);
@@ -43,9 +47,8 @@ BtNavigator::BtNavigator(rclcpp::Node::SharedPtr parent_node,
     // ── 初始化行为树引擎 ──────────────────────────────────────────────────────
     bt_engine_ = std::make_unique<BehaviorTreeEngine>();
 
-    // Always load framework built-in plugins and trees first.
+    // Always load framework built-in plugins first.
     bt_engine_->registerPlugins({"finenav_navigator/lib/finenav_navigator"});
-    bt_engine_->registerBehaviorTrees({"finenav_navigator/behavior_trees"});
 
     // Then load any additional paths from user parameters.
     if (!params_.plugins.empty())       { bt_engine_->registerPlugins(params_.plugins); }
@@ -65,6 +68,12 @@ void BtNavigator::execute()
     FINENAV_LOG_INFO(pnode_->get_logger(), "Executing action...");
 
     auto goal = action_server_->get_current_goal();
+    if (!goal || goal->poses.empty()) {
+        FINENAV_LOG_ERROR(pnode_->get_logger(),
+            "NavigateToPose goal carries no poses — nothing to navigate to.");
+        if (goal) action_server_->terminate_all();
+        return;
+    }
 
     try {
         tree_ = bt_engine_->factory().createTree(goal->behavior_tree);
@@ -77,16 +86,16 @@ void BtNavigator::execute()
     }
 
     auto blackboard = tree_.rootBlackboard();
-    blackboard->set("goal", goal->pose.pose);
+    blackboard->set("goal_poses", goal->poses);
+    blackboard->set("_pipeline", pipeline_.get());
     blackboard->set("_node", parent_node_);
-    blackboard->set("_nav_task_master", master_.get());
     blackboard->set("_chassis_cmd", chassis_cmd_.get());
 
     auto episode_start = pnode_->now();
     rclcpp::WallRate loop_rate(params_.tick_frequency);
     FINENAV_LOG_INFO(pnode_->get_logger(),
         "Starting navigation to ({:.2f}, {:.2f})",
-        goal->pose.pose.position.x, goal->pose.pose.position.y);
+        goal->poses.back().position.x, goal->poses.back().position.y);
 
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
@@ -108,22 +117,22 @@ void BtNavigator::execute()
         if (state_provider_) {
             if (auto rs = state_provider_->getRobotState()) {
                 geometry_msgs::msg::Pose p;
-                p.position.x    = rs->position.x();
-                p.position.y    = rs->position.y();
-                p.position.z    = rs->position.z();
-                p.orientation.w = rs->orientation.w();
-                p.orientation.x = rs->orientation.x();
-                p.orientation.y = rs->orientation.y();
-                p.orientation.z = rs->orientation.z();
+                p.position.x    = rs->pose.position.x;
+                p.position.y    = rs->pose.position.y;
+                p.position.z    = rs->pose.position.z;
+                p.orientation.w = rs->pose.orientation.w;
+                p.orientation.x = rs->pose.orientation.x;
+                p.orientation.y = rs->pose.orientation.y;
+                p.orientation.z = rs->pose.orientation.z;
                 blackboard->set<geometry_msgs::msg::Pose>("robot_pose", p);
 
                 geometry_msgs::msg::Twist t;
-                t.linear.x  = rs->linear_velocity.x();
-                t.linear.y  = rs->linear_velocity.y();
-                t.linear.z  = rs->linear_velocity.z();
-                t.angular.x = rs->angular_velocity.x();
-                t.angular.y = rs->angular_velocity.y();
-                t.angular.z = rs->angular_velocity.z();
+                t.linear.x  = rs->twist.linear.x;
+                t.linear.y  = rs->twist.linear.y;
+                t.linear.z  = rs->twist.linear.z;
+                t.angular.x = rs->twist.angular.x;
+                t.angular.y = rs->twist.angular.y;
+                t.angular.z = rs->twist.angular.z;
                 blackboard->set<geometry_msgs::msg::Twist>("robot_twist", t);
             }
         }
@@ -163,13 +172,13 @@ void BtNavigator::execute()
             auto result = std::make_shared<typename ActionT::Result>();
             if (state_provider_) {
                 if (auto rs = state_provider_->getRobotState()) {
-                    auto& g = goal->pose.pose;
-                    result->position_error.x = rs->position.x() - g.position.x;
-                    result->position_error.y = rs->position.y() - g.position.y;
-                    result->position_error.z = rs->position.z() - g.position.z;
+                    auto& g = goal->poses.back();
+                    result->position_error.x = rs->pose.position.x - g.position.x;
+                    result->position_error.y = rs->pose.position.y - g.position.y;
+                    result->position_error.z = rs->pose.position.z - g.position.z;
 
-                    Eigen::Quaterniond q_cur(rs->orientation.w(), rs->orientation.x(),
-                                             rs->orientation.y(), rs->orientation.z());
+                    Eigen::Quaterniond q_cur(rs->pose.orientation.w, rs->pose.orientation.x,
+                                             rs->pose.orientation.y, rs->pose.orientation.z);
                     Eigen::Quaterniond q_goal(g.orientation.w, g.orientation.x,
                                               g.orientation.y, g.orientation.z);
                     auto euler = (q_goal.inverse() * q_cur).toRotationMatrix()
@@ -196,20 +205,20 @@ void BtNavigator::execute()
                 auto fb = std::make_shared<typename ActionT::Feedback>();
                 fb->current_pose.header.stamp = pnode_->now();
                 fb->current_pose.header.frame_id = "map"; // TODO： 弄个宏定义define
-                fb->current_pose.pose.position.x    = rs->position.x();
-                fb->current_pose.pose.position.y    = rs->position.y();
-                fb->current_pose.pose.position.z    = rs->position.z();
-                fb->current_pose.pose.orientation.w = rs->orientation.w();
-                fb->current_pose.pose.orientation.x = rs->orientation.x();
-                fb->current_pose.pose.orientation.y = rs->orientation.y();
-                fb->current_pose.pose.orientation.z = rs->orientation.z();
+                fb->current_pose.pose.position.x    = rs->pose.position.x;
+                fb->current_pose.pose.position.y    = rs->pose.position.y;
+                fb->current_pose.pose.position.z    = rs->pose.position.z;
+                fb->current_pose.pose.orientation.w = rs->pose.orientation.w;
+                fb->current_pose.pose.orientation.x = rs->pose.orientation.x;
+                fb->current_pose.pose.orientation.y = rs->pose.orientation.y;
+                fb->current_pose.pose.orientation.z = rs->pose.orientation.z;
                 fb->navigation_time = rclcpp::Duration(pnode_->now() - episode_start);
-                fb->current_speed.linear.x  = rs->linear_velocity.x();
-                fb->current_speed.linear.y  = rs->linear_velocity.y();
-                fb->current_speed.linear.z  = rs->linear_velocity.z();
-                fb->current_speed.angular.x = rs->angular_velocity.x();
-                fb->current_speed.angular.y = rs->angular_velocity.y();
-                fb->current_speed.angular.z = rs->angular_velocity.z();
+                fb->current_speed.linear.x  = rs->twist.linear.x;
+                fb->current_speed.linear.y  = rs->twist.linear.y;
+                fb->current_speed.linear.z  = rs->twist.linear.z;
+                fb->current_speed.angular.x = rs->twist.angular.x;
+                fb->current_speed.angular.y = rs->twist.angular.y;
+                fb->current_speed.angular.z = rs->twist.angular.z;
                 action_server_->publish_feedback(fb);
             }
             last_feedback_time_ = pnode_->now();

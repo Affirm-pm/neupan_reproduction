@@ -26,9 +26,9 @@ namespace finenav::navigator {
  *
  * Usage in XML:
  * @code
- * <!-- 在终点 3m 内持续 10 秒 → 认为导航完成 -->
+ * <!-- 在 point_b 附近 3m 内持续 10 秒 → 认为到达（point_b 由用户显式提供） -->
  * <KeepForDuration duration_sec="10.0">
- *     <IsNearPoint point_a="{robot_pose}" point_b="{goal}" distance_threshold="3.0"/>
+ *     <IsNearPoint point_a="{robot_pose}" point_b="{some_pose}" distance_threshold="3.0"/>
  * </KeepForDuration>
  * @endcode
  */

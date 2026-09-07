@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "finenav_core/algo_configurator.hpp"
-#include "finenav_core/math_def.hpp"
+#include "finenav_core/map/map_concept.hpp"
+#include "finenav_core/common/geometry_types.hpp"
 
 #include "finenav_example/dummy_map_params.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
@@ -40,23 +40,23 @@ public:
 
     // ── Framework injectors ─────────────────────────────────────────
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
-    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; }
+    void setVisualizer(const finenav::viz::FineNavVisualizer& viz) { viz_ = viz; }
 
     bool isInside(const finenav::core::Position3D& p) const;
     finenav::core::Region3D   getWindowBounds()  const;
     finenav::core::Position3D getWindowCenter()  const;
 
-    bool isOccupied(const finenav::core::Position3D& p) const;
+    // Inline so the getting_started executable needs no symbol from this .so —
+    // it recovers the typed handle by header + RTTI only (the .so is dlopened).
+    bool isOccupied(const finenav::core::Position3D&) const { return false; }
+
+    void selfManage(finenav::core::MapRuntime&) {}
 
 private:
     double window_size_ = 50.0;
     finenav::core::Region3D bounds_;
     rclcpp::Logger                logger_{rclcpp::get_logger("DummyMap")};
-    finenav::viz::FineNavVisualizer* viz_ = nullptr;
+    finenav::viz::FineNavVisualizer viz_;
 };
 
 }  // namespace finenav::example
-
-// Register this map into the FineNav-Engine parameter system.
-// "dummy_map" must match the top-level key in dummy_map.yaml.
-FINENAV_REGISTER_ALGO_CONFIG(finenav::example::DummyMap, dummy_map)

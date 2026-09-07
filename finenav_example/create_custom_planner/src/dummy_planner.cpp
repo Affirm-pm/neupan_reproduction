@@ -6,6 +6,8 @@
 
 #include <cmath>
 
+#include "finenav_core/common/algo_register_macros.hpp"
+
 namespace finenav::example {
 
 DummyPlanner::DummyPlanner() = default;
@@ -26,14 +28,16 @@ DummyPlanner::Result DummyPlanner::plan(const Context& ctx,const IMapView& map_v
 
     using Trajectory = finenav::core::Trajectory<OutputProfile>; // TODO：这个写法不错，很漂亮
 
-    double dx = ctx.goal_pose.position.x - ctx.robot_state.position.x();
-    double dy = ctx.goal_pose.position.y - ctx.robot_state.position.y();
+    if (ctx.ref_traj.poses.empty()) return std::nullopt;
+    const auto& goal = ctx.ref_traj.poses.back();
+    double dx = goal.position.x - ctx.robot_state.pose.position.x;
+    double dy = goal.position.y - ctx.robot_state.pose.position.y;
 
     double desired_yaw = std::atan2(dy, dx);
 
-    const auto& q = ctx.robot_state.orientation;
-    double siny = 2.0 * (q.w() * q.z() + q.x() * q.y());
-    double cosy = 1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z());
+    const auto& q = ctx.robot_state.pose.orientation;
+    double siny = 2.0 * (q.w * q.z + q.x * q.y);
+    double cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
     double current_yaw = std::atan2(siny, cosy);
 
     double yaw_error = desired_yaw - current_yaw;
@@ -50,3 +54,7 @@ DummyPlanner::Result DummyPlanner::plan(const Context& ctx,const IMapView& map_v
 }
 
 }  // namespace finenav::example
+
+// One-line registration: parameter wiring + plugin self-registration.
+// "dummy_planner" must match the top-level key in dummy_planner.yaml.
+FINENAV_REGISTER_PLANNER(finenav::example::DummyPlanner, dummy_planner)

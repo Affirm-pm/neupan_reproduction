@@ -10,14 +10,9 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "finenav_util/common/log_macros.hpp"
-#include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 
 namespace finenav::core {
-
-// Forward declaration — ObservationSource is owned by MapServer.
-template <SpatialContainer MapT>
-class MapServer;
 
 /**
  * @brief ObservationBufferPolicy — buffer and timeout parameters for one sensor stream.
@@ -29,29 +24,31 @@ struct ObservationBufferPolicy {
     double expected_update_rate_hz{0.0};       ///< Expected sensor rate; warns on starvation (0 = disabled)
 };
 
-
-template <SpatialContainer MapT>
+/**
+ * @brief IObservationSource — type-erased base for all observation sources.
+ *
+ * Non-template so MapRuntime can store a heterogeneous collection.
+ */
 class IObservationSource {
 public:
     virtual ~IObservationSource() = default;
 
-    virtual void applyBuffered(MapT& map, const rclcpp::Time& now,
+    virtual void applyBuffered(const rclcpp::Time& now,
                                 RobotStateProvider* state_provider) = 0;
 };
 
 /**
  * @brief ObservationSource — manages the data buffer for one sensor stream.
  *
- * @tparam MapT  Map type.
  * @tparam MsgT  Sensor message type.
  */
-template <SpatialContainer MapT, typename MsgT>
-class ObservationSource final : public IObservationSource<MapT> {
+template <typename MsgT>
+class ObservationSource final : public IObservationSource {
 public:
 
     using Fuser = std::function<void(
         const MsgT& msg, const rclcpp::Time& stamp,
-        const RobotState& state, MapT& map)>;
+        const RobotState& state)>;
 
     ObservationSource(const std::string& source_name, ObservationBufferPolicy policy,
                       Fuser fuser, rclcpp::Logger logger);
@@ -60,8 +57,8 @@ public:
 
     /// Drain buffered messages and fuse each one into the map.
     /// Skips messages whose timestamped robot state is unavailable.
-    void applyBuffered(MapT& map, const rclcpp::Time& now,
-                        RobotStateProvider* state_provider) override;
+    void applyBuffered(const rclcpp::Time& now,
+                       RobotStateProvider* state_provider) override;
 
 private:
 
@@ -86,22 +83,22 @@ private:
 // ==============================================================================
 // ObservationSource Implementation
 // ==============================================================================
-template <SpatialContainer MapT, typename MsgT>
-ObservationSource<MapT, MsgT>::ObservationSource(
+template <typename MsgT>
+ObservationSource<MsgT>::ObservationSource(
     const std::string& source_name, ObservationBufferPolicy policy,
     Fuser fuser, rclcpp::Logger logger)
     : source_name_(source_name), policy_(policy), fuser_(std::move(fuser)),
       logger_(std::move(logger)) {}
 
-template <SpatialContainer MapT, typename MsgT>
-void ObservationSource<MapT, MsgT>::enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp) {
+template <typename MsgT>
+void ObservationSource<MsgT>::enqueueThreadSafe(MsgT&& msg, const rclcpp::Time& stamp) {
     std::lock_guard<std::mutex> lock(mutex_);
     enqueue(std::move(msg), stamp);
 }
 
-template <SpatialContainer MapT, typename MsgT>
-void ObservationSource<MapT, MsgT>::applyBuffered(
-    MapT& map, const rclcpp::Time& now, RobotStateProvider* state_provider) {
+template <typename MsgT>
+void ObservationSource<MsgT>::applyBuffered(
+    const rclcpp::Time& now, RobotStateProvider* state_provider) {
 
     std::deque<BufferedMessage> pending;
     {
@@ -157,12 +154,12 @@ void ObservationSource<MapT, MsgT>::applyBuffered(
                 source_name_, item.stamp.seconds());
             continue;
         }
-        fuser_(item.msg, item.stamp, *maybe_state, map);
+        fuser_(item.msg, item.stamp, *maybe_state);
     }
 }
 
-template <SpatialContainer MapT, typename MsgT>
-void ObservationSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
+template <typename MsgT>
+void ObservationSource<MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stamp) {
     if (policy_.max_buffer_size > 0 && buffer_.size() >= policy_.max_buffer_size) {
         FINENAV_LOG_WARN_THROTTLE(logger_, 2000,
             "ObservationSource '{}': buffer full ({}/{}); oldest message dropped. "
@@ -175,8 +172,8 @@ void ObservationSource<MapT, MsgT>::enqueue(MsgT&& msg, const rclcpp::Time& stam
     has_seen_message_ = true;
 }
 
-template <SpatialContainer MapT, typename MsgT>
-void ObservationSource<MapT, MsgT>::pruneExpired(const rclcpp::Time& now) {
+template <typename MsgT>
+void ObservationSource<MsgT>::pruneExpired(const rclcpp::Time& now) {
     if (policy_.observation_keep_time_sec <= 0.0) return;
     size_t n = 0;
     while (!buffer_.empty()) {

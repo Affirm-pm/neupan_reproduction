@@ -8,10 +8,9 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 
-#include "finenav_core/algo_configurator.hpp"
-#include "finenav_core/math_def.hpp"
+#include "finenav_core/common/geometry_types.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
-#include "finenav_core/plan/trajectory.hpp"
+#include "finenav_core/plan/trajectory.hpp" // TODO： 应该合并
 
 #include "finenav_example/dummy_planner_params.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
@@ -32,7 +31,7 @@ public:
  * DummyPlanner's parameters (linear_speed, angular_speed) are hot-reloadable
  * because their YAML does NOT have `read_only: true`.  The framework calls
  * configure() in two scenarios:
- *   1. Startup:  AlgoConfigurator loads initial values (YAML defaults or
+ *   1. Startup:  the framework loads initial values (YAML defaults or
  *               --params-file overrides).
  *   2. Runtime:  `ros2 param set` triggers the ParamListener callback, which
  *               calls configure() with the full new parameter set.
@@ -47,7 +46,7 @@ public:
     using ConfigType    = dummy_planner::Params;
     using IMapView      = DummyMapView;
 
-    static constexpr finenav::core::IOProfile InputProfile{false, false, false, false};
+    static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
     static constexpr finenav::core::IOProfile OutputProfile{false, true, false, false};
 
     DummyPlanner();
@@ -65,7 +64,7 @@ public:
     // Declare these to receive the logger and visualizer automatically.
     // The framework detects them via if constexpr — no extra registration needed.
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
-    void setVisualizer(finenav::viz::FineNavVisualizer& viz) { viz_ = &viz; }
+    void setVisualizer(const finenav::viz::FineNavVisualizer& viz) { viz_ = viz; }
 
     void reset();
 
@@ -78,11 +77,7 @@ private:
     double linear_speed_  = 0.5;
     double angular_speed_ = 1.0;
     rclcpp::Logger                logger_{rclcpp::get_logger("DummyPlanner")};
-    finenav::viz::FineNavVisualizer* viz_ = nullptr;
+    finenav::viz::FineNavVisualizer viz_;
 };
 
 }  // namespace finenav::example
-
-// Register this planner into the FineNav-Engine parameter system.
-// "dummy_planner" must match the top-level key in dummy_planner.yaml.
-FINENAV_REGISTER_ALGO_CONFIG(finenav::example::DummyPlanner, dummy_planner)

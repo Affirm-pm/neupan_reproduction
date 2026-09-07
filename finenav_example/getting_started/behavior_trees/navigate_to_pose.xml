@@ -3,27 +3,34 @@
 
   Navigate to a goal pose using the dummy planner.
   When the goal is reached, stops the planner and succeeds.
+
+  NOTE: rewritten for the Step-4 navigator BT interface (commit d1d4ce7):
+  the old <ComputePlan layer=... planner_id=.../> node no longer exists.
+  Goals are injected with <PublishNavigationGoal/> (reads blackboard
+  "goal_poses") and the pre-assembled layer "my_layer" (built in main.cpp by
+  createLayerByMapView) is driven with <ExecuteControlLayer layer="my_layer"/>.
   -->
 <root BTCPP_format="4">
 
     <BehaviorTree ID="GettingStartedNavigate">
-        <RetryUntilSuccessful num_attempts="-1">
-            <Sequence name="TrackThenStop">
-                <ReactiveFallback name="NavigateOrSucceed">
-                    <IsGoalReached  robot_pose="{robot_pose}"
-                                    robot_twist="{robot_twist}"
-                                    goal="{goal}"
-                                    xy_tolerance="0.25"
-                                    yaw_tolerance="0.1"
-                                    speed_tolerance="0.1"/>
-                    <ComputePlan    layer="my_layer"
-                                    goal="{goal}"
-                                    planner_id="dummy_planner"/>
-                </ReactiveFallback>
-                <!-- Goal reached: publish zero velocity and succeed -->
-                <StopChassisMotion/>
-            </Sequence>
-        </RetryUntilSuccessful>
+        <Sequence>
+            <PublishNavigationGoal/>
+            <RetryUntilSuccessful num_attempts="-1">
+                <Sequence name="TrackThenStop">
+                    <ReactiveFallback name="NavigateOrSucceed">
+                        <IsGoalReached  robot_pose="{robot_pose}"
+                                        robot_twist="{robot_twist}"
+                                        goal_poses="{goal_poses}"
+                                        xy_tolerance="0.25"
+                                        yaw_tolerance="0.1"
+                                        speed_tolerance="0.1"/>
+                        <ExecuteControlLayer layer="my_layer"/>
+                    </ReactiveFallback>
+                    <!-- Goal reached: publish zero velocity and succeed -->
+                    <StopChassisMotion/>
+                </Sequence>
+            </RetryUntilSuccessful>
+        </Sequence>
     </BehaviorTree>
 
 </root>

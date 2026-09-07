@@ -202,7 +202,7 @@ Task-level orchestration uses BehaviorTree.CPP v4. Available BT plugins:
 | `IsStuck` | Condition | Timeout-based stuck detection |
 | `PublishZeroCmdVel` | Action | Sends zero velocity for safe stop |
 
-BT XML files are in `finenav_navigator/behavior_trees/`.
+BT XML files are application-provided (see `finenav_example/getting_started/behavior_trees/`); the framework ships no built-in trees.
 
 ---
 

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <shared_mutex>
 #include <string>
@@ -59,6 +60,12 @@ public:
     void addLine(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
                  const std_msgs::msg::ColorRGBA& color, double width = 0.01);
 
+    /// Connected line strip represented by one Marker.
+    void addLineStrip(const std::vector<Eigen::Vector3d>& points,
+                      const std_msgs::msg::ColorRGBA& color,
+                      double width = 0.02,
+                      const std::string& ns = "LineStrip");
+
     /// Connected cylinders along points.
     void addPath(const std::vector<Eigen::Vector3d>& points,
                  const std_msgs::msg::ColorRGBA& color, double radius = 0.02);
@@ -75,7 +82,10 @@ public:
     void publish(const std::string& topic = "finenav_visualization");
 
     /// Discard accumulated markers without publishing.
-    void clear() { markers_.markers.clear(); }
+    void clear() {
+        markers_.markers.clear();
+        next_marker_id_ = 0;
+    }
 
     /// Delete all current markers from RViz.
     void deleteAllMarkers(const std::string& topic = "finenav_visualization");
@@ -84,10 +94,13 @@ public:
     bool hasSubscribers(const std::string& topic) const;
 
 private:
+    std::int32_t allocateId();
+
     rclcpp::Node::SharedPtr node_;
     visualization_msgs::msg::MarkerArray markers_;
     std::string base_frame_ = "map";
     float alpha_ = 1.0f;
+    std::int32_t next_marker_id_{0};
 
     std::unordered_map<std::string,
         rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr> pubs_;

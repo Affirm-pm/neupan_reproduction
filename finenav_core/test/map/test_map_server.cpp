@@ -26,7 +26,7 @@ TEST_F(MapServerTest, ConstructWithValidStateProvider) {
     MockStateProvider provider;
 
     auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "test_server", &provider);
+        node, "smoke_map", "test_server", &provider);
     EXPECT_TRUE(server != nullptr);
 }
 
@@ -34,7 +34,7 @@ TEST_F(MapServerTest, RegisterPreUpdateHook) {
     auto node = rclcpp::Node::make_shared("test_node");
     MockStateProvider provider;
     auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "test_server", &provider);
+        node, "smoke_map", "test_server", &provider);
 
     bool called = false;
     server->registerPreUpdateHook(
@@ -47,7 +47,7 @@ TEST_F(MapServerTest, RegisterPostUpdateHook) {
     auto node = rclcpp::Node::make_shared("test_node");
     MockStateProvider provider;
     auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "test_server", &provider);
+        node, "smoke_map", "test_server", &provider);
 
     bool called = false;
     server->registerPostUpdateHook(
@@ -59,28 +59,28 @@ TEST_F(MapServerTest, GetLockedReadView) {
     auto node = rclcpp::Node::make_shared("test_node");
     MockStateProvider provider;
     auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "test_server", &provider);
+        node, "smoke_map", "test_server", &provider);
 
     auto view = server->getLockedReadView();
-    EXPECT_TRUE(view->isInside(Position3D::Zero()));
+    EXPECT_TRUE(view->isInside(Position3D{}));
 }
 
 TEST_F(MapServerTest, GetLockedWriteView) {
     auto node = rclcpp::Node::make_shared("test_node");
     MockStateProvider provider;
     auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "test_server", &provider);
+        node, "smoke_map", "test_server", &provider);
 
     auto view = server->getLockedWriteView();
-    EXPECT_TRUE(view->isInside(Position3D::Zero()));
-    view->shiftWindowTo(Position3D(10, 0, 0));
+    EXPECT_TRUE(view->isInside(Position3D{}));
+    view->shiftWindowTo(Position3D{10, 0, 0});
 }
 
 TEST_F(MapServerTest, AddObservationSourceManualInjector) {
     auto node = rclcpp::Node::make_shared("test_node");
     MockStateProvider provider;
     auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "test_server", &provider);
+        node, "smoke_map", "test_server", &provider);
 
     auto injector = server->addObservationSource<SmokeCell>(
         "test_src", {},

@@ -14,6 +14,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 
 #include "finenav_util/common/log_macros.hpp"
+#include "finenav_core/robot_state/eigen_conversions.hpp"
 
 namespace finenav::localizer {
 
@@ -149,10 +150,6 @@ void FineNavLocalizer::onPose(const PoseMsg& msg) {
         if (routing_.pose != Routing::PoseSrc::Pose) return;
 
         // ── Resolve odometry at the observation timestamp ────────────────
-        // A delayed pose observation must anchor against the odometry that
-        // was current *at the observation instant*, not the latest one.
-        // We recover that odometry from the state history:
-        //     odom_at_obs = anchor⁻¹ ⊕ state_at_obs
         Eigen::Vector3d    odom_p_at_obs = odom_cache_.position();
         Eigen::Quaterniond odom_q_at_obs = odom_cache_.orientation();
         bool               fallback      = false;
@@ -166,16 +163,19 @@ void FineNavLocalizer::onPose(const PoseMsg& msg) {
                     stamp.seconds());
                 fallback = true;
             } else {
-                // Back out odometry at T_obs from the stored state
+                Eigen::Vector3d    state_pos_at_obs;
+                Eigen::Quaterniond state_ori_at_obs;
+                core::fromMsg(*state_at_obs, state_pos_at_obs);
+                core::fromMsg(*state_at_obs, state_ori_at_obs);
+
                 odom_q_at_obs = world_anchor_.orientation().conjugate()
-                                * state_at_obs->orientation;
+                                * state_ori_at_obs;
                 odom_p_at_obs = world_anchor_.orientation().conjugate()
-                                * (state_at_obs->position - world_anchor_.position());
+                                * (state_pos_at_obs - world_anchor_.position());
             }
         }
 
         // ── Compute the new anchor ───────────────────────────────────────
-        //     anchor = obs ⊖ odom_at_obs
         const Eigen::Quaterniond anchor_ori = obs_q * odom_q_at_obs.conjugate();
         const Eigen::Vector3d    anchor_pos = obs_p - anchor_ori * odom_p_at_obs;
 
@@ -186,9 +186,15 @@ void FineNavLocalizer::onPose(const PoseMsg& msg) {
         }
 
         // ── Compose state from the updated anchor ────────────────────────
-        composeState(world_anchor_.position(), world_anchor_.orientation(),
-                     odom_cache_.position(), odom_cache_.orientation(),
-                     state_.position, state_.orientation);
+        {
+            Eigen::Vector3d    tmp_pos;
+            Eigen::Quaterniond tmp_ori;
+            composeState(world_anchor_.position(), world_anchor_.orientation(),
+                         odom_cache_.position(), odom_cache_.orientation(),
+                         tmp_pos, tmp_ori);
+            core::toMsg(tmp_pos, state_);
+            core::toMsg(tmp_ori, state_);
+        }
 
         // Velocity: auto-diff from consecutive poses
         if (routing_.velocity == Routing::VelSrc::AutoDiff) {
@@ -198,7 +204,8 @@ void FineNavLocalizer::onPose(const PoseMsg& msg) {
         initialized_ = true;
     }
 
-    pushState(stamp, state_);
+    state_.header.stamp = stamp;
+    pushState(state_);
 }
 
 void FineNavLocalizer::onTwist(const TwistMsg& msg) {
@@ -223,7 +230,8 @@ void FineNavLocalizer::onTwist(const TwistMsg& msg) {
         if (params_.force_2d_mode) {
             force2D();
         }
-        pushState(stamp, state_);
+        state_.header.stamp = stamp;
+        pushState(state_);
     }
 }
 
@@ -240,13 +248,16 @@ void FineNavLocalizer::onOdometry(const OdomMsg& msg) {
 
     // Compose state = anchor ⊕ odometry
     if (world_anchor_.isReady()) {
+        Eigen::Vector3d    tmp_pos;
+        Eigen::Quaterniond tmp_ori;
         composeState(world_anchor_.position(), world_anchor_.orientation(),
                      odom_cache_.position(), odom_cache_.orientation(),
-                     state_.position, state_.orientation);
+                     tmp_pos, tmp_ori);
+        core::toMsg(tmp_pos, state_);
+        core::toMsg(tmp_ori, state_);
     } else {
-        // Bootstrap: no anchor yet — output odometry as-is
-        state_.position    = p;
-        state_.orientation = q;
+        core::toMsg(p, state_);
+        core::toMsg(q, state_);
     }
 
     // ── Velocity: odom.twist as explicit velocity ───────────────────────
@@ -262,7 +273,8 @@ void FineNavLocalizer::onOdometry(const OdomMsg& msg) {
     if (params_.force_2d_mode) {
         force2D();
     }
-    pushState(rclcpp::Time(msg.header.stamp), state_);
+    state_.header.stamp = rclcpp::Time(msg.header.stamp);
+    pushState(state_);
 }
 
 void FineNavLocalizer::timerCallback() {
@@ -281,23 +293,25 @@ void FineNavLocalizer::timerCallback() {
         std::lock_guard<std::mutex> lk(state_mutex_);
 
         // ── EMA smoothing tick ──────────────────────────────────────────
-        // When smoothing is enabled the WorldAnchor gradually converges
-        // the anchor toward each new target.  After each EMA step we
-        // recompose the state from the updated anchor + latest odometry.
         if (world_anchor_.isReady()) {
             auto anchor_pos = world_anchor_.position();
             auto anchor_ori = world_anchor_.orientation();
             if (params_.pose_smoothing_time > 0.0 &&
                 world_anchor_.tick(anchor_pos, anchor_ori)) {
                 if (odom_cache_.hasData()) {
+                    Eigen::Vector3d    tmp_pos;
+                    Eigen::Quaterniond tmp_ori;
                     composeState(anchor_pos, anchor_ori,
                                  odom_cache_.position(), odom_cache_.orientation(),
-                                 state_.position, state_.orientation);
+                                 tmp_pos, tmp_ori);
+                    core::toMsg(tmp_pos, state_);
+                    core::toMsg(tmp_ori, state_);
                 }
                 if (params_.force_2d_mode) {
                     force2D();
                 }
-                pushState(now, state_);
+                state_.header.stamp = now;
+                pushState(state_);
             }
         }
 
@@ -318,13 +332,13 @@ void FineNavLocalizer::publishOutput(const rclcpp::Time& now) {
         tf.header.stamp    = now;
         tf.header.frame_id = "map";
         tf.child_frame_id  = "base_link";
-        tf.transform.translation.x = state_.position.x();
-        tf.transform.translation.y = state_.position.y();
-        tf.transform.translation.z = state_.position.z();
-        tf.transform.rotation.w = state_.orientation.w();
-        tf.transform.rotation.x = state_.orientation.x();
-        tf.transform.rotation.y = state_.orientation.y();
-        tf.transform.rotation.z = state_.orientation.z();
+        tf.transform.translation.x = state_.pose.position.x;
+        tf.transform.translation.y = state_.pose.position.y;
+        tf.transform.translation.z = state_.pose.position.z;
+        tf.transform.rotation.w = state_.pose.orientation.w;
+        tf.transform.rotation.x = state_.pose.orientation.x;
+        tf.transform.rotation.y = state_.pose.orientation.y;
+        tf.transform.rotation.z = state_.pose.orientation.z;
         tf_br_->sendTransform(tf);
     }
 
@@ -333,29 +347,35 @@ void FineNavLocalizer::publishOutput(const rclcpp::Time& now) {
         odom.header.stamp    = now;
         odom.header.frame_id = "map";
         odom.child_frame_id  = "base_link";
-        odom.pose.pose.position.x    = state_.position.x();
-        odom.pose.pose.position.y    = state_.position.y();
-        odom.pose.pose.position.z    = state_.position.z();
-        odom.pose.pose.orientation.w = state_.orientation.w();
-        odom.pose.pose.orientation.x = state_.orientation.x();
-        odom.pose.pose.orientation.y = state_.orientation.y();
-        odom.pose.pose.orientation.z = state_.orientation.z();
-        odom.twist.twist.linear.x  = state_.linear_velocity.x();
-        odom.twist.twist.linear.y  = state_.linear_velocity.y();
-        odom.twist.twist.linear.z  = state_.linear_velocity.z();
-        odom.twist.twist.angular.x = state_.angular_velocity.x();
-        odom.twist.twist.angular.y = state_.angular_velocity.y();
-        odom.twist.twist.angular.z = state_.angular_velocity.z();
+        odom.pose.pose.position.x    = state_.pose.position.x;
+        odom.pose.pose.position.y    = state_.pose.position.y;
+        odom.pose.pose.position.z    = state_.pose.position.z;
+        odom.pose.pose.orientation.w = state_.pose.orientation.w;
+        odom.pose.pose.orientation.x = state_.pose.orientation.x;
+        odom.pose.pose.orientation.y = state_.pose.orientation.y;
+        odom.pose.pose.orientation.z = state_.pose.orientation.z;
+        odom.twist.twist.linear.x  = state_.twist.linear.x;
+        odom.twist.twist.linear.y  = state_.twist.linear.y;
+        odom.twist.twist.linear.z  = state_.twist.linear.z;
+        odom.twist.twist.angular.x = state_.twist.angular.x;
+        odom.twist.twist.angular.y = state_.twist.angular.y;
+        odom.twist.twist.angular.z = state_.twist.angular.z;
         nav_state_pub_->publish(odom);
     }
 }
 
 void FineNavLocalizer::force2D() {
-    state_.position.z() = 0.0;
-    const Eigen::Vector3d x_axis = state_.orientation.matrix().col(0);
+    state_.pose.position.z = 0.0;
+
+    Eigen::Vector3d    pos;
+    Eigen::Quaterniond ori;
+    core::fromMsg(state_, pos);
+    core::fromMsg(state_, ori);
+
+    const Eigen::Vector3d x_axis = ori.matrix().col(0);
     const double yaw = std::atan2(x_axis.y(), x_axis.x());
-    state_.orientation =
-        Eigen::Quaterniond(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+    Eigen::Quaterniond q_2d(Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()));
+    core::toMsg(q_2d, state_);
 }
 
 }  // namespace finenav::localizer

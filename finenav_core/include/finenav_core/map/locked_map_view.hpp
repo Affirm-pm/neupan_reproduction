@@ -13,7 +13,7 @@ namespace finenav::core {
  * (read) lock; destruction releases it. Multiple concurrent readers are allowed.
  * As long as any LockedMapRO is alive, writers are blocked.
  */
-template <SpatialContainer MapT>
+template <Map MapT>
 class LockedMapRO {
 public:
     LockedMapRO(const MapT& map, std::shared_mutex& mutex)
@@ -38,7 +38,7 @@ private:
  * exclusive (write) lock, blocking until all active LockedMapRO handles are
  * released. Use sparingly — prefer addObservationSource() for routine data injection.
  */
-template <SpatialContainer MapT>
+template <Map MapT>
 class LockedMapRW {
 public:
     LockedMapRW(MapT& map, std::shared_mutex& mutex)

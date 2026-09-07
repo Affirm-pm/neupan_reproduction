@@ -9,30 +9,8 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_engine/finenav_engine.hpp"
-#include <geometry_msgs/msg/pose.hpp>
-
-#include "dummy_map.hpp"
-#include "dummy_planner.hpp"
 
 using namespace finenav;
-
-using example::DummyPlanner;
-using example::DummyMap;
-
-/**
- *  @brief Define a MapView, which determine the rule for planner
- *  @details In this example, the rule is quite simple: the planner only considers the map occupied if the position is occupied in the map.
- */
-class ASimpleMapView : public DummyPlanner::IMapView {
-public:
-    ASimpleMapView(const DummyMap& map_ptr) : map_(map_ptr) {}
-    bool isWalkable(const core::Position3D&) const override {
-        return !map_.isOccupied(core::Position3D());
-    }
-private:
-    const DummyMap& map_;
-};
-
 
 int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
@@ -43,20 +21,24 @@ int main(int argc, char** argv) {
     // 0. Set the default behavior tree (used by /goal_pose and navigateTo() without bt_id).
     engine->setDefaultBehaviorTree("GettingStartedNavigate");
 
-    // 1. Create MapServer
-    auto map_server = engine->createMapServer<DummyMap>("my_map");
+    // 1. Load the algorithm .so's.  The planner, map and mapview libraries are
+    //    deliberately NOT linked into this executable (see CMakeLists.txt) — a
+    //    self-registering .so the executable references no symbol from would be
+    //    dropped by --as-needed.  dlopen forces each registrar to fire, which
+    //    populates the shared PlanRegistry + MapRegistry + MapViewRegistry.
+    //    "finenav_example/lib" resolves to <prefix>/lib and loads every *.so it finds.
+    engine->loadAlgoPlugins({"finenav_example/lib"});
 
-    // 2. Create ControlLayer
-    auto layer = engine->createLayer<DummyPlanner>("my_layer", core::ContinuousPolicy{10.0});
+    // 2. Assemble a ControlLayer from a MapView bridge by NAME.
+    //    createLayerByMapView resolves the planner + map TYPES the bridge declares
+    //    back to their registered names ("dummy_planner" / "dummy_map"), reuses
+    //    (or creates) the MapServer, builds the IMapView and attaches it.  The
+    //    end user never names a planner or a map — only the MapView.
+    engine->createLayerByMapView("dummy_mapview", "my_layer", core::ContinuousPolicy{10.0});
 
-    // 3. Bind map to layer
-    layer->bind_map_view(map_server, [](const DummyMap& map_data, const std::string&) {
-            return std::make_shared<ASimpleMapView>(map_data);
-    });
-
-    // 4. Wire tree
+    // 3. Wire the tree — layers are addressed by their layer_name string.
     engine->wireControlPipeline({
-        _root >> layer
+        _root >> "my_layer"
     });
 
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");

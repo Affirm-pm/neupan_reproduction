@@ -4,154 +4,67 @@
 
 #pragma once
 
-#include <any>
 #include <atomic>
-#include <mutex>
+#include <functional>
+#include <memory>
 #include <thread>
 #include <variant>
 
-#include "rclcpp/rclcpp.hpp"
-#include "finenav_interfaces/msg/trajectory.hpp"
-#include "finenav_core/map/map_concept.hpp"
-#include "finenav_core/map/map_server.hpp"
-#include "finenav_core/plan/planner_concept.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
-#include "finenav_core/plan/generate_map_views_variant.hpp"
-#include "finenav_core/plan/ros_conversions.hpp"
-#include "finenav_core/algo_configurator.hpp"
-#include "finenav_core/param_handle_keeper.hpp"
-#include "finenav_core/plan/i_control_layer.hpp"
-#include "finenav_util/ros/task_channel.hpp"
-#include "finenav_util/ros/node_thread.hpp"
+#include "finenav_core/plan/pipeline_node.hpp"
+#include "finenav_core/task_bus/task_bus.hpp"
+#include "rclcpp/rclcpp.hpp"
 
 namespace finenav::core {
 
 /**
- * @brief ControlLayer — binds a set of planners to a MapServer under an execution policy.
+ * @brief ControlLayer — a single-planner pipeline stage driven by an
+ *        ExecutionPolicyVariant.
  *
- * Each ControlLayer runs one planner at a time (selected at runtime by active_planner_id).
- * It owns the planner instances, manages the ROS action server, and orchestrates the
- * plan-once flow: pre-callback → read-lock MapView → planner.plan() → post-callback.
+ * Inherits the plan-once pipeline (planner instance, planOnce(), MapView
+ * attachment) from PipelineNode and adds the execution policy, which decides
+ * how the node is triggered and where its output goes:
+ *   - SingleShotPolicy  → commanded: one plan() per goal
+ *   - ContinuousPolicy  → commanded: plan() loop at N Hz
+ *   - ReactivePolicy    → commanded: listen for refs; plan() on each while STARTed
  *
- * @tparam Planners  The planner types supported by this layer (one or more).
+ * @tparam PlannerT  The planner type owned by this layer.
  */
-template <typename... Planners>
-class ControlLayer : public IControlLayer {
+template <Planner PlannerT>
+class ControlLayer : public PipelineNode<PlannerT> {
 public:
-    // ── Types ──────────────────────────────────────────────────────────────
-
-    using MapViewsVariant = GenerateMapViewsVariant<Planners...>;
-    using PrePlanCallback = std::function<bool(PrePlanContext&)>;
-    using PostPlanCallback = std::function<bool(PostPlanContext&)>;
-    using ExecutionPolicyVariant = std::variant<SingleShotPolicy, ContinuousPolicy>;
-
-    // ── Construction ───────────────────────────────────────────────────────
-
     explicit ControlLayer(
         rclcpp::Node::SharedPtr node,
+        const std::string& algo_name,
         const std::string& layer_name,
         ExecutionPolicyVariant policy = SingleShotPolicy{},
         RobotStateProvider* state_provider = nullptr);
 
-    ~ControlLayer();
+    ~ControlLayer() override;
 
-    // ── IControlLayer ─────────────────────────────────────────────────────
-
-    void connectFrom(const std::string& parent_topic) override;
-
-    // ── Configuration ──────────────────────────────────────────────────────
-
-    void setInputTopic(const std::string& topic);
-    void setupDataPorts();
-
-    /**
-     * @brief Bind a MapServer to this layer so planners can read the map.
-     *
-     * At every plan() call the framework acquires a read-lock from @p server,
-     * passes the locked const MapT& to @p builder together with the currently
-     * active planner name, and holds the lock until plan() returns via
-     * BoundMapView::lock_guard.
-     *
-     * @param builder  (const MapT&, const std::string& active_planner_id) → MapViewsVariant
-     * @tparam MapT      Must satisfy SpatialContainer.
-     */
-    template <typename MapT, typename BuilderFn>
-    void bind_map_view(std::shared_ptr<MapServer<MapT>> server, BuilderFn&& builder);
-
-    void set_on_pre_plan(PrePlanCallback cb)   { on_pre_plan_  = std::move(cb); }
-    void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
-
-    const std::string& get_active_planner_id() const { return active_planner_id_; }
+protected:
+    void onPlanRef(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg) override;
 
 private:
-    // ── Internal types ─────────────────────────────────────────────────────
+    // ── construction: one policy → one plumbing set + one episode body ──────
+    void startWorker(std::function<void()> episode_body);   // all three policies
+    bool waitForState();
 
-    struct BoundMapView {
-        MapViewsVariant        view_variant;
-        std::shared_ptr<void>  lock_guard;
-    };
+    // ── episode bodies ──────────────────────────────────────────────────────
+    void runSingleShot();
+    void runContinuous();
+    void runReactive();
+    void react();
 
-    using MapViewFactory = std::function<BoundMapView(const std::string& active_planner_id)>;
+    ExecutionPolicyVariant policy_;
 
-    // ── Methods ────────────────────────────────────────────────────────────
+    // commanded plumbing (shared by all three policies); worker_ itself is
+    // inherited from PipelineNode.
+    std::thread        worker_thread_;
+    std::atomic<bool>  stop_{false};
 
-    void PlanRefCallback(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
-
-    /// Episode entry-point invoked by the ROS action server.
-
-    /**
-     * @brief Entry point of a planning episode
-     */
-    void execute();
-
-    /// Policy dispatch.
-    void executeImpl(SingleShotPolicy& policy);
-    void executeImpl(ContinuousPolicy&   policy);
-
-    /// Reset each planner whose AlgoConfigurator name matches active_planner_id_.
-    void resetActivePlanner();
-
-    /**
-     * @brief Run one planning step: pre-cb → read-lock MapView → plan() → post-cb.
-     * @return true on success.
-     */
-    bool planOnce(geometry_msgs::msg::Pose goal_pose);
-
-    // ── ROS infrastructure ─────────────────────────────────────────────────
-
-    rclcpp::Node::SharedPtr      node_;
-    rclcpp::Node::SharedPtr      pnode_;
-    std::unique_ptr<finenav::util::NodeThread> pnode_thread_;
-
-    rclcpp::TimerBase::SharedPtr timer_;
-    std::unique_ptr<finenav::util::TaskWorker> worker_;
-    std::thread worker_thread_;
-    std::atomic<bool> stop_execution_{false};
-
-    rclcpp::Subscription<finenav_interfaces::msg::TaskFeedback>::SharedPtr plan_ref_sub_;
-
-    // ── Planner state ──────────────────────────────────────────────────────
-
-    std::tuple<Planners...> planners_instance_;
-    std::string               active_planner_id_;
-    ExecutionPolicyVariant   policy_;
-
-    // ── Callbacks ──────────────────────────────────────────────────────────
-
-    MapViewFactory              map_view_factory_;
-    PrePlanCallback             on_pre_plan_;
-    PostPlanCallback            on_post_plan_;
-    RobotStateProvider*        state_provider_{nullptr};
-
-    // ── Data ───────────────────────────────────────────────────────────────
-
-    std::string layer_name_;
-    std::string input_topic_;
-
-    std::mutex                       plan_ref_mutex_;
-    std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;
-
-    ParamHandleKeeper param_keeper_;
+    // reactive gating: true while the layer is STARTed and listening
+    std::atomic<bool>  started_{false};
 };
 
 } // namespace finenav::core

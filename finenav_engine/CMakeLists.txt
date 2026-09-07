@@ -6,13 +6,15 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(ament_index_cpp REQUIRED)
+find_package(behaviortree_cpp REQUIRED)
 
 set(finenav_dependencies
         finenav_core
         finenav_localizer
         finenav_navigator
-        finenav_motion_decorator
         finenav_interfaces
+        finenav_visualizer
         finenav_util
 )
 
@@ -27,6 +29,8 @@ ament_target_dependencies(finenav_engine
         rclcpp
         rclcpp_action
         geometry_msgs
+        ament_index_cpp
+        behaviortree_cpp
         ${finenav_dependencies}
 )
 target_include_directories(finenav_engine PUBLIC

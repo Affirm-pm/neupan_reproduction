@@ -31,7 +31,7 @@ finenav_navigator:
   behavior_trees: {
     type: string_array,
     default_value: [],
-    description: "Additional 'package_name/subfolder' paths for SubTrees (built-in trees are always loaded)",
+    description: "Additional 'package_name/subfolder' paths for SubTrees (the framework ships no built-in trees; applications must provide their own)",
     validation: {
       unique<>: null,
     }

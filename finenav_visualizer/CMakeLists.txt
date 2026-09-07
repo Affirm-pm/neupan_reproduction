@@ -15,6 +15,9 @@ find_package(Eigen3 REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common)
 find_package(pcl_conversions REQUIRED)
+if (BUILD_TESTING)
+    find_package(ament_cmake_gtest REQUIRED)
+endif()
 
 ament_auto_find_build_dependencies()
 
@@ -55,5 +58,14 @@ install(DIRECTORY include/finenav_visualizer/
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
 ament_export_dependencies(rclcpp visualization_msgs sensor_msgs Eigen3 PCL)
+
+if (BUILD_TESTING)
+    ament_add_gtest(marker_viz_test
+        test/marker_viz_test.cpp
+    )
+
+    target_link_libraries(marker_viz_test ${PROJECT_NAME})
+    ament_target_dependencies(marker_viz_test rclcpp visualization_msgs)
+endif()
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

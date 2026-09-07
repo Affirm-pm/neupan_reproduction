@@ -16,15 +16,17 @@ namespace finenav::navigator {
  * "在终点附近持续一段时间后认为完成导航"的逻辑。
  *
  * Blackboard 输入:
- *   - point_a (geometry_msgs::msg::Pose): 第一个位姿点（通常是 robot_pose）
- *   - point_b (geometry_msgs::msg::Pose): 第二个位姿点（通常是 goal）
+ *   - point_a (geometry_msgs::msg::Pose): 第一个位姿点（默认 robot_pose）
+ *   - point_b (geometry_msgs::msg::Pose): 第二个位姿点（无默认，需由用户显式提供，
+ *            例如 {goal_poses} 的某一点 / 地图关键点）
  *
  * 输入端口:
  *   - distance_threshold (double, 默认 3.0 m): 距离判定阈值
  *
  * Usage in XML:
  * @code
- * <IsNearPoint point_a="{robot_pose}" point_b="{goal}" distance_threshold="3.0"/>
+ * <!-- 两点均由调用方显式给出（不再隐含依赖单点 {goal}） -->
+ * <IsNearPoint point_a="{robot_pose}" point_b="{some_pose}" distance_threshold="3.0"/>
  * @endcode
  */
 class IsNearPoint : public BT::ConditionNode {
