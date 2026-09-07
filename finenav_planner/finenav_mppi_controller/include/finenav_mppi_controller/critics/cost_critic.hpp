@@ -12,21 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef NAV2_MPPI_CONTROLLER__CRITICS__COST_CRITIC_HPP_
-#define NAV2_MPPI_CONTROLLER__CRITICS__COST_CRITIC_HPP_
+#ifndef FINENAV_MPPI_CONTROLLER__CRITICS__COST_CRITIC_HPP_
+#define FINENAV_MPPI_CONTROLLER__CRITICS__COST_CRITIC_HPP_
 
-#include <memory>
-#include <string>
-
+#include <cstddef>
+#include <functional>
 
 #include "finenav_mppi_controller/critic_function.hpp"
 #include "finenav_mppi_controller/models/state.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
 
-
 namespace mppi::critics
 {
+
+struct CostCriticExecutionOptions
+{
+  std::size_t num_threads{1};
+  std::size_t chunk_size{1};
+};
 
 /**
  * @class mppi::critics::CostCritic
@@ -36,6 +40,9 @@ namespace mppi::critics
 class CostCritic : public CriticFunction
 {
 public:
+  explicit CostCritic(CostCriticExecutionOptions options = {});
+  ~CostCritic() override;
+
   /**
     * @brief Initialize critic
     */
@@ -46,9 +53,13 @@ public:
    *
    * @param costs [out] add obstacle cost values to this tensor
    */
-  void score(CriticData & data, const nav2_mppi_controller::IMapView& map_view) override;
+  void score(CriticData & data, const nav2_mppi_controller::IMapView & map_view) override;
 
 protected:
+  void executeTrajectories(
+    std::size_t count,
+    const std::function<void(std::size_t)> & callback);
+
   /**
     * @brief Checks if cost represents a collision
     * @param cost Point cost at pose center
@@ -57,10 +68,12 @@ protected:
     * @param theta theta of pose
     * @return bool if in collision
     */
-    bool inCollision(float x, float y, float theta, const nav2_mppi_controller::IMapView& map_view)
-    {
-        return map_view.isCollision(x, y, theta);
-    }
+  bool inCollision(
+    float x, float y, float theta,
+    const nav2_mppi_controller::IMapView & map_view) const
+  {
+    return map_view.isCollision(x, y, theta);
+  }
 
 
   /**
@@ -69,37 +82,27 @@ protected:
     * @param y Y of pose
     * @return Collision information at pose
     */
-    float costAtPose(float x, float y, const nav2_mppi_controller::IMapView& map_view)
-    {
-        // 使用 Position3D 作为参数传入 map_view
-        return map_view.getCost(Position3D{static_cast<double>(x),
-                                                    static_cast<double>(y),
-                                                    0.0});
-    }
-
-  /**
-    * @brief Find the min cost of the inflation decay function for which the robot MAY be
-    * in collision in any orientation
-    * @param costmap Costmap2DROS to get minimum inscribed cost (e.g. 128 in inflation layer documentation)
-    * @return double circumscribed cost, any higher than this and need to do full footprint collision checking
-    * since some element of the robot could be in collision
-    */
-//  float findCircumscribedCost(std::shared_ptr<nav2_costmap_2d::Costmap2DROS> costmap);
+  float costAtPose(float x, float y, const nav2_mppi_controller::IMapView & map_view) const
+  {
+    // 使用 Position3D 作为参数传入 map_view
+    return map_view.getCost(
+      Position3D{static_cast<double>(x),
+        static_cast<double>(y),
+        0.0});
+  }
 
 protected:
-  float possibly_inscribed_cost_;
-
 //  bool consider_footprint_{true};
-  float circumscribed_radius_{0};
-  float circumscribed_cost_{0};
   float collision_cost_{0};
   float critical_cost_{0};
   float weight_{0};
 
   float near_goal_distance_;
   unsigned int power_{0};
+  CostCriticExecutionOptions execution_options_;
+  int observed_openmp_threads_{1};
 };
 
 }  // namespace mppi::critics
 
-#endif  // NAV2_MPPI_CONTROLLER__CRITICS__COST_CRITIC_HPP_
+#endif  // FINENAV_MPPI_CONTROLLER__CRITICS__COST_CRITIC_HPP_

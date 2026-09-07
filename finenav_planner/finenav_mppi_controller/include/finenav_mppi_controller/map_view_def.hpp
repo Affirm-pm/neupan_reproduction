@@ -5,6 +5,14 @@
 
 using Position3D = Eigen::Vector3d;
 namespace nav2_mppi_controller {
+    /**
+     * @brief Read-only map view used by MPPI critics.
+     *
+     * CostCritic's OpenMPDynamic execution calls getCost(), costAtPose(),
+     * and isCollision() concurrently on the same instance. Implementations used
+     * with this execution mode must therefore support concurrent const reads and must
+     * not mutate an unsynchronized cache from these methods.
+     */
     class IMapView {
     public:
         IMapView() =  default;

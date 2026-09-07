@@ -15,7 +15,7 @@
 #ifndef NAV2_MPPI_CONTROLLER__MODELS__PATH_HPP_
 #define NAV2_MPPI_CONTROLLER__MODELS__PATH_HPP_
 
-#include <xtensor/xtensor.hpp>
+#include "finenav_mppi_controller/models/eigen_types.hpp"
 
 namespace mppi::models
 {
@@ -26,18 +26,21 @@ namespace mppi::models
  */
 struct Path
 {
-  xt::xtensor<float, 1> x;
-  xt::xtensor<float, 1> y;
-  xt::xtensor<float, 1> yaws;
+  Vector x;
+  Vector y;
+  Vector yaws;
 
   /**
     * @brief Reset path data
     */
   void reset(unsigned int size)
   {
-    x = xt::zeros<float>({size});
-    y = xt::zeros<float>({size});
-    yaws = xt::zeros<float>({size});
+    x.resize(size);
+    y.resize(size);
+    yaws.resize(size);
+    x.setZero();
+    y.setZero();
+    yaws.setZero();
   }
 };
 

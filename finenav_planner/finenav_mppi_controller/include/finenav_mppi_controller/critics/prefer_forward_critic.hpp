@@ -22,7 +22,7 @@ namespace mppi::critics
 {
 
 /**
- * @class mppi::critics::ConstraintCritic
+ * @class mppi::critics::PreferForwardCritic
  * @brief Critic objective function for preferring forward motion
  */
 

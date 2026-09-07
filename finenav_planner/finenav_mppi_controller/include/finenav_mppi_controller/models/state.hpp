@@ -15,10 +15,10 @@
 #ifndef NAV2_MPPI_CONTROLLER__MODELS__STATE_HPP_
 #define NAV2_MPPI_CONTROLLER__MODELS__STATE_HPP_
 
-#include <xtensor/xtensor.hpp>
-
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+
+#include "finenav_mppi_controller/models/eigen_types.hpp"
 
 namespace mppi::models
 {
@@ -29,13 +29,13 @@ namespace mppi::models
  */
 struct State
 {
-  xt::xtensor<float, 2> vx;
-  xt::xtensor<float, 2> vy;
-  xt::xtensor<float, 2> wz;
+  BatchArray vx;
+  BatchArray vy;
+  BatchArray wz;
 
-  xt::xtensor<float, 2> cvx;
-  xt::xtensor<float, 2> cvy;
-  xt::xtensor<float, 2> cwz;
+  BatchArray cvx;
+  BatchArray cvy;
+  BatchArray cwz;
 
   geometry_msgs::msg::PoseStamped pose;
   geometry_msgs::msg::Twist speed;
@@ -45,13 +45,20 @@ struct State
     */
   void reset(unsigned int batch_size, unsigned int time_steps)
   {
-    vx = xt::zeros<float>({batch_size, time_steps});
-    vy = xt::zeros<float>({batch_size, time_steps});
-    wz = xt::zeros<float>({batch_size, time_steps});
+    vx.resize(batch_size, time_steps);
+    vy.resize(batch_size, time_steps);
+    wz.resize(batch_size, time_steps);
 
-    cvx = xt::zeros<float>({batch_size, time_steps});
-    cvy = xt::zeros<float>({batch_size, time_steps});
-    cwz = xt::zeros<float>({batch_size, time_steps});
+    cvx.resize(batch_size, time_steps);
+    cvy.resize(batch_size, time_steps);
+    cwz.resize(batch_size, time_steps);
+
+    vx.setZero();
+    vy.setZero();
+    wz.setZero();
+    cvx.setZero();
+    cvy.setZero();
+    cwz.setZero();
   }
 };
 }  // namespace mppi::models

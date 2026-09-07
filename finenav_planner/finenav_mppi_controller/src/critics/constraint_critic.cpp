@@ -20,6 +20,7 @@ using namespace nav2_mppi_controller;
 
 void ConstraintCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("ConstraintCritic");
   const auto & c = p.ConstraintCritic;
   enabled_ = c.enabled;
   power_   = static_cast<unsigned int>(c.cost_power);
@@ -39,40 +40,37 @@ void ConstraintCritic::initialize(const finenav_mppi_controller::Params & p)
 
 void ConstraintCritic::score(CriticData & data, const IMapView& map_view)
 {
-  using xt::evaluation_strategy::immediate;
   if (!this->enabled_) {
     return;
   }
-  auto sgn = xt::where(data.state.vx > 0.0, 1.0, -1.0);
-  auto vel_total = sgn * xt::sqrt(data.state.vx * data.state.vx + data.state.vy * data.state.vy);
-  auto out_of_max_bounds_motion = xt::maximum(vel_total - max_vel_, 0);
-  auto out_of_min_bounds_motion = xt::maximum(min_vel_ - vel_total, 0);
+  const auto sgn = data.state.vx.unaryExpr([](float value) {
+      return value > 0.0F ? 1.0F : -1.0F;
+    });
+  const auto vel_total = sgn * (data.state.vx.square() + data.state.vy.square()).sqrt();
+  const auto out_of_max_bounds_motion = (vel_total - max_vel_).max(0.0F);
+  const auto out_of_min_bounds_motion = (min_vel_ - vel_total).max(0.0F);
 
   auto acker = dynamic_cast<AckermannMotionModel *>(data.motion_model.get());
   if (acker != nullptr) {
     auto & vx = data.state.vx;
     auto & wz = data.state.wz;
-    auto out_of_turning_rad_motion = xt::maximum(
-      acker->getMinTurningRadius() - (xt::fabs(vx) / xt::fabs(wz)), 0.0);
+    // Match Nav2's #5855 fix: keep the Ackermann radius ratio finite when
+    // angular velocity is zero or very small.
+    constexpr float epsilon = 1e-6F;
+    const auto wz_safe = wz.abs().max(epsilon);
+    const auto out_of_turning_rad_motion = (acker->getMinTurningRadius() -
+      (vx.abs() / wz_safe)).max(0.0F);
 
-    data.costs += xt::pow(
-      xt::sum(
-        (std::move(out_of_max_bounds_motion) +
-        std::move(out_of_min_bounds_motion) +
-        std::move(out_of_turning_rad_motion)) *
-        data.model_dt, {1}, immediate) * weight_, power_);
+    data.costs += (((out_of_max_bounds_motion + out_of_min_bounds_motion +
+      out_of_turning_rad_motion) * data.model_dt).rowwise().sum() * weight_).pow(power_);
       RCLCPP_DEBUG(logger_, "[ConstraintCritic]: Scored");
 
     return;
   }
 
-  data.costs += xt::pow(
-    xt::sum(
-      (std::move(out_of_max_bounds_motion) +
-      std::move(out_of_min_bounds_motion)) *
-      data.model_dt, {1}, immediate) * weight_, power_);
+  data.costs += (((out_of_max_bounds_motion + out_of_min_bounds_motion) *
+    data.model_dt).rowwise().sum() * weight_).pow(power_);
     RCLCPP_DEBUG(logger_, "[ConstraintCritic]: Scored");
 }
 
 }  // namespace mppi::critics
-

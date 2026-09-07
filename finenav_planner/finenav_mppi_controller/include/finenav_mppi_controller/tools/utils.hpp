@@ -18,15 +18,12 @@
 
 #include <algorithm>
 #include <chrono>
-#include <string>
+#include <cmath>
 #include <limits>
 #include <memory>
+#include <string>
+#include <type_traits>
 #include <vector>
-
-#include <xtensor/xarray.hpp>
-#include <xtensor/xnorm.hpp>
-#include <xtensor/xmath.hpp>
-#include <xtensor/xview.hpp>
 
 #include "angles/angles.h"
 
@@ -35,10 +32,7 @@
 
 #include "geometry_msgs/msg/twist_stamped.hpp"
 #include "nav_msgs/msg/path.hpp"
-#include "visualization_msgs/msg/marker_array.hpp"
-
 #include "rclcpp/rclcpp.hpp"
-#include "rclcpp_lifecycle/lifecycle_node.hpp"
 
 
 #include "finenav_mppi_controller/models/optimizer_settings.hpp"
@@ -46,95 +40,10 @@
 #include "finenav_mppi_controller/models/path.hpp"
 #include "builtin_interfaces/msg/time.hpp"
 #include "finenav_mppi_controller/critic_data.hpp"
-#include <Eigen/Core>
+#include "finenav_mppi_controller/map_view_def.hpp"
 
-using Position3D = Eigen::Vector3d;
 namespace mppi::utils
 {
-using xt::evaluation_strategy::immediate;
-
-/**
- * @brief Convert data into pose
- * @param x X position
- * @param y Y position
- * @param z Z position
- * @return Pose object
- */
-inline geometry_msgs::msg::Pose createPose(double x, double y, double z)
-{
-  geometry_msgs::msg::Pose pose;
-  pose.position.x = x;
-  pose.position.y = y;
-  pose.position.z = z;
-  pose.orientation.w = 1;
-  pose.orientation.x = 0;
-  pose.orientation.y = 0;
-  pose.orientation.z = 0;
-  return pose;
-}
-
-/**
- * @brief Convert data into scale
- * @param x X scale
- * @param y Y scale
- * @param z Z scale
- * @return Scale object
- */
-inline geometry_msgs::msg::Vector3 createScale(double x, double y, double z)
-{
-  geometry_msgs::msg::Vector3 scale;
-  scale.x = x;
-  scale.y = y;
-  scale.z = z;
-  return scale;
-}
-
-/**
- * @brief Convert data into color
- * @param r Red component
- * @param g Green component
- * @param b Blue component
- * @param a Alpha component (transparency)
- * @return Color object
- */
-inline std_msgs::msg::ColorRGBA createColor(float r, float g, float b, float a)
-{
-  std_msgs::msg::ColorRGBA color;
-  color.r = r;
-  color.g = g;
-  color.b = b;
-  color.a = a;
-  return color;
-}
-
-/**
- * @brief Convert data into a Maarker
- * @param id Marker ID
- * @param pose Marker pose
- * @param scale Marker scale
- * @param color Marker color
- * @param frame Reference frame to use
- * @return Visualization Marker
- */
-inline visualization_msgs::msg::Marker createMarker(
-  int id, const geometry_msgs::msg::Pose & pose, const geometry_msgs::msg::Vector3 & scale,
-  const std_msgs::msg::ColorRGBA & color, const std::string & frame_id, const std::string & ns)
-{
-  using visualization_msgs::msg::Marker;
-  Marker marker;
-  marker.header.frame_id = frame_id;
-  marker.header.stamp = rclcpp::Time(0, 0);
-  marker.ns = ns;
-  marker.id = id;
-  marker.type = Marker::SPHERE;
-  marker.action = Marker::ADD;
-
-  marker.pose = pose;
-  marker.scale = scale;
-  marker.color = color;
-  return marker;
-}
-
 /**
  * @brief Convert data into TwistStamped
  * @param vx X velocity
@@ -192,49 +101,6 @@ inline models::Path toTensor(const nav_msgs::msg::Path & path)
 }
 
 /**
- * @brief Check if the robot pose is within the Goal Checker's tolerances to goal
- * @param global_checker Pointer to the goal checker
- * @param robot Pose of robot
- * @param path Path to retreive goal pose from
- * @return bool If robot is within goal checker tolerances to the goal
- */
-inline bool withinPositionGoalTolerance(
-  const geometry_msgs::msg::Pose & robot,
-  const models::Path & path)
-{
-  const auto goal_idx = path.x.shape(0) - 1;
-  const auto goal_x = path.x(goal_idx);
-  const auto goal_y = path.y(goal_idx);
-
-    geometry_msgs::msg::Pose pose_tolerance;
-    geometry_msgs::msg::Twist velocity_tolerance;
-
-    // 硬编码 pose_tolerance 的值
-    pose_tolerance.position.x = 0.1;
-    pose_tolerance.position.y = 0.1;
-    pose_tolerance.position.z = 0.1;
-    pose_tolerance.orientation.x = 0.0;
-    pose_tolerance.orientation.y = 0.0;
-    pose_tolerance.orientation.z = 0.0;
-    pose_tolerance.orientation.w = 1.0;
-
-
-    const auto pose_tolerance_sq = pose_tolerance.position.x * pose_tolerance.position.x;
-
-    auto dx = robot.position.x - goal_x;
-    auto dy = robot.position.y - goal_y;
-
-    auto dist_sq = dx * dx + dy * dy;
-
-    if (dist_sq < pose_tolerance_sq) {
-      return true;
-    }
-
-
-  return false;
-}
-
-/**
  * @brief Check if the robot pose is within tolerance to the goal
  * @param pose_tolerance Pose tolerance to use
  * @param robot Pose of robot
@@ -246,7 +112,7 @@ inline bool withinPositionGoalTolerance(
   const geometry_msgs::msg::Pose & robot,
   const models::Path & path)
 {
-  const auto goal_idx = path.x.shape(0) - 1;
+  const auto goal_idx = path.x.size() - 1;
   const auto goal_x = path.x(goal_idx);
   const auto goal_y = path.y(goal_idx);
 
@@ -265,17 +131,33 @@ inline bool withinPositionGoalTolerance(
 }
 
 /**
+  * @brief Normalize a scalar angle to the -M_PI to +M_PI interval
+  * @param angle Angle to normalize in radians
+  * @return Normalized angle in radians
+  */
+template<typename T>
+std::enable_if_t<std::is_floating_point_v<T>, T> normalize_angles(T angle)
+{
+  constexpr T pi = static_cast<T>(M_PI);
+  const T theta = std::fmod(angle + pi, static_cast<T>(2.0) * pi);
+  return theta <= T{0} ? theta + pi : theta - pi;
+}
+
+/**
   * @brief normalize
   * Normalizes the angle to be -M_PI circle to +M_PI circle
   * It takes and returns radians.
   * @param angles Angles to normalize
   * @return normalized angles
   */
-template<typename T>
-auto normalize_angles(const T & angles)
+template<typename Derived>
+auto normalize_angles(const Eigen::ArrayBase<Derived> & angles)
 {
-  auto && theta = xt::eval(xt::fmod(angles + M_PI, 2.0 * M_PI));
-  return xt::eval(xt::where(theta <= 0.0, theta + M_PI, theta - M_PI));
+  const auto theta = (angles + static_cast<float>(M_PI)).unaryExpr(
+    [](float value) {return std::fmod(value, static_cast<float>(2.0 * M_PI));}).eval();
+  return (theta <= 0.0F).select(
+    theta + static_cast<float>(M_PI),
+    theta - static_cast<float>(M_PI)).eval();
 }
 
 /**
@@ -307,23 +189,17 @@ auto shortest_angular_distance(
  */
 inline size_t findPathFurthestReachedPoint(const CriticData & data)
 {
-  const auto traj_x = xt::view(data.trajectories.x, xt::all(), -1, xt::newaxis());
-  const auto traj_y = xt::view(data.trajectories.y, xt::all(), -1, xt::newaxis());
-
-  const auto dx = data.path.x - traj_x;
-  const auto dy = data.path.y - traj_y;
-
-  const auto dists = dx * dx + dy * dy;
-
   size_t max_id_by_trajectories = 0, min_id_by_path = 0;
   float min_distance_by_path = std::numeric_limits<float>::max();
   float cur_dist = 0.0f;
 
-  for (size_t i = 0; i < dists.shape(0); i++) {
+  for (Eigen::Index i = 0; i < data.trajectories.x.rows(); i++) {
     min_id_by_path = 0;
     min_distance_by_path = std::numeric_limits<float>::max();
-    for (size_t j = 0; j < dists.shape(1); j++) {
-      cur_dist = dists(i, j);
+    for (Eigen::Index j = 0; j < data.path.x.size(); j++) {
+      const auto dx = data.path.x(j) - data.trajectories.x(i, data.trajectories.x.cols() - 1);
+      const auto dy = data.path.y(j) - data.trajectories.y(i, data.trajectories.y.cols() - 1);
+      cur_dist = dx * dx + dy * dy;
       if (cur_dist < min_distance_by_path) {
         min_distance_by_path = cur_dist;
         min_id_by_path = j;
@@ -349,7 +225,7 @@ inline size_t findPathTrajectoryInitialPoint(const CriticData & data)
 
   float min_distance_by_path = std::numeric_limits<float>::max();
   size_t min_id = 0;
-  for (size_t j = 0; j < dists.shape(0); j++) {
+  for (Eigen::Index j = 0; j < dists.size(); j++) {
     if (dists(j) < min_distance_by_path) {
       min_distance_by_path = dists(j);
       min_id = j;
@@ -379,7 +255,7 @@ inline void findPathCosts(
   CriticData & data,
   const MapView& map_view)
 {
-  const size_t path_segments_count = data.path.x.shape(0) - 1;
+  const size_t path_segments_count = data.path.x.size() - 1;
   data.path_pts_valid = std::vector<bool>(path_segments_count, false);
   for (unsigned int idx = 0; idx < path_segments_count; idx++) {
     const auto path_x = data.path.x(idx);
@@ -455,244 +331,29 @@ inline float posePointAngle(
 }
 
 /**
- * @brief Apply Savisky-Golay filter to optimal trajectory
- * @param control_sequence Sequence to apply filter to
- * @param control_history Recent set of controls for edge-case handling
- * @param Settings Settings to use
- */
-inline void savitskyGolayFilter(
-  models::ControlSequence & control_sequence,
-  std::array<mppi::models::Control, 4> & control_history,
-  const models::OptimizerSettings & settings)
-{
-  // Savitzky-Golay Quadratic, 9-point Coefficients
-  xt::xarray<float> filter = {-21.0, 14.0, 39.0, 54.0, 59.0, 54.0, 39.0, 14.0, -21.0};
-  filter /= 231.0;
-
-  const unsigned int num_sequences = control_sequence.vx.shape(0) - 1;
-
-  // Too short to smooth meaningfully
-  if (num_sequences < 20) {
-    return;
-  }
-
-  auto applyFilter = [&](const xt::xarray<float> & data) -> float {
-      return xt::sum(data * filter, {0}, immediate)();
-    };
-
-  auto applyFilterOverAxis =
-    [&](xt::xtensor<float, 1> & sequence,
-      const float hist_0, const float hist_1, const float hist_2, const float hist_3) -> void
-    {
-      unsigned int idx = 0;
-      sequence(idx) = applyFilter(
-      {
-        hist_0,
-        hist_1,
-        hist_2,
-        hist_3,
-        sequence(idx),
-        sequence(idx + 1),
-        sequence(idx + 2),
-        sequence(idx + 3),
-        sequence(idx + 4)});
-
-      idx++;
-      sequence(idx) = applyFilter(
-      {
-        hist_1,
-        hist_2,
-        hist_3,
-        sequence(idx - 1),
-        sequence(idx),
-        sequence(idx + 1),
-        sequence(idx + 2),
-        sequence(idx + 3),
-        sequence(idx + 4)});
-
-      idx++;
-      sequence(idx) = applyFilter(
-      {
-        hist_2,
-        hist_3,
-        sequence(idx - 2),
-        sequence(idx - 1),
-        sequence(idx),
-        sequence(idx + 1),
-        sequence(idx + 2),
-        sequence(idx + 3),
-        sequence(idx + 4)});
-
-      idx++;
-      sequence(idx) = applyFilter(
-      {
-        hist_3,
-        sequence(idx - 3),
-        sequence(idx - 2),
-        sequence(idx - 1),
-        sequence(idx),
-        sequence(idx + 1),
-        sequence(idx + 2),
-        sequence(idx + 3),
-        sequence(idx + 4)});
-
-      for (idx = 4; idx != num_sequences - 4; idx++) {
-        sequence(idx) = applyFilter(
-        {
-          sequence(idx - 4),
-          sequence(idx - 3),
-          sequence(idx - 2),
-          sequence(idx - 1),
-          sequence(idx),
-          sequence(idx + 1),
-          sequence(idx + 2),
-          sequence(idx + 3),
-          sequence(idx + 4)});
-      }
-
-      idx++;
-      sequence(idx) = applyFilter(
-      {
-        sequence(idx - 4),
-        sequence(idx - 3),
-        sequence(idx - 2),
-        sequence(idx - 1),
-        sequence(idx),
-        sequence(idx + 1),
-        sequence(idx + 2),
-        sequence(idx + 3),
-        sequence(idx + 3)});
-
-      idx++;
-      sequence(idx) = applyFilter(
-      {
-        sequence(idx - 4),
-        sequence(idx - 3),
-        sequence(idx - 2),
-        sequence(idx - 1),
-        sequence(idx),
-        sequence(idx + 1),
-        sequence(idx + 2),
-        sequence(idx + 2),
-        sequence(idx + 2)});
-
-      idx++;
-      sequence(idx) = applyFilter(
-      {
-        sequence(idx - 4),
-        sequence(idx - 3),
-        sequence(idx - 2),
-        sequence(idx - 1),
-        sequence(idx),
-        sequence(idx + 1),
-        sequence(idx + 1),
-        sequence(idx + 1),
-        sequence(idx + 1)});
-
-      idx++;
-      sequence(idx) = applyFilter(
-      {
-        sequence(idx - 4),
-        sequence(idx - 3),
-        sequence(idx - 2),
-        sequence(idx - 1),
-        sequence(idx),
-        sequence(idx),
-        sequence(idx),
-        sequence(idx),
-        sequence(idx)});
-    };
-
-  // Filter trajectories
-  applyFilterOverAxis(
-    control_sequence.vx, control_history[0].vx,
-    control_history[1].vx, control_history[2].vx, control_history[3].vx);
-  applyFilterOverAxis(
-    control_sequence.vy, control_history[0].vy,
-    control_history[1].vy, control_history[2].vy, control_history[3].vy);
-  applyFilterOverAxis(
-    control_sequence.wz, control_history[0].wz,
-    control_history[1].wz, control_history[2].wz, control_history[3].wz);
-
-  // Update control history
-  unsigned int offset = settings.shift_control_sequence ? 1 : 0;
-  control_history[0] = control_history[1];
-  control_history[1] = control_history[2];
-  control_history[2] = control_history[3];
-  control_history[3] = {
-    control_sequence.vx(offset),
-    control_sequence.vy(offset),
-    control_sequence.wz(offset)};
-}
-
-/**
- * @brief Find the iterator of the first pose at which there is an inversion on the path,
- * @param path to check for inversion
- * @return the first point after the inversion found in the path
- */
-inline unsigned int findFirstPathInversion(nav_msgs::msg::Path & path)
-{
-  // At least 3 poses for a possible inversion
-  if (path.poses.size() < 3) {
-    return path.poses.size();
-  }
-
-  // Iterating through the path to determine the position of the path inversion
-  for (unsigned int idx = 1; idx < path.poses.size() - 1; ++idx) {
-    // We have two vectors for the dot product OA and AB. Determining the vectors.
-    float oa_x = path.poses[idx].pose.position.x -
-      path.poses[idx - 1].pose.position.x;
-    float oa_y = path.poses[idx].pose.position.y -
-      path.poses[idx - 1].pose.position.y;
-    float ab_x = path.poses[idx + 1].pose.position.x -
-      path.poses[idx].pose.position.x;
-    float ab_y = path.poses[idx + 1].pose.position.y -
-      path.poses[idx].pose.position.y;
-
-    // Checking for the existance of cusp, in the path, using the dot product.
-    float dot_product = (oa_x * ab_x) + (oa_y * ab_y);
-    if (dot_product < 0.0) {
-      return idx + 1;
-    }
-  }
-
-  return path.poses.size();
-}
-
-/**
- * @brief Find and remove poses after the first inversion in the path
- * @param path to check for inversion
- * @return The location of the inversion, return 0 if none exist
- */
-inline unsigned int removePosesAfterFirstInversion(nav_msgs::msg::Path & path)
-{
-  nav_msgs::msg::Path cropped_path = path;
-  const unsigned int first_after_inversion = findFirstPathInversion(cropped_path);
-  if (first_after_inversion == path.poses.size()) {
-    return 0u;
-  }
-
-  cropped_path.poses.erase(
-    cropped_path.poses.begin() + first_after_inversion, cropped_path.poses.end());
-  path = cropped_path;
-  return first_after_inversion;
-}
-
-/**
  * @brief Compare to trajectory points to find closest path point along integrated distances
  * @param vec Vect to check
  * @return dist Distance to look for
  */
 inline size_t findClosestPathPt(const std::vector<float> & vec, float dist, size_t init = 0)
 {
-  auto iter = std::lower_bound(vec.begin() + init, vec.end(), dist);
-  if (iter == vec.begin() + init) {
+  if (vec.empty()) {
     return 0;
   }
-  if (dist - *(iter - 1) < *iter - dist) {
-    return iter - 1 - vec.begin();
+
+  const size_t start_index = std::min(init, vec.size() - 1);
+  float previous_distance = start_index != 0 ? vec[start_index] : 0.0F;
+  for (size_t index = start_index + 1; index < vec.size(); ++index) {
+    const float current_distance = vec[index];
+    if (current_distance > dist) {
+      if (dist - previous_distance < current_distance - dist) {
+        return index - 1;
+      }
+      return index;
+    }
+    previous_distance = current_distance;
   }
-  return iter - vec.begin();
+  return vec.size() - 1;
 }
 
 }  // namespace mppi::utils

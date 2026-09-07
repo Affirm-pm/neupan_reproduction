@@ -24,6 +24,7 @@ OBBCollisionModel::OBBCollisionModel(const Vector3D& min, const Vector3D& max,
     min_ = min;
     max_ = max;
     outer_diameter_ = (max_ - min_).norm();
+    buildLocalEdgePoints();
 }
 
 double OBBCollisionModel::getOuterDiameter() const {
@@ -85,9 +86,18 @@ void OBBCollisionModel::precompute(const Pose& pose) {
 
 void OBBCollisionModel::precomputeEdge(const Pose& pose) {
     edge_cached_points_.clear();
+    edge_cached_points_.reserve(local_edge_points_.size());
+    const Pose body_to_world = pose * local_pose_;
+
+    for (const auto& local_point : local_edge_points_) {
+        edge_cached_points_.push_back(body_to_world * local_point);
+    }
+}
+
+void OBBCollisionModel::buildLocalEdgePoints() {
+    local_edge_points_.clear();
 
     const double step = policy_.step;
-    const Pose body_to_world = pose * local_pose_;
 
     // OBB 共 12 条棱：对每个轴 a，沿 a 方向的棱由另外两轴各取 min/max 交叉组合固定
     // 轴旋转技巧：u = (a+1)%3，v = (a+2)%3
@@ -108,7 +118,7 @@ void OBBCollisionModel::precomputeEdge(const Pose& pose) {
                     pt[a] = t;
                     pt[u] = u_sides[su];
                     pt[v] = v_sides[sv];
-                    edge_cached_points_.push_back(body_to_world * pt);
+                    local_edge_points_.push_back(pt);
                 }
                 // 补全终点（浮点步进可能漏掉 max_[a]）
                 // 当棱长为 0 时 min_[a]==max_[a]，主循环已覆盖该点，无需再补
@@ -117,7 +127,7 @@ void OBBCollisionModel::precomputeEdge(const Pose& pose) {
                     endpoint[a] = max_[a];
                     endpoint[u] = u_sides[su];
                     endpoint[v] = v_sides[sv];
-                    edge_cached_points_.push_back(body_to_world * endpoint);
+                    local_edge_points_.push_back(endpoint);
                 }
             }
         }

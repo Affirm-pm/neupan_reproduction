@@ -20,6 +20,7 @@ using namespace nav2_mppi_controller;
 
 void VelocityDeadbandCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("VelocityDeadbandCritic");
   const auto & c = p.VelocityDeadbandCritic;
   enabled_ = c.enabled;
   power_   = static_cast<unsigned int>(c.cost_power);
@@ -41,62 +42,33 @@ void VelocityDeadbandCritic::initialize(const finenav_mppi_controller::Params & 
 
 void VelocityDeadbandCritic::score(CriticData & data, const IMapView& map_view)
 {
-  using xt::evaluation_strategy::immediate;
-
   if (!this->enabled_) {
     return;
   }
 
   auto & vx = data.state.vx;
   auto & wz = data.state.wz;
+  const auto vx_penalty = (std::fabs(deadband_velocities_.at(0)) - vx.abs()).max(0.0F);
+  const auto wz_penalty = (std::fabs(deadband_velocities_.at(2)) - wz.abs()).max(0.0F);
 
   if (data.motion_model->isHolonomic()) {
     auto & vy = data.state.vy;
+    const auto vy_penalty = (std::fabs(deadband_velocities_.at(1)) - vy.abs()).max(0.0F);
+    const auto total_penalty = vx_penalty + vy_penalty + wz_penalty;
     if (power_ > 1u) {
-      data.costs += xt::pow(
-        xt::sum(
-          std::move(
-            xt::maximum(fabs(deadband_velocities_.at(0)) - xt::fabs(vx), 0) +
-            xt::maximum(fabs(deadband_velocities_.at(1)) - xt::fabs(vy), 0) +
-            xt::maximum(fabs(deadband_velocities_.at(2)) - xt::fabs(wz), 0)) *
-          data.model_dt,
-          {1}, immediate) *
-        weight_,
-        power_);
+      data.costs += ((total_penalty * data.model_dt).rowwise().sum() * weight_).pow(power_);
     } else {
-      data.costs += xt::sum(
-        (std::move(
-          xt::maximum(fabs(deadband_velocities_.at(0)) - xt::fabs(vx), 0) +
-          xt::maximum(fabs(deadband_velocities_.at(1)) - xt::fabs(vy), 0) +
-          xt::maximum(fabs(deadband_velocities_.at(2)) - xt::fabs(wz), 0))) *
-        data.model_dt,
-        {1}, immediate) *
-        weight_;
+      data.costs += (total_penalty * data.model_dt).rowwise().sum() * weight_;
     }
     return;
   }
 
   if (power_ > 1u) {
-    data.costs += xt::pow(
-      xt::sum(
-        std::move(
-          xt::maximum(fabs(deadband_velocities_.at(0)) - xt::fabs(vx), 0) +
-          xt::maximum(fabs(deadband_velocities_.at(2)) - xt::fabs(wz), 0)) *
-        data.model_dt,
-        {1}, immediate) *
-      weight_,
-      power_);
+    data.costs += (((vx_penalty + wz_penalty) * data.model_dt).rowwise().sum() * weight_).pow(power_);
   } else {
-    data.costs += xt::sum(
-      (std::move(
-        xt::maximum(fabs(deadband_velocities_.at(0)) - xt::fabs(vx), 0) +
-        xt::maximum(fabs(deadband_velocities_.at(2)) - xt::fabs(wz), 0))) *
-      data.model_dt,
-      {1}, immediate) *
-      weight_;
+    data.costs += ((vx_penalty + wz_penalty) * data.model_dt).rowwise().sum() * weight_;
   }
   return;
 }
 
 }  // namespace mppi::critics
-

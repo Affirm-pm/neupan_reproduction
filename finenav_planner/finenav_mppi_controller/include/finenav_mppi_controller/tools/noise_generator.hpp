@@ -20,9 +20,7 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-
-#include <xtensor/xtensor.hpp>
-#include <xtensor/xview.hpp>
+#include <random>
 
 #include "finenav_mppi_controller/models/optimizer_settings.hpp"
 //#include "finenav_mppi_controller/tools/parameters_handler.hpp"
@@ -48,12 +46,12 @@ public:
    * @brief Initialize noise generator with settings and model types
    * @param settings Settings of controller
    * @param is_holonomic If base is holonomic
-   * @param name Namespace for configs
-   * @param param_handler Get parameters util
+   * @param regenerate_noises Whether to generate the next noise distribution asynchronously
    */
   void initialize(
     mppi::models::OptimizerSettings & settings,
-    bool is_holonomic);
+    bool is_holonomic,
+    bool regenerate_noises);
 
   /**
    * @brief Shutdown noise generator thread
@@ -94,9 +92,9 @@ protected:
    */
   void generateNoisedControls();
 
-  xt::xtensor<float, 2> noises_vx_;
-  xt::xtensor<float, 2> noises_vy_;
-  xt::xtensor<float, 2> noises_wz_;
+  models::BatchArray noises_vx_;
+  models::BatchArray noises_vy_;
+  models::BatchArray noises_wz_;
 
   mppi::models::OptimizerSettings settings_;
   bool is_holonomic_;
@@ -104,6 +102,8 @@ protected:
   std::thread noise_thread_;
   std::condition_variable noise_cond_;
   std::mutex noise_lock_;
+  std::mt19937 random_engine_{42};
+  bool deterministic_benchmark_noise_{false};
   bool active_{false}, ready_{false}, regenerate_noises_{false};
 };
 

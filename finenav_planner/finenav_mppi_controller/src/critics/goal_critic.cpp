@@ -19,10 +19,9 @@ namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
-using xt::evaluation_strategy::immediate;
-
 void GoalCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("GoalCritic");
   const auto & c = p.GoalCritic;
   enabled_               = c.enabled;
   power_                 = static_cast<unsigned int>(c.cost_power);
@@ -43,21 +42,16 @@ void GoalCritic::score(CriticData & data, const IMapView& map_view)
     return;
   }
 
-  const auto goal_idx = data.path.x.shape(0) - 1;
+  const auto goal_idx = data.path.x.size() - 1;
 
   const auto goal_x = data.path.x(goal_idx);
   const auto goal_y = data.path.y(goal_idx);
 
-  const auto traj_x = xt::view(data.trajectories.x, xt::all(), xt::all());
-  const auto traj_y = xt::view(data.trajectories.y, xt::all(), xt::all());
+  const auto dists = ((data.trajectories.x - goal_x).square() +
+    (data.trajectories.y - goal_y).square()).sqrt();
 
-  auto dists = xt::sqrt(
-    xt::pow(traj_x - goal_x, 2) +
-    xt::pow(traj_y - goal_y, 2));
-
-  data.costs += xt::pow(xt::mean(dists, {1}, immediate) * weight_, power_);
+  data.costs += (dists.rowwise().mean() * weight_).pow(power_);
     RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics
-

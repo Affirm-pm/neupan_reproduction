@@ -15,6 +15,8 @@
 #ifndef NAV2_MPPI_CONTROLLER__MODELS__CONSTRAINTS_HPP_
 #define NAV2_MPPI_CONTROLLER__MODELS__CONSTRAINTS_HPP_
 
+#include <limits>
+
 namespace mppi::models
 {
 
@@ -24,10 +26,15 @@ namespace mppi::models
  */
 struct ControlConstraints
 {
-  float vx_max;
-  float vx_min;
-  float vy;
-  float wz;
+  float vx_max{0.0F};
+  float vx_min{0.0F};
+  float vy{0.0F};
+  float wz{0.0F};
+  float ax_min{-std::numeric_limits<float>::infinity()};
+  float ax_max{std::numeric_limits<float>::infinity()};
+  float ay_min{-std::numeric_limits<float>::infinity()};
+  float ay_max{std::numeric_limits<float>::infinity()};
+  float az_max{std::numeric_limits<float>::infinity()};
 };
 
 /**

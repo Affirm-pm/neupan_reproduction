@@ -6,6 +6,7 @@
 
 #include "finenav_collision_model/collision_model.hpp"
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace finenav {
@@ -161,6 +162,20 @@ public:
     int checkCostEdge(const Pose& pose, CR&& rule);
 
     /**
+     * @brief 无状态棱线碰撞检测
+     * @details 使用构造时生成的局部坐标采样点，在当前调用中完成坐标变换，不修改共享缓存。
+     */
+    template <CollisionRule CR>
+    bool checkCollisionEdgeStateless(const Pose& pose, CR&& rule) const;
+
+    /**
+     * @brief 无状态棱线代价检测
+     * @details 使用构造时生成的局部坐标采样点，在当前调用中完成坐标变换，不修改共享缓存。
+     */
+    template <CostRule CR>
+    int checkCostEdgeStateless(const Pose& pose, CR&& rule) const;
+
+    /**
      * @brief 获取 OBB 外径
      * @details 外径定义为包围该 OBB 的最小球直径，数值等于 OBB 空间对角线长度。
      * @return OBB 外径
@@ -168,6 +183,8 @@ public:
     double getOuterDiameter() const;
 
 private:
+    void buildLocalEdgePoints();
+
     Vector3D size_;           ///< OBB 尺寸
     double   outer_diameter_; ///< OBB 外径（空间对角线长度）
     Vector3D min_;            ///< OBB 自身坐标系下的最小边界
@@ -177,6 +194,7 @@ private:
 
     std::vector<Position3D> cached_points_;      ///< 缓存的世界系面采样点（由 precompute 填充）
     std::vector<Position3D> edge_cached_points_; ///< 缓存的世界系棱线采样点（由 precomputeEdge 填充）
+    std::vector<Position3D> local_edge_points_;  ///< 构造时生成的 OBB 局部坐标系棱线采样点
 };
 
 template <CollisionRule CR>
@@ -261,6 +279,30 @@ template <CostRule CR>
 int OBBCollisionModel::checkCostEdge(const Pose& pose, CR&& rule) {
     precomputeEdge(pose);
     return checkCostEdge(std::forward<CR>(rule));
+}
+
+template <CollisionRule CR>
+bool OBBCollisionModel::checkCollisionEdgeStateless(const Pose& pose, CR&& rule) const {
+    const Pose body_to_world = pose * local_pose_;
+    for (const auto& local_point : local_edge_points_) {
+        if (rule(body_to_world * local_point)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template <CostRule CR>
+int OBBCollisionModel::checkCostEdgeStateless(const Pose& pose, CR&& rule) const {
+    const Pose body_to_world = pose * local_pose_;
+    int max_cost = 0;
+    for (const auto& local_point : local_edge_points_) {
+        const int cost = rule(body_to_world * local_point);
+        if (cost > max_cost) {
+            max_cost = cost;
+        }
+    }
+    return max_cost;
 }
 
 } // namespace finenav

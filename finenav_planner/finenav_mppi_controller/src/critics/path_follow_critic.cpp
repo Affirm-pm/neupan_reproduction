@@ -14,15 +14,13 @@
 
 #include "finenav_mppi_controller/critics/path_follow_critic.hpp"
 
-#include <xtensor/xmath.hpp>
-#include <xtensor/xsort.hpp>
-
 namespace mppi::critics
 {
 using namespace nav2_mppi_controller;
 
 void PathFollowCritic::initialize(const finenav_mppi_controller::Params & p)
 {
+  logger_ = rclcpp::get_logger("PathFollowCritic");
   const auto & c = p.PathFollowCritic;
   enabled_               = c.enabled;
   power_                 = static_cast<unsigned int>(c.cost_power);
@@ -33,14 +31,14 @@ void PathFollowCritic::initialize(const finenav_mppi_controller::Params & p)
 
 void PathFollowCritic::score(CriticData & data, const IMapView& map_view)
 {
-  if (!this->enabled_ || data.path.x.shape(0) < 2 ||
+  if (!this->enabled_ || data.path.x.size() < 2 ||
     utils::withinPositionGoalTolerance(threshold_to_consider_, data.state.pose.pose, data.path))
   {
     return;
   }
   utils::setPathFurthestPointIfNotSet(data);
   utils::setPathCostsIfNotSet(data, map_view);
-  const size_t path_size = data.path.x.shape(0) - 1;
+  const size_t path_size = data.path.x.size() - 1;
 
   auto offseted_idx = std::min(
     *data.furthest_reached_path_point + offset_from_furthest_, path_size-1);
@@ -57,16 +55,14 @@ void PathFollowCritic::score(CriticData & data, const IMapView& map_view)
   const auto path_x = data.path.x(offseted_idx);
   const auto path_y = data.path.y(offseted_idx);
 
-  const auto last_x = xt::view(data.trajectories.x, xt::all(), -1);
-  const auto last_y = xt::view(data.trajectories.y, xt::all(), -1);
+  const auto last_x = data.trajectories.x.col(data.trajectories.x.cols() - 1);
+  const auto last_y = data.trajectories.y.col(data.trajectories.y.cols() - 1);
 
-  auto dists = xt::sqrt(
-    xt::pow(last_x - path_x, 2) +
-    xt::pow(last_y - path_y, 2));
+  const models::Vector dists = ((last_x.array() - path_x).square() +
+    (last_y.array() - path_y).square()).sqrt();
 
-  data.costs += xt::pow(weight_ * std::move(dists), power_);
+  data.costs += (weight_ * dists).pow(power_);
     RCLCPP_DEBUG(logger_, "Scored");
 }
 
 }  // namespace mppi::critics
-

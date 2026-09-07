@@ -15,16 +15,21 @@
 #ifndef NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_
 #define NAV2_MPPI_CONTROLLER__CONTROLLER_HPP_
 
-#include <string>
+#include <atomic>
+#include <cmath>
+#include <cstdint>
 #include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 //#include "finenav_mppi_controller/tools/path_handler.hpp"
-//#include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
+#include "finenav_mppi_controller/tools/trajectory_visualizer.hpp"
 #include "finenav_mppi_controller/models/constraints.hpp"
 #include "finenav_mppi_controller/tools/utils.hpp"
 
 #include "rclcpp/rclcpp.hpp"
-
 
 
 #include "finenav_core/plan/planner_concept.hpp"
@@ -52,6 +57,17 @@ public:
     */
     MPPIController() = default;
 
+    void setLogger(const rclcpp::Logger& logger) {
+        logger_ = logger;
+    }
+
+    void setVisualizer(finenav::viz::FineNavVisualizer& visualizer) {
+        framework_visualizer_ = &visualizer;
+        if (configured_ && visualizer_enabled_) {
+            visualizer_.configure(*framework_visualizer_, visualizer_config_);
+        }
+    }
+
     static constexpr finenav::core::IOProfile InputProfile = {
         .pose = true,
         .vel  = false,
@@ -69,19 +85,64 @@ public:
     using Context = finenav::core::PlanningContext<MPPIController>;
     using ConfigType = finenav_mppi_controller::Params;
     void configure(const ConfigType& params) {              //应该传入参数 因测试先去除
+        if (params.CostCritic.num_threads <= 0 || params.CostCritic.chunk_size <= 0) {
+            throw std::invalid_argument(
+                "CostCritic.num_threads and CostCritic.chunk_size must be greater than zero");
+        }
+
+        if (params.visualize &&
+            (params.visualizer_trajectory_step <= 0 || params.visualizer_time_step <= 0 ||
+            params.visualizer_max_trajectories <= 0 || params.visualizer_publish_rate <= 0.0)) {
+            throw std::invalid_argument(
+                "Visualizer sampling, maximum trajectories, and publish rate must be greater "
+                "than zero");
+        }
+
+        if (!std::isfinite(params.ax_min) || !std::isfinite(params.ax_max) ||
+            !std::isfinite(params.ay_min) || !std::isfinite(params.ay_max) ||
+            !std::isfinite(params.az_max) || params.ax_min > 0.0 ||
+            params.ax_max < 0.0 || params.ay_min > 0.0 || params.ay_max < 0.0 ||
+            params.az_max < 0.0) {
+            throw std::invalid_argument(
+                "Acceleration limits must satisfy ax_min <= 0 <= ax_max, "
+                "ay_min <= 0 <= ay_max, and az_max >= 0");
+        }
 
         registerCritic(std::make_unique<critics::ConstraintCritic>());
-        registerCritic(std::make_unique<critics::CostCritic>());
+        critics::CostCriticExecutionOptions cost_critic_options;
+        cost_critic_options.num_threads = static_cast<std::size_t>(
+          params.CostCritic.num_threads);
+        cost_critic_options.chunk_size = static_cast<std::size_t>(
+          params.CostCritic.chunk_size);
+        registerCritic(std::make_unique<critics::CostCritic>(cost_critic_options));
         registerCritic(std::make_unique<critics::GoalAngleCritic>());
         registerCritic(std::make_unique<critics::GoalCritic>());
-        // registerCritic(std::make_unique<critics::ObstaclesCritic>());
         registerCritic(std::make_unique<critics::PathAlignCritic>());
-        registerCritic(std::make_unique<critics::PathAlignLegacyCritic>());
         registerCritic(std::make_unique<critics::PathAngleCritic>());
         registerCritic(std::make_unique<critics::PathFollowCritic>());
         registerCritic(std::make_unique<critics::PreferForwardCritic>());
         registerCritic(std::make_unique<critics::TwirlingCritic>());
         registerCritic(std::make_unique<critics::VelocityDeadbandCritic>());
+
+        visualizer_enabled_ = params.visualize;
+        visualizer_config_.frame_id = params.visualizer_frame_id;
+        visualizer_config_.trajectory_topic = params.visualizer_trajectory_topic;
+        visualizer_config_.optimal_path_topic = params.visualizer_optimal_path_topic;
+        visualizer_config_.reference_path_topic = params.visualizer_reference_path_topic;
+        visualizer_config_.trajectory_step = static_cast<std::size_t>(
+          params.visualizer_trajectory_step);
+        visualizer_config_.time_step = static_cast<std::size_t>(params.visualizer_time_step);
+        visualizer_config_.max_trajectories = static_cast<std::size_t>(
+          params.visualizer_max_trajectories);
+        visualizer_config_.publish_rate = params.visualizer_publish_rate;
+        if (params.visualize) {
+            if (framework_visualizer_) {
+                visualizer_.configure(*framework_visualizer_, visualizer_config_);
+            }
+        } else {
+            visualization_generation_.fetch_add(1, std::memory_order_relaxed);
+            visualizer_.reset();
+        }
 
         std::cout<<"[nav2_mppi_controller] Critics registered. Initializing optimizer..."<<std::endl;
         std::cout<<"[nav2_mppi_controller] Number of critics: "<<critics_.size()<<std::endl;
@@ -91,10 +152,15 @@ public:
             critics_,
             params
             );
+        configured_ = true;
        //TODO:初始化过程需要完善
     }
 
      std::optional<finenav::core::Trajectory<OutputProfile>>plan(const finenav::core::PlanningContext<MPPIController>& ctx, const IMapView& map_view) {
+        if (ctx.ref_traj.poses.empty()) {
+            return std::nullopt;
+        }
+
         using Clock = std::chrono::steady_clock;
         using Ms    = std::chrono::duration<double, std::milli>;
         const auto t_plan_start = Clock::now();
@@ -106,39 +172,34 @@ public:
         this->setPlan(path);
 
         geometry_msgs::msg::PoseStamped start_pose_stamped;
-        start_pose_stamped.pose.position.x = robot_state.position.x();
-        start_pose_stamped.pose.position.y = robot_state.position.y();
-        start_pose_stamped.pose.position.z = robot_state.position.z();
-        start_pose_stamped.pose.orientation.w = robot_state.orientation.w();
-        start_pose_stamped.pose.orientation.x = robot_state.orientation.x();
-        start_pose_stamped.pose.orientation.y = robot_state.orientation.y();
-        start_pose_stamped.pose.orientation.z = robot_state.orientation.z();
+        start_pose_stamped.pose = robot_state.pose;
         start_pose_stamped.header.stamp = rclcpp::Clock().now();
         start_pose_stamped.header.frame_id = "map";
 
-        geometry_msgs::msg::Twist twist;
-        twist.linear.x  = robot_state.linear_velocity.x();
-        twist.linear.y  = robot_state.linear_velocity.y();
-        twist.linear.z  = robot_state.linear_velocity.z();
-        twist.angular.x = robot_state.angular_velocity.x();
-        twist.angular.y = robot_state.angular_velocity.y();
-        twist.angular.z = robot_state.angular_velocity.z();
+        const auto& twist = robot_state.twist;
 
-        const auto t_optimize_start= Clock::now();
-        computeVelocityCommands(
+        const auto t_optimize_start = Clock::now();
+        auto optimization_result = computeVelocityCommands(
             start_pose_stamped,
             twist,
-            map_view
-            );
+            map_view);
         const double ms_optimize = Ms(Clock::now() - t_optimize_start).count();
+
+        if (visualizer_enabled_) {
+            visualizer_.submit(
+                optimizer_.getGeneratedTrajectories(),
+                optimizer_.getCriticCostBreakdown(),
+                optimization_result.trajectory,
+                path,
+                visualization_generation_.load(std::memory_order_relaxed));
+        }
 
         // 装填输出轨迹
 
-    // 获取最优轨迹
-    auto optimized_trajectory = optimizer_.getOptimizedTrajectory();
-    auto control_seq = optimizer_.getControlSequence();
+    const auto& optimized_trajectory = optimization_result.trajectory;
+    const auto& control_seq = optimization_result.controls;
     // 填充轨迹点 (pose + twist)
-    const size_t n = optimized_trajectory.shape(0);
+    const size_t n = optimized_trajectory.rows();
     traj.poses.reserve(n);
     traj.twists.reserve(n);
     for (size_t i = 0; i < n; ++i) {
@@ -164,7 +225,7 @@ public:
     {
         static rclcpp::Clock throttle_clk{RCL_STEADY_TIME};
         RCLCPP_INFO_THROTTLE(
-            rclcpp::get_logger("MPPIController"), throttle_clk, 2000,
+            logger_, throttle_clk, 2000,
             "\n[MPPIController] plan() timing\n"
             "  evalControl (optimize) : %7.2f ms\n"
             "  total plan()           : %7.2f ms",
@@ -195,6 +256,12 @@ public:
    *        a zero warm-start, independent of any previous planning direction.
    */
   void reset() {
+      // Called by ControlLayer at the episode boundary on the same worker as plan().
+      const auto generation = visualization_generation_.fetch_add(
+        1, std::memory_order_relaxed) + 1;
+      if (visualizer_enabled_) {
+        visualizer_.clear(generation);
+      }
       optimizer_.reset();
   }
 
@@ -248,14 +315,14 @@ protected:
     * @param goal_checker Pointer to the goal checker for awareness if completed task
     */
 	// geometry_msgs::msg::TwistStamped computeVelocityCommands(
-    void computeVelocityCommands(
+    OptimizationResult computeVelocityCommands(
     	const geometry_msgs::msg::PoseStamped & robot_pose,
   		const geometry_msgs::msg::Twist & robot_speed,
     	const IMapView& map_view)
 	{
-	#ifdef BENCHMARK_TESTING
-  	auto start = std::chrono::system_clock::now();
-	#endif
+#ifdef BENCHMARK_TESTING
+    auto start = std::chrono::system_clock::now();
+#endif
 
 	//  if (clock_->now() - last_time_called_ > rclcpp::Duration::from_seconds(reset_period_)) {
 	//    reset();
@@ -265,14 +332,13 @@ protected:
 //  	std::lock_guard<std::mutex> param_lock(*parameters_handler_->getLock());
 //
 
-  	// geometry_msgs::msg::TwistStamped cmd =
-    optimizer_.evalControl(robot_pose, robot_speed, path_ ,map_view);
+    const auto result = optimizer_.evalControl(robot_pose, robot_speed, path_, map_view);
 
-	#ifdef BENCHMARK_TESTING
-  	auto end = std::chrono::system_clock::now();
-  	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-  	RCLCPP_INFO(logger_, "Control loop execution time: %ld [ms]", duration);
-	#endif
+#ifdef BENCHMARK_TESTING
+    auto end = std::chrono::system_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    RCLCPP_INFO(logger_, "Control loop execution time: %ld [ms]", duration);
+#endif
 
 //  	if (visualize_) {
 //    	double z_height = 0.06;
@@ -287,24 +353,23 @@ protected:
 //    	}
 //    	visualize(std::move(path_, cmd.header.stamp, z_height);
 //  	}
-  	// return cmd;
+	return result;
 }
 
-//  std::string name_;
-//  rclcpp_lifecycle::LifecycleNode::WeakPtr parent_;
-//  rclcpp::Clock::SharedPtr clock_;
-//  rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
-//  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-  nav_msgs::msg::Path path_;
+    nav_msgs::msg::Path path_;
 
-//  std::unique_ptr<ParametersHandler> parameters_handler_;
-  Optimizer optimizer_;
-//  TrajectoryVisualizer trajectory_visualizer_;
-  std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
+    rclcpp::Logger logger_{rclcpp::get_logger("MPPIController")};
+    finenav::viz::FineNavVisualizer* framework_visualizer_{nullptr};
+    TrajectoryVisualizer visualizer_;
+    bool visualizer_enabled_{false};
+    bool configured_{false};
+    VisualizerConfig visualizer_config_;
+    std::atomic<std::uint64_t> visualization_generation_{0};
+    Optimizer optimizer_;
+    std::vector<std::unique_ptr<critics::CriticFunction>> critics_;
+    bool visualize_;
 
-  bool visualize_;
-
-  double reset_period_;
+    double reset_period_;
   // Last time computeVelocityCommands was called
 //  rclcpp::Time last_time_called_;
 };

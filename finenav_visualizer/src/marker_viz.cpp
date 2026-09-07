@@ -49,6 +49,11 @@ std_msgs::msg::ColorRGBA makeColor(float r, float g, float b, float a) {
 
 MarkerViz::MarkerViz(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {}
 
+std::int32_t MarkerViz::allocateId()
+{
+    return next_marker_id_++;
+}
+
 void MarkerViz::setLifetime(double sec) {
     for (auto& m : markers_.markers) {
         m.lifetime.sec = static_cast<int32_t>(sec);
@@ -61,6 +66,7 @@ void MarkerViz::addSphere(const Eigen::Vector3d& center, double radius,
     visualization_msgs::msg::Marker m;
     m.header.frame_id = base_frame_;
     m.ns = "Sphere";
+    m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::SPHERE;
     m.action = visualization_msgs::msg::Marker::ADD;
     m.pose = toPose(Eigen::Translation3d(center) * Eigen::Quaterniond::Identity());
@@ -77,7 +83,7 @@ void MarkerViz::addSpheres(const std::vector<Eigen::Vector3d>& centers,
         visualization_msgs::msg::Marker m;
         m.header.frame_id = base_frame_;
         m.ns = "Spheres";
-        m.id = static_cast<int32_t>(i);
+        m.id = allocateId();
         m.type = visualization_msgs::msg::Marker::SPHERE;
         m.action = visualization_msgs::msg::Marker::ADD;
         m.pose = toPose(Eigen::Translation3d(centers[i]) * Eigen::Quaterniond::Identity());
@@ -94,6 +100,7 @@ void MarkerViz::addArrow(const Eigen::Vector3d& start, const Eigen::Vector3d& en
     visualization_msgs::msg::Marker m;
     m.header.frame_id = base_frame_;
     m.ns = "Arrow";
+    m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::ARROW;
     m.action = visualization_msgs::msg::Marker::ADD;
     m.points.push_back(toPoint(start));
@@ -109,6 +116,7 @@ void MarkerViz::addCuboid(const Eigen::Isometry3d& pose, double depth, double wi
     visualization_msgs::msg::Marker m;
     m.header.frame_id = base_frame_;
     m.ns = "Cuboid";
+    m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::CUBE;
     m.action = visualization_msgs::msg::Marker::ADD;
     m.pose = toPose(pose);
@@ -135,6 +143,7 @@ void MarkerViz::addWireframeCuboid(const Eigen::Isometry3d& pose,
         visualization_msgs::msg::Marker m;
         m.header.frame_id = base_frame_;
         m.ns = "Wireframe";
+        m.id = allocateId();
         m.type = visualization_msgs::msg::Marker::LINE_LIST;
         m.action = visualization_msgs::msg::Marker::ADD;
         m.scale.x = 0.02;
@@ -160,6 +169,7 @@ void MarkerViz::addCone(const Eigen::Isometry3d& pose, double angle, double max_
         visualization_msgs::msg::Marker m;
         m.header.frame_id = base_frame_;
         m.ns = "FOV";
+        m.id = allocateId();
         m.type = visualization_msgs::msg::Marker::TRIANGLE_LIST;
         m.action = visualization_msgs::msg::Marker::ADD;
         m.points.push_back(toPoint(tip));
@@ -177,6 +187,7 @@ void MarkerViz::addCylinder(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2
     visualization_msgs::msg::Marker m;
     m.header.frame_id = base_frame_;
     m.ns = "Cylinder";
+    m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::CYLINDER;
     m.action = visualization_msgs::msg::Marker::ADD;
 
@@ -199,6 +210,7 @@ void MarkerViz::addLine(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
     visualization_msgs::msg::Marker m;
     m.header.frame_id = base_frame_;
     m.ns = "Line";
+    m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::LINE_LIST;
     m.action = visualization_msgs::msg::Marker::ADD;
     m.scale.x = width;
@@ -206,6 +218,29 @@ void MarkerViz::addLine(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
     m.points.push_back(toPoint(p2));
     m.color = color;
     m.color.a *= alpha_;
+    markers_.markers.push_back(std::move(m));
+}
+
+void MarkerViz::addLineStrip(const std::vector<Eigen::Vector3d>& points,
+                             const std_msgs::msg::ColorRGBA& color,
+                             double width,
+                             const std::string& ns) {
+    if (points.empty()) return;
+
+    visualization_msgs::msg::Marker m;
+    m.header.frame_id = base_frame_;
+    m.ns = ns;
+    m.id = allocateId();
+    m.type = visualization_msgs::msg::Marker::LINE_STRIP;
+    m.action = visualization_msgs::msg::Marker::ADD;
+    m.pose.orientation.w = 1.0;
+    m.scale.x = width;
+    m.color = color;
+    m.color.a *= alpha_;
+    m.points.reserve(points.size());
+    for (const auto& point : points) {
+        m.points.push_back(toPoint(point));
+    }
     markers_.markers.push_back(std::move(m));
 }
 
@@ -232,6 +267,7 @@ void MarkerViz::addText(const Eigen::Vector3d& pos, const std::string& text,
     visualization_msgs::msg::Marker m;
     m.header.frame_id = base_frame_;
     m.ns = "Text";
+    m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
     m.action = visualization_msgs::msg::Marker::ADD;
     m.pose = toPose(Eigen::Translation3d(pos) * Eigen::Quaterniond::Identity());
@@ -263,7 +299,7 @@ void MarkerViz::publish(const std::string& topic) {
         pub = p;
     }
     pub->publish(markers_);
-    markers_.markers.clear();
+    clear();
 }
 
 void MarkerViz::deleteAllMarkers(const std::string& topic) {
@@ -285,7 +321,7 @@ void MarkerViz::deleteAllMarkers(const std::string& topic) {
         pub = p;
     }
     pub->publish(arr);
-    markers_.markers.clear();
+    clear();
 }
 
 bool MarkerViz::hasSubscribers(const std::string& topic) const {
