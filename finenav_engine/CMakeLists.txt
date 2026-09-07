@@ -14,6 +14,7 @@ set(finenav_dependencies
         finenav_localizer
         finenav_navigator
         finenav_interfaces
+        finenav_visualizer
         finenav_util
 )
 

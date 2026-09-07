@@ -13,6 +13,7 @@
     <depend>finenav_localizer</depend>
     <depend>finenav_navigator</depend>
     <depend>finenav_interfaces</depend>
+    <depend>finenav_visualizer</depend>
     <depend>finenav_util</depend>
     <depend>ament_index_cpp</depend>
     <depend>behaviortree_cpp</depend>
