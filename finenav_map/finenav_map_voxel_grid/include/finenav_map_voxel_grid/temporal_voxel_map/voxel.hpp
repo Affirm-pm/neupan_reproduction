@@ -10,9 +10,9 @@
 
 #include <Eigen/Core>
 
-namespace finenav {
+#include "finenav_map_voxel_grid/grid_map/grid_map_math.hpp"
 
-using Position = Eigen::Vector3d;  // from grid_map_math.hpp
+namespace finenav_map_voxel_grid {
 
 /**
  * @brief Voxel cell data for TemporalVoxelMap.
@@ -48,4 +48,4 @@ struct PositionEqual {
 
 using DynamicPosSet = std::unordered_set<Position, PositionHash, PositionEqual>;
 
-}  // namespace finenav
+}  // namespace finenav_map_voxel_grid

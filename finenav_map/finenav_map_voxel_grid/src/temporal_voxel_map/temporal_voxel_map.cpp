@@ -2,13 +2,13 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_map_temporal_voxel_map/temporal_voxel_map.hpp"
+#include "finenav_map_voxel_grid/temporal_voxel_map/temporal_voxel_map.hpp"
 
 #include <cmath>
 
 #include "finenav_core/common/algo_register_macros.hpp"
 
-namespace finenav {
+namespace finenav_map_voxel_grid {
 
 // ==============================================================================
 // Utility
@@ -166,8 +166,8 @@ void TemporalVoxelMap::pruneExpiredCells(const Eigen::Isometry3d& T_map_body)
     }
 }
 
-}  // namespace finenav
+}  // namespace finenav_map_voxel_grid
 
 // One-line registration: parameter wiring + map self-registration.
 // "temporal_voxel_map" must match the top-level key in temporal_voxel_map.yaml.
-FINENAV_REGISTER_MAP(finenav::TemporalVoxelMap, temporal_voxel_map)
+FINENAV_REGISTER_MAP(finenav_map_voxel_grid::TemporalVoxelMap, temporal_voxel_map)

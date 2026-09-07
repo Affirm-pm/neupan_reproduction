@@ -6,11 +6,11 @@
 
 #include <limits>
 #include <algorithm>
-#include "finenav_map_grid_map/grid_map.hpp"
+#include "finenav_map_voxel_grid/grid_map/grid_map.hpp"
 #include <cmath>
 
 
-namespace finenav {
+namespace finenav_map_voxel_grid {
 
 template <typename T>
 GridMap<T>::GridMap()

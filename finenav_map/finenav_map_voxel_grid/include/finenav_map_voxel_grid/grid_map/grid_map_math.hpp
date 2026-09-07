@@ -7,7 +7,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
-namespace finenav {
+namespace finenav_map_voxel_grid {
 
 using Vector3D   = Eigen::Vector3d;
 using Position3D = Eigen::Vector3d;

@@ -16,14 +16,11 @@
 
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
-#include "finenav_map_grid_map/grid_map.hpp"
-#include "finenav_map_temporal_voxel_map/temporal_voxel_map_params.hpp"
-#include "finenav_map_temporal_voxel_map/voxel.hpp"
+#include "finenav_map_voxel_grid/grid_map/grid_map.hpp"
+#include "finenav_map_voxel_grid/temporal_voxel_map_params.hpp"
+#include "finenav_map_voxel_grid/temporal_voxel_map/voxel.hpp"
 
-namespace finenav {
-
-using finenav::core::Position3D;
-using finenav::core::Region3D;
+namespace finenav_map_voxel_grid {
 
 /**
  * @brief TemporalVoxelMap — 3D voxel grid with time-based dynamic obstacle filtering.
@@ -125,4 +122,4 @@ private:
     finenav::viz::FineNavVisualizer* viz_ = nullptr;
 };
 
-}  // namespace finenav
+}  // namespace finenav_map_voxel_grid

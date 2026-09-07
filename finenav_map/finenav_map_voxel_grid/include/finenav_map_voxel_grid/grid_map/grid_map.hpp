@@ -6,10 +6,10 @@
 
 #include <vector>
 
-#include "finenav_map_grid_map/grid_map_math.hpp"
-#include "finenav_map_grid_map/grid_map_iterator.hpp"
+#include "finenav_map_voxel_grid/grid_map/grid_map_math.hpp"
+#include "finenav_map_voxel_grid/grid_map/grid_map_iterator.hpp"
 
-namespace finenav {
+namespace finenav_map_voxel_grid {
 
 /**
  * @brief Configuration for GridMap — a pure container, not an algorithm.
@@ -323,4 +323,4 @@ private:
 
 }
 
-#include "finenav_map_grid_map/grid_map_impl.hpp"
+#include "finenav_map_voxel_grid/grid_map/grid_map_impl.hpp"

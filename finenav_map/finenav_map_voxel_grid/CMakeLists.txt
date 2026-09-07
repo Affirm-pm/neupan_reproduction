@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(finenav_map_temporal_voxel_map)
+project(finenav_map_voxel_grid)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -9,6 +9,7 @@ endif()
 
 find_package(ament_cmake_auto REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common)
 
 ament_auto_find_build_dependencies()
@@ -21,13 +22,13 @@ generate_parameter_library(
 
 # ── Library ──────────────────────────────────────────────────────────
 add_library(${PROJECT_NAME} SHARED
-    src/temporal_voxel_map.cpp
+    src/temporal_voxel_map/temporal_voxel_map.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/temporal_voxel_map_params_parameters>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
@@ -37,7 +38,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 
 ament_target_dependencies(${PROJECT_NAME} PUBLIC
     finenav_core
-    finenav_map_grid_map
     finenav_visualizer
     rclcpp
 )
@@ -55,6 +55,6 @@ install(DIRECTORY include/${PROJECT_NAME}/
 )
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
-ament_export_dependencies(finenav_core finenav_map_grid_map rclcpp Eigen3 PCL)
+ament_export_dependencies(finenav_core finenav_visualizer rclcpp Eigen3 PCL)
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
