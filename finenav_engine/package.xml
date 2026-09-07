@@ -12,7 +12,6 @@
     <depend>finenav_core</depend>
     <depend>finenav_localizer</depend>
     <depend>finenav_navigator</depend>
-    <depend>finenav_motion_decorator</depend>
     <depend>finenav_interfaces</depend>
     <depend>finenav_util</depend>
     <depend>ament_index_cpp</depend>

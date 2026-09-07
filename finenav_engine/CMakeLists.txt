@@ -13,7 +13,6 @@ set(finenav_dependencies
         finenav_core
         finenav_localizer
         finenav_navigator
-        finenav_motion_decorator
         finenav_interfaces
         finenav_util
 )

@@ -1,5 +1,0 @@
-seek_to_nearest_point:
-  use_2d:
-    type: bool
-    default_value: true
-    description: "If true, only XY distance is used for the nearest-point search; Z is ignored."

@@ -1,7 +1,0 @@
-trim_by_duration:
-  max_duration_sec:
-    type: double
-    default_value: 10.0
-    description: "Maximum time-from-start to keep (seconds)."
-    validation:
-      gt<>: [0.0]

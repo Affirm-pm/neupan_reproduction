@@ -1,7 +1,0 @@
-trim_by_count:
-  max_points:
-    type: int
-    default_value: 100
-    description: "Maximum number of waypoints to keep."
-    validation:
-      gt<>: [0]
