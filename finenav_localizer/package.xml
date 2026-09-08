@@ -11,7 +11,8 @@
 
     <depend>rclcpp</depend>
     <depend>tf2_ros</depend>
-    <depend>tf2_eigen</depend>
+    <depend>geometry_msgs</depend>
+    <depend>nav_msgs</depend>
 
     <depend>eigen</depend>
 

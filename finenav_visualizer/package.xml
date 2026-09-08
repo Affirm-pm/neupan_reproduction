@@ -12,6 +12,7 @@
     <depend>visualization_msgs</depend>
     <depend>sensor_msgs</depend>
     <depend>eigen</depend>
+    <depend>eigen3_cmake_module</depend>
     <depend>pcl_conversions</depend>
     <depend>libpcl-all-dev</depend>
 
