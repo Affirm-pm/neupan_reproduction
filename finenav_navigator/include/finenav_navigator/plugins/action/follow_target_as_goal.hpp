@@ -27,8 +27,8 @@ namespace finenav::navigator
  * 重新注入 _root/__feedback，驱动下游控制层以新的 ref_traj 重新规划。
  * 本节点始终返回 RUNNING；被 halt 时通过 onHalted 复位订阅状态。
  *
- * 典型用法：与 ExecuteControlLayer 放在 ReactiveSequence 中并发执行，
- * 由 ExecuteControlLayer 跑控制层、本节点持续喂入最新跟随目标。
+ * 典型用法：与 ExecuteControlPipelineBranch 放在 ReactiveSequence 中并发执行，
+ * 由 ExecuteControlPipelineBranch 激活整条支路、本节点持续喂入最新跟随目标。
  *
  * 输入端口:
  *   - topic_name      (string, 默认 "/target_pose"):  订阅的目标话题名称

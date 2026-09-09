@@ -38,8 +38,8 @@ PipelineNode<PlannerT>::PipelineNode(
     pnode_ = rclcpp::Node::make_shared(layer_name, node_->get_name(), pnode_opts);
     pnode_thread_ = std::make_unique<finenav::util::NodeThread>(pnode_);
 
-    // ── Task channel worker: owns cmd_sub_/feedback_pub_ (+ ref_sub_ after
-    //    connectFrom) on the private node. ─────────────────────────────────
+    // ── Task channel worker: owns cmd_sub_/feedback_pub_ (+ ref_subs_ after
+    //    connectFrom, one per possible predecessor) on the private node. ────
     worker_ = std::make_unique<finenav::core::TaskWorker>(pnode_, layer_name_);
 
     // ── Planner instance + parameter wiring ───────────────────────────────

@@ -36,3 +36,8 @@ ament_add_gtest(test_task_bus_intra task_bus/test_task_bus_intra.cpp)
 target_include_directories(test_task_bus_intra PRIVATE ${CORE_INCLUDE_DIRS})
 target_link_libraries(test_task_bus_intra ${PROJECT_NAME})
 ament_target_dependencies(test_task_bus_intra rclcpp finenav_interfaces)
+
+# --- test_branch_table (header-only topology reduction) ---
+ament_add_gtest(test_branch_table plan/test_branch_table.cpp)
+target_include_directories(test_branch_table PRIVATE ${CORE_INCLUDE_DIRS})
+target_link_libraries(test_branch_table ${PROJECT_NAME})

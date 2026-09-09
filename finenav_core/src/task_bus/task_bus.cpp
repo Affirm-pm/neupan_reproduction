@@ -102,7 +102,9 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
 void TaskWorker::connectFrom(
     const std::string& parent_name,
     std::function<void(std::shared_ptr<const FeedbackMsg>)> on_ref) {
-    ref_sub_ = node_->create_subscription<FeedbackMsg>(
+    if (ref_subs_.count(parent_name)) return;  // idempotent: already subscribed
+
+    ref_subs_[parent_name] = node_->create_subscription<FeedbackMsg>(
         TaskChannel::feedbackTopic(parent_name), 10,
         [on_ref = std::move(on_ref)](std::shared_ptr<const FeedbackMsg> msg) {
             on_ref(std::move(msg));

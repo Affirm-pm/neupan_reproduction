@@ -14,7 +14,7 @@ namespace finenav::navigator {
 PipelineController::PipelineController(
     rclcpp::Node::SharedPtr node,
     finenav::core::TaskMaster* master,
-    finenav::core::ControlPipelineTree* pipe)
+    finenav::core::BranchTable* pipe)
     : node_(std::move(node)), master_(master), pipe_(pipe)
 {
     root_feedback_pub_ = node_->create_publisher<FeedbackMsg>(
@@ -31,46 +31,50 @@ void PipelineController::publishNavigationGoal(std::vector<Pose> poses) {
     root_feedback_pub_->publish(std::move(fb));
 }
 
-void PipelineController::startBranch(const std::string& to) {
-    if (!pipe_->hasNode(to)) {
+void PipelineController::activateBranch(const std::string& branch_name) {
+    if (!pipe_->hasBranch(branch_name)) {
+        std::string candidates;
+        for (const auto& [name, _] : pipe_->branches()) candidates += " " + name;
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "startBranch: '{}' is not a node in the control pipeline.", to);
+            "activateBranch: unknown branch '{}'. Known branches:{}", branch_name, candidates);
         return;
     }
 
-    const auto path = pathTo(to);
-    std::unordered_set<std::string> on_path(path.begin(), path.end());
+    const auto& stages = pipe_->branch(branch_name);   // never contains "_root"
+    std::unordered_set<std::string> new_set(stages.begin(), stages.end());
 
-    // 1) 停 off-path 层（维护 mux 不变量：任意时刻至多一条 root→leaf 链活跃）。
-    for (const auto& name : pipe_->nodes()) {
-        if (!on_path.count(name)) master_->stop(name);
+    // 1) 停旧：逆序（下游先停），只停不在新支路里的。
+    for (auto it = active_.rbegin(); it != active_.rend(); ++it) {
+        if (!new_set.count(*it)) master_->stop(*it);
     }
-    // 2) 按拓扑序（root→leaf）启动 on-path 层。
-    for (const auto& name : path) master_->start(name);
+    // 2) 起新：顺序（上游先起），只起之前没开的。
+    for (const auto& s : stages) {
+        if (!active_set_.count(s)) master_->start(s);
+    }
+
+    active_     = stages;
+    active_set_ = std::move(new_set);
 }
 
-void PipelineController::startLayer(const std::string& name) { master_->start(name); }
-void PipelineController::stopLayer(const std::string& name)  { master_->stop(name); }
-void PipelineController::stopAll()                            { master_->stopAll(); }
+void PipelineController::stopAll() {
+    master_->stopAll();
+    active_.clear();
+    active_set_.clear();
+}
 
 std::shared_ptr<const PipelineController::FeedbackMsg>
 PipelineController::feedback(const std::string& name) const {
     return master_->feedback(name);
 }
 
-std::vector<std::string> PipelineController::pathTo(const std::string& to) const {
-    std::vector<std::string> path;
-    std::string cur = to;
-    while (!cur.empty() && cur != "_root") {
-        path.push_back(cur);
-        cur = pipe_->parent(cur);
-    }
-    std::reverse(path.begin(), path.end());
-    return path;
+bool PipelineController::hasBranch(const std::string& branch_name) const {
+    return pipe_->hasBranch(branch_name);
 }
 
-std::vector<std::string> PipelineController::leaves() const {
-    return pipe_->leaves();
+std::vector<std::string> PipelineController::branchNames() const {
+    std::vector<std::string> names;
+    for (const auto& [name, _] : pipe_->branches()) names.push_back(name);
+    return names;
 }
 
 }  // namespace finenav::navigator

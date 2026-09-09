@@ -100,7 +100,7 @@ void BtNavigator::execute()
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "Cancellation requested.");
-            master_->stopAll();
+            pipeline_->stopAll();
             tree_.haltTree();
             action_server_->terminate_all();
             return;
@@ -108,7 +108,7 @@ void BtNavigator::execute()
 
         if (action_server_->is_preempt_requested()) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "Preemption requested.");
-            master_->stopAll();
+            pipeline_->stopAll();
             tree_.haltTree();
             return;
         }
@@ -189,12 +189,12 @@ void BtNavigator::execute()
                 }
             }
             result->total_time = rclcpp::Duration(pnode_->now() - episode_start);
-            master_->stopAll();
+            pipeline_->stopAll();
             action_server_->succeeded_current(result);
             return;
         } else if (status == BT::NodeStatus::FAILURE) {
             FINENAV_LOG_ERROR(pnode_->get_logger(), "Navigation failed.");
-            master_->stopAll();
+            pipeline_->stopAll();
             action_server_->terminate_all();
             return;
         }

@@ -7,6 +7,7 @@ find_package(rclcpp_action REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(behaviortree_cpp REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 set(finenav_dependencies
         finenav_core
@@ -32,6 +33,9 @@ ament_target_dependencies(finenav_engine
         behaviortree_cpp
         ${finenav_dependencies}
 )
+# Header-only JSON; plain signature keeps ament_target_dependencies (which uses
+# the plain form internally) from clashing with a keyword signature.
+target_link_libraries(finenav_engine nlohmann_json::nlohmann_json)
 target_include_directories(finenav_engine PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include/${PROJECT_NAME}>

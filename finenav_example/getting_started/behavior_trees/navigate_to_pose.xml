@@ -4,11 +4,12 @@
   Navigate to a goal pose using the dummy planner.
   When the goal is reached, stops the planner and succeeds.
 
-  NOTE: rewritten for the Step-4 navigator BT interface (commit d1d4ce7):
+  NOTE: rewritten for the branch-table navigator interface:
   the old <ComputePlan layer=... planner_id=.../> node no longer exists.
   Goals are injected with <PublishNavigationGoal/> (reads blackboard
-  "goal_poses") and the pre-assembled layer "my_layer" (built in main.cpp by
-  createLayerByMapView) is driven with <ExecuteControlLayer layer="my_layer"/>.
+  "goal_poses"); main.cpp wires the fluent path _root >> "my_layer", which
+  reduces to a single branch named "my_layer" (stages ["my_layer"]), and that
+  branch is activated with <ExecuteControlPipelineBranch branch="my_layer"/>.
   -->
 <root BTCPP_format="4">
 
@@ -24,7 +25,7 @@
                                         xy_tolerance="0.25"
                                         yaw_tolerance="0.1"
                                         speed_tolerance="0.1"/>
-                        <ExecuteControlLayer layer="my_layer"/>
+                        <ExecuteControlPipelineBranch branch="my_layer"/>
                     </ReactiveFallback>
                     <!-- Goal reached: publish zero velocity and succeed -->
                     <StopChassisMotion/>

@@ -8,7 +8,7 @@
 #include <unordered_map>
 
 #include "finenav_core/robot_state/robot_state.hpp"
-#include "finenav_core/plan/control_pipeline_tree.hpp"
+#include "finenav_core/plan/branch_table.hpp"
 #include "finenav_navigator/behavior_tree_engine.hpp"
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/pipeline_controller.hpp"
@@ -55,7 +55,7 @@ public:
 
     // ── IPC + topology (public for FineNavEngine wiring) ────────────────────
     finenav::core::TaskMaster&       master()       { return *master_; } // TODO: 如果没人用，就去掉
-    finenav::core::ControlPipelineTree& pipe()       { return pipe_; }
+    finenav::core::BranchTable&      pipe()         { return pipe_; }
 
     void setChassisCommand(std::shared_ptr<IChassisCommand> cmd) {
         chassis_cmd_ = std::move(cmd);
@@ -78,7 +78,7 @@ private:
     std::unique_ptr<finenav_navigator::ParamListener> param_listener_;
 
     std::unique_ptr<finenav::core::TaskMaster> master_;
-    finenav::core::ControlPipelineTree pipe_;
+    finenav::core::BranchTable pipe_;
     std::unique_ptr<PipelineController> pipeline_;
     using FeedbackMsg = finenav_interfaces::msg::TaskFeedback;
 

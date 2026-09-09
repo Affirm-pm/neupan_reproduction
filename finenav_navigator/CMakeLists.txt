@@ -69,29 +69,13 @@ ament_target_dependencies(finenav_publish_navigation_goal_behavior
 )
 target_compile_definitions(finenav_publish_navigation_goal_behavior PRIVATE BT_PLUGIN_EXPORT)
 
-add_library(finenav_start_control_pipeline_branch_behavior SHARED
-        src/plugins/action/start_control_pipeline_branch.cpp
+add_library(finenav_execute_control_pipeline_branch_behavior SHARED
+        src/plugins/action/execute_control_pipeline_branch.cpp
 )
-ament_target_dependencies(finenav_start_control_pipeline_branch_behavior
+ament_target_dependencies(finenav_execute_control_pipeline_branch_behavior
         ${dependencies}
 )
-target_compile_definitions(finenav_start_control_pipeline_branch_behavior PRIVATE BT_PLUGIN_EXPORT)
-
-add_library(finenav_execute_control_layer_behavior SHARED
-        src/plugins/action/execute_control_layer.cpp
-)
-ament_target_dependencies(finenav_execute_control_layer_behavior
-        ${dependencies}
-)
-target_compile_definitions(finenav_execute_control_layer_behavior PRIVATE BT_PLUGIN_EXPORT)
-
-add_library(finenav_stop_control_layer_behavior SHARED
-        src/plugins/action/stop_control_layer.cpp
-)
-ament_target_dependencies(finenav_stop_control_layer_behavior
-        ${dependencies}
-)
-target_compile_definitions(finenav_stop_control_layer_behavior PRIVATE BT_PLUGIN_EXPORT)
+target_compile_definitions(finenav_execute_control_pipeline_branch_behavior PRIVATE BT_PLUGIN_EXPORT)
 
 # Condition Plugins
 add_library(finenav_is_goal_reached_condition SHARED
@@ -181,9 +165,7 @@ install(TARGETS finenav_navigator navigator_params
 # Install — BT plugins (separate subdirectory so the scanner doesn't pick up non-plugin .so)
 install(TARGETS
         finenav_publish_navigation_goal_behavior
-        finenav_start_control_pipeline_branch_behavior
-        finenav_execute_control_layer_behavior
-        finenav_stop_control_layer_behavior
+        finenav_execute_control_pipeline_branch_behavior
         finenav_stop_chassis_motion_behavior
         finenav_is_goal_reached_condition
         finenav_is_waypoint_reached_condition

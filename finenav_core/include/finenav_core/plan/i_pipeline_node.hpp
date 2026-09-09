@@ -26,9 +26,11 @@ class IPipelineNode {
 public:
     virtual ~IPipelineNode() = default;
 
-    /// Connect this stage to its upstream stage, given the upstream **layer
-    /// name** (not a topic string).  The stage subscribes to the upstream
-    /// layer's feedback topic and consumes it as the reference input.
+    /// Register a possible predecessor for this stage, given the upstream
+    /// **layer name** (not a topic string).  The stage subscribes to that
+    /// upstream layer's feedback topic and consumes it as the reference input.
+    /// Multiple predecessors (fan-out) may be registered; only the upstream of
+    /// the ACTIVE branch publishes, so the stage sees at most one live ref.
     virtual void connectFrom(const std::string& parent_name) = 0;
 
     /**

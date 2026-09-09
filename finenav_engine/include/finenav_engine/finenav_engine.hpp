@@ -114,14 +114,37 @@ public:
 
     // ── Connector ─────────────────────────────────────────────────────────
 
-    /// Wire multiple paths into a tree.  Each path is a chain built with >>.
+    /// Wire multiple root-to-leaf paths into the pipeline.  Each path is a
+    /// chain built with >>.  Each `ControlPipeEdge.chain` (minus a leading
+    /// "_root") becomes one named branch — the name is the leaf stage (the
+    /// last element), which uniquely identifies a root-to-leaf path.
     /// @code
-    ///   engine->wire({
+    ///   engine->wireControlPipeline({
     ///       _root >> rte >> det >> mppi,
     ///              rte >> rot
     ///   });
     /// @endcode
     void wireControlPipeline(std::initializer_list<ControlPipeEdge> edges);
+
+    /// Load the control pipeline from a JSON config file:
+    /// @code
+    /// {
+    ///   "control_pipeline": {
+    ///     "branches": {
+    ///       "direct":  ["route_planner", "mppi"],
+    ///       "detour":  ["route_planner", "recovery", "mppi"]
+    ///     },
+    ///     "layers": {
+    ///       "route_planner": { "algo": "astar_planner", "policy": "single_shot" },
+    ///       "mppi":          { "mapview": "dummy_mapview", "policy": { "continuous": 10.0 } }
+    ///     }
+    ///   }
+    /// }
+    /// @endcode
+    /// Same-named layers are created exactly once (dedup by name); each branch
+    /// is fan-out wired and registered in the navigator's BranchTable.  Returns
+    /// false on parse / validation error.
+    bool loadControlPipeline(const std::string& config_path);
 
     // ── Navigation control ────────────────────────────────────────────────
 
@@ -130,9 +153,12 @@ public:
     void cancelNavigation();
 
 private:
-    void connectEdge(const std::string& from, const std::string& to);
-    void connectEdge(const std::string& from,
-                     std::shared_ptr<finenav::core::IPipelineNode> to);
+    /// Wire one named branch: connectFrom("_root") on the first stage and
+    /// connectFrom(pred) for each adjacent pair (fan-out; idempotent), then
+    /// register the branch in navigator_->pipe().addBranch(name, stages).
+    /// Stages must already exist in layers_ (created by the layer factory or
+    /// by loadControlPipeline's layer pass).
+    void wireBranch(const std::string& branch_name, const std::vector<std::string>& stages);
 
     /// Return the MapServer already created under @p algo_name, or create one
     /// (server name == algo name) on first use — so multiple MapViews sharing a
