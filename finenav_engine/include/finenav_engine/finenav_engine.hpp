@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <initializer_list>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -24,7 +23,6 @@
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/navigator.hpp"
-#include "finenav_engine/detail/pipe_syntax.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
@@ -114,17 +112,19 @@ public:
 
     // ── Connector ─────────────────────────────────────────────────────────
 
-    /// Wire multiple root-to-leaf paths into the pipeline.  Each path is a
-    /// chain built with >>.  Each `ControlPipeEdge.chain` (minus a leading
-    /// "_root") becomes one named branch — the name is the leaf stage (the
-    /// last element), which uniquely identifies a root-to-leaf path.
-    /// @code
-    ///   engine->wireControlPipeline({
-    ///       _root >> rte >> det >> mppi,
-    ///              rte >> rot
-    ///   });
-    /// @endcode
-    void wireControlPipeline(std::initializer_list<ControlPipeEdge> edges);
+    /// Programmatically declare one named branch of the control pipeline — the
+    /// only programmatic entry point for wiring a branch (the JSON path is
+    /// loadControlPipeline()).  @p stages is an ordered sequence of layer
+    /// names that MUST already have been created (via a layer factory or
+    /// loadControlPipeline()'s layer pass).  It does NOT include "_root": the
+    /// first stage implicitly consumes _root (navigation-goal injection), and
+    /// each subsequent stage consumes its predecessor (fan-out, idempotent).
+    /// The branch is then registered under @p branch_name in the navigator's
+    /// BranchTable, where the behavior tree activates it with
+    /// <ExecuteControlPipelineBranch branch="@p branch_name"/>.
+    /// On failure (unknown stage, or addBranch rejecting the branch — e.g.
+    /// duplicate branch name or '_root' inside @p stages) an ERROR is logged.
+    void wireBranch(const std::string& branch_name, const std::vector<std::string>& stages);
 
     /// Load the control pipeline from a JSON config file:
     /// @code
@@ -153,13 +153,6 @@ public:
     void cancelNavigation();
 
 private:
-    /// Wire one named branch: connectFrom("_root") on the first stage and
-    /// connectFrom(pred) for each adjacent pair (fan-out; idempotent), then
-    /// register the branch in navigator_->pipe().addBranch(name, stages).
-    /// Stages must already exist in layers_ (created by the layer factory or
-    /// by loadControlPipeline's layer pass).
-    void wireBranch(const std::string& branch_name, const std::vector<std::string>& stages);
-
     /// Return the MapServer already created under @p algo_name, or create one
     /// (server name == algo name) on first use — so multiple MapViews sharing a
     /// map type reuse one server.

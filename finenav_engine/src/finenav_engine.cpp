@@ -290,7 +290,7 @@ bool FineNavEngine::loadAlgoPlugins(const std::vector<std::string>& plugins)
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  wireBranch (private) — fan-out wiring for one branch
+//  wireBranch (public) — fan-out wiring for one named branch
 // ══════════════════════════════════════════════════════════════════════════════
 
 void FineNavEngine::wireBranch(const std::string& branch_name,
@@ -320,27 +320,6 @@ void FineNavEngine::wireBranch(const std::string& branch_name,
         FINENAV_LOG_ERROR(node_->get_logger(),
             "wireBranch('{}'): addBranch rejected (duplicate branch name, empty "
             "stages, duplicate stage, or '_root' inside stages).", branch_name);
-    }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  wireControlPipeline (public, fluent)
-// ══════════════════════════════════════════════════════════════════════════════
-
-void FineNavEngine::wireControlPipeline(std::initializer_list<ControlPipeEdge> edges) {
-    for (const auto& edge : edges) {
-        std::vector<std::string> stages = edge.chain;
-        if (!stages.empty() && stages.front() == _root) {
-            stages.erase(stages.begin());
-        }
-        if (stages.empty()) {
-            FINENAV_LOG_WARN(node_->get_logger(),
-                "wireControlPipeline: an edge carries no branch stages — skipped.");
-            continue;
-        }
-        // A fluent edge is a root-to-leaf path; the leaf names the branch, so
-        // main.cpp's `_root >> "my_layer"` becomes branch "my_layer" == ["my_layer"].
-        wireBranch(stages.back(), stages);
     }
 }
 

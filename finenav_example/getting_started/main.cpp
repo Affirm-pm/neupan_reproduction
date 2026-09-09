@@ -36,10 +36,11 @@ int main(int argc, char** argv) {
     //    end user never names a planner or a map — only the MapView.
     engine->createLayerByMapView("dummy_mapview", "my_layer", core::ContinuousPolicy{10.0});
 
-    // 3. Wire the tree — layers are addressed by their layer_name string.
-    engine->wireControlPipeline({
-        _root >> "my_layer"
-    });
+    // 3. Declare the control pipeline as a named branch.  A branch is an
+    //    ordered sequence of layer names; the first stage implicitly consumes
+    //    _root (the navigation goal).  The branch name ("navigate") is what the
+    //    behavior tree uses in <ExecuteControlPipelineBranch branch="..."/>.
+    engine->wireBranch("navigate", {"my_layer"});
 
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");
     rclcpp::spin(node);

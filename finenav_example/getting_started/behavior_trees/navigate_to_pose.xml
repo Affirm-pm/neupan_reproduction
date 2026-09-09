@@ -7,9 +7,9 @@
   NOTE: rewritten for the branch-table navigator interface:
   the old <ComputePlan layer=... planner_id=.../> node no longer exists.
   Goals are injected with <PublishNavigationGoal/> (reads blackboard
-  "goal_poses"); main.cpp wires the fluent path _root >> "my_layer", which
-  reduces to a single branch named "my_layer" (stages ["my_layer"]), and that
-  branch is activated with <ExecuteControlPipelineBranch branch="my_layer"/>.
+  "goal_poses"); main.cpp declares the branch with
+  engine->wireBranch("navigate", {"my_layer"}), and that named branch is
+  activated here with <ExecuteControlPipelineBranch branch="navigate"/>.
   -->
 <root BTCPP_format="4">
 
@@ -25,7 +25,7 @@
                                         xy_tolerance="0.25"
                                         yaw_tolerance="0.1"
                                         speed_tolerance="0.1"/>
-                        <ExecuteControlPipelineBranch branch="my_layer"/>
+                        <ExecuteControlPipelineBranch branch="navigate"/>
                     </ReactiveFallback>
                     <!-- Goal reached: publish zero velocity and succeed -->
                     <StopChassisMotion/>
