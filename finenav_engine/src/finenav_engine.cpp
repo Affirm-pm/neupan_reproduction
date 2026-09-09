@@ -28,7 +28,7 @@ namespace {
 ///   {"continuous": hz} | {"tracking": hz} | {"frequency_hz": hz}
 ///   {"type": "single_shot"|"reactive"|"continuous"|"tracking", "frequency_hz": hz}
 /// Missing / null → SingleShotPolicy (safe default).
-finenav::core::ExecutionPolicyVariant parsePolicy(const nlohmann::json& policy) {
+finenav::core::ExecutionPolicyVariant parsePolicy(const nlohmann::json& policy) { // TODO: 如果parse逻辑太多，考虑单独拆一个文件
     using finenav::core::SingleShotPolicy;
     using finenav::core::ContinuousPolicy;
     using finenav::core::ReactivePolicy;
@@ -72,7 +72,7 @@ finenav::core::ExecutionPolicyVariant parsePolicy(const nlohmann::json& policy) 
     }
 
     // Non-null scalars we don't understand → single-shot default.
-    return SingleShotPolicy{};
+    return SingleShotPolicy{}; // TODO: 不应该静默错误
 }
 
 }  // namespace
@@ -93,25 +93,14 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
         [this](const geometry_msgs::msg::PoseStamped& msg) { navigateTo({msg.pose}); });
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  MapServer removal
-// ══════════════════════════════════════════════════════════════════════════════
 
 bool FineNavEngine::removeMapServer(const std::string& name) {
     return maps_.erase(name) > 0;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  ControlLayer removal
-// ══════════════════════════════════════════════════════════════════════════════
-
 bool FineNavEngine::removeControlLayer(const std::string& name) {
     return layers_.erase(name) > 0;
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  Factory by name (runtime reflection via PlanRegistry / MapRegistry)
-// ══════════════════════════════════════════════════════════════════════════════
 
 std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByName(
     const std::string& algo_name, const std::string& layer_name,
@@ -150,10 +139,6 @@ std::shared_ptr<finenav::core::IMapResource> FineNavEngine::createMapServerByNam
         "createMapServerByName('{}', '{}'): map server created.", algo_name, server_name);
     return server;
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  MapView assembly (runtime reflection via MapViewRegistry + PlanRegistry + MapRegistry)
-// ══════════════════════════════════════════════════════════════════════════════
 
 std::shared_ptr<finenav::core::IMapResource> FineNavEngine::ensureMapServer(
     const std::string& algo_name)
@@ -233,10 +218,6 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByMapVie
     return layer;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  Plugin discovery (dlopen)
-// ══════════════════════════════════════════════════════════════════════════════
-
 bool FineNavEngine::loadAlgoPlugins(const std::vector<std::string>& plugins)
 {
     int loaded_total = 0;
@@ -289,10 +270,6 @@ bool FineNavEngine::loadAlgoPlugins(const std::vector<std::string>& plugins)
     return loaded_total > 0;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  wireBranch (public) — fan-out wiring for one named branch
-// ══════════════════════════════════════════════════════════════════════════════
-
 void FineNavEngine::wireBranch(const std::string& branch_name,
                                const std::vector<std::string>& stages) {
     if (stages.empty()) {
@@ -322,10 +299,6 @@ void FineNavEngine::wireBranch(const std::string& branch_name,
             "stages, duplicate stage, or '_root' inside stages).", branch_name);
     }
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  loadControlPipeline (public, JSON branch-table input)
-// ══════════════════════════════════════════════════════════════════════════════
 
 bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
     std::ifstream in(config_path);
@@ -451,10 +424,6 @@ bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
         "loadControlPipeline: loaded '{}' (ok={}).", config_path, ok);
     return ok;
 }
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  Navigation control
-// ══════════════════════════════════════════════════════════════════════════════
 
 void FineNavEngine::navigateTo(const std::vector<geometry_msgs::msg::Pose>& goals,
                                const std::string& bt_id) {
