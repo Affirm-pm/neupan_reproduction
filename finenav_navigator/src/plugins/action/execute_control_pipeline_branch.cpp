@@ -50,12 +50,12 @@ BT::NodeStatus ExecuteControlPipelineBranch::onRunning() {
     const auto stages = pipeline->branchStages(branch_);
     if (stages.empty()) return BT::NodeStatus::FAILURE;
 
-    // 任一 layer FAILED → FAILURE；否则一直 RUNNING。
+    // 任一 layer FAULTED → FAILURE；否则一直 RUNNING。
     // 分支的"完成"不由这里判定 —— 由 task_master（IsGoalReached 等条件）下达 STOP，
     // 或在 BT 侧用其它条件节点决定何时把本节点 hal 掉（onHalted → stopBranch）。
     for (const auto& s : stages) {
         auto fb = pipeline->feedback(s);
-        if (fb && fb->status == FeedbackMsg::FAILED) return BT::NodeStatus::FAILURE;
+        if (fb && fb->status == FeedbackMsg::FAULTED) return BT::NodeStatus::FAILURE;
     }
 
     // 其余 → RUNNING（含 feedback 未发布的预热态）。

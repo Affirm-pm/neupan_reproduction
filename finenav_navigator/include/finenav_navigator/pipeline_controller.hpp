@@ -57,7 +57,7 @@ public:
     std::vector<std::string> branchStages(const std::string& branch_name) const;
     /// 停一条 branch：逆序 STOP 其全部 stage。
     void stopBranch(const std::string& branch_name);
-    /// 重启一条 branch：逆序 STOP 再顺序 START（自愈 FAILED 层，等价旧 onStart=startLayer）。
+    /// 重启一条 branch：逆序 STOP 再顺序 START（自愈 FAULTED 层，等价旧 onStart=startLayer）。
     void restartBranch(const std::string& branch_name);
 
 private:

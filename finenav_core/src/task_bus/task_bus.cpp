@@ -88,6 +88,10 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
     feedback_pub_ = node_->create_publisher<FeedbackMsg>(
         TaskChannel::feedbackTopic(channel_name), 10);
 
+    // Every layer starts life explicitly IDLE (created / at rest).  The master's
+    // manageLayer() subscription is created before the worker, so this is received.
+    publishIdle();
+
     cmd_sub_ = node_->create_subscription<CmdMsg>(
         TaskChannel::cmdTopic(channel_name), 10,
         [this](std::shared_ptr<const CmdMsg> msg) {
@@ -133,16 +137,21 @@ void TaskWorker::publishRunning(finenav_interfaces::msg::Trajectory&& traj) {
     feedback_pub_->publish(std::move(msg));
 }
 
-void TaskWorker::publishCompleted(finenav_interfaces::msg::Trajectory&& traj) {
-    auto msg        = std::make_unique<FeedbackMsg>();
-    msg->status     = FeedbackMsg::COMPLETED;
-    msg->trajectory = std::move(traj);
+void TaskWorker::publishIdle() {
+    auto msg    = std::make_unique<FeedbackMsg>();
+    msg->status = FeedbackMsg::IDLE;
     feedback_pub_->publish(std::move(msg));
 }
 
-void TaskWorker::publishFailed() {
-    auto msg     = std::make_unique<FeedbackMsg>();
-    msg->status  = FeedbackMsg::FAILED;
+void TaskWorker::publishStopped() {
+    auto msg    = std::make_unique<FeedbackMsg>();
+    msg->status = FeedbackMsg::STOPPED;
+    feedback_pub_->publish(std::move(msg));
+}
+
+void TaskWorker::publishFaulted() {
+    auto msg    = std::make_unique<FeedbackMsg>();
+    msg->status = FeedbackMsg::FAULTED;
     feedback_pub_->publish(std::move(msg));
 }
 

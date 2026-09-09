@@ -6,7 +6,7 @@
 ///
 /// 2 topics per channel:
 ///   <name>/__cmd       → TaskCmd      (Master→Worker: START/STOP control)
-///   <name>/__feedback  → TaskFeedback (Worker→Master: running/completed/failed)
+///   <name>/__feedback  → TaskFeedback (Worker→Master: idle/running/stopped/faulted)
 
 #pragma once
 
@@ -124,13 +124,15 @@ public:
     /**
      * @brief Worker -> Master, publish feedback messages
      * @details
-     * publishRunning() - Publish a feedback message indicating that the task is currently running.
-     * publishCompleted() - Publish a feedback message indicating that the task has been completed successfully.
-     * publishFailed() - Publish a feedback message indicating that the task has failed. No trajectories are sent.
+     * publishIdle()    - Publish IDLE: layer created / not yet STARTed (the safe at-rest state).
+     * publishRunning() - Publish RUNNING: STARTed, actively planning. Carries a trajectory.
+     * publishStopped() - Publish STOPPED: received STOP, normal termination. No trajectory.
+     * publishFaulted() - Publish FAULTED: plan() returned nullopt, abnormal termination. No trajectory.
      */
+    void publishIdle();
     void publishRunning(finenav_interfaces::msg::Trajectory&& traj);
-    void publishCompleted(finenav_interfaces::msg::Trajectory&& traj);
-    void publishFailed();
+    void publishStopped();
+    void publishFaulted();
 
 private:
     std::shared_ptr<rclcpp::Node> node_;

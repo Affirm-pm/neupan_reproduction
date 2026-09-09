@@ -65,7 +65,8 @@ void ControlLayer<PlannerT>::startWorker(std::function<void()> episode_body) {
             if (this->worker_->hasStart()) {
                 this->worker_->ackStart();
                 if (!waitForState()) {
-                    this->worker_->publishFailed();
+                    if (this->worker_->shouldStop()) this->worker_->publishStopped();
+                    else this->worker_->publishFaulted();
                     continue;
                 }
                 this->resetPlanner();
@@ -97,14 +98,14 @@ void ControlLayer<PlannerT>::runPeriodic() {
 
     while (rclcpp::ok()) {
         if (this->worker_->shouldStop()) {
-            this->worker_->publishFailed();
+            this->worker_->publishStopped();
             return;
         }
 
         auto out = this->planOnce();
         if (!out) {
-            FINENAV_LOG_ERROR(this->pnode_->get_logger(), "Periodic: plan() failed — aborting.");
-            this->worker_->publishFailed();
+            FINENAV_LOG_ERROR(this->pnode_->get_logger(), "Periodic: plan() faulted — aborting.");
+            this->worker_->publishFaulted();
             return;
         }
         this->worker_->publishRunning(std::move(*out));
@@ -140,6 +141,7 @@ void ControlLayer<PlannerT>::runEventDriven() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     started_.store(false);
+    this->worker_->publishStopped();
 }
 
 template <Planner PlannerT>
