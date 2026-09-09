@@ -77,4 +77,24 @@ std::vector<std::string> PipelineController::branchNames() const {
     return names;
 }
 
+std::vector<std::string> PipelineController::branchStages(const std::string& branch_name) const {
+    // pipe_->branch(name) 返回 const 引用；未知 branch 返回空 static，拷贝返回。
+    return pipe_->branch(branch_name);
+}
+
+void PipelineController::stopBranch(const std::string& branch_name) {
+    const auto& stages = pipe_->branch(branch_name);   // 未知 branch → 空，自然 no-op
+    for (auto it = stages.rbegin(); it != stages.rend(); ++it) {
+        master_->stop(*it);
+    }
+}
+
+void PipelineController::restartBranch(const std::string& branch_name) {
+    stopBranch(branch_name);
+    const auto& stages = pipe_->branch(branch_name);
+    for (const auto& s : stages) {
+        master_->start(s);
+    }
+}
+
 }  // namespace finenav::navigator

@@ -11,23 +11,31 @@
 namespace finenav::navigator {
 
 /**
- * @brief ExecuteControlPipelineBranch — 一键激活一条 control_pipeline 支路（非阻塞）。
+ * @brief ExecuteControlPipelineBranch — 有状态地激活并持有一条 control_pipeline 支路。
  *
- * 从黑盒读取 `_pipeline`，端口 `branch` 为支路名，调用 activateBranch(branch)：
- * 集合差激活整条支路（停旧起新、共享 stage 保持运行）。SyncAction，
- * fire-and-forget —— 激活后立即 SUCCESS，不阻塞等待完成；「到达目标」由 BT
- * 条件节点（IsGoalReached 等）轮询判断。未知支路名 → FAILURE（候选名列日志）。
+ * 从黑盒读取 `_pipeline`，端口 `branch` 为支路名。StatefulActionNode：
+ * onStart 里调用 restartBranch(branch)（逆序 STOP + 顺序 START，自愈 FAILED 层）
+ * 并返回 RUNNING；此后每次 onRunning 轮询该支路全部 stage 的最新 feedback，
+ * 按「任一 FAILED → FAILURE；否则叶子（最后一项）COMPLETED → SUCCESS；
+ * 否则 RUNNING」聚合返回。被外部 halt（如 ReactiveFallback 因 IsGoalReached
+ * 成功而切走）时 onHalted 调用 stopBranch(branch) 停掉整条支路。
+ * 未知支路名 → onStart 返回 FAILURE（候选名列日志）。
  */
-class ExecuteControlPipelineBranch : public BT::SyncActionNode {
+class ExecuteControlPipelineBranch : public BT::StatefulActionNode {
 public:
     ExecuteControlPipelineBranch(const std::string& name, const BT::NodeConfig& config)
-        : BT::SyncActionNode(name, config) {}
+        : BT::StatefulActionNode(name, config) {}
 
     static BT::PortsList providedPorts() {
         return {BT::InputPort<std::string>("branch", "Name of the pipeline branch to activate")};
     }
 
-    BT::NodeStatus tick() override;
+    BT::NodeStatus onStart() override;
+    BT::NodeStatus onRunning() override;
+    void onHalted() override;
+
+private:
+    std::string branch_;
 };
 
 }  // namespace finenav::navigator

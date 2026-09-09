@@ -53,6 +53,13 @@ public:
     bool hasBranch(const std::string& branch_name) const;
     std::vector<std::string> branchNames() const;
 
+    /// 某条 branch 的 stage 序列（不含 _root）。未知 branch 返回空。
+    std::vector<std::string> branchStages(const std::string& branch_name) const;
+    /// 停一条 branch：逆序 STOP 其全部 stage。
+    void stopBranch(const std::string& branch_name);
+    /// 重启一条 branch：逆序 STOP 再顺序 START（自愈 FAILED 层，等价旧 onStart=startLayer）。
+    void restartBranch(const std::string& branch_name);
+
 private:
     rclcpp::Node::SharedPtr node_;
     finenav::core::TaskMaster* master_;
