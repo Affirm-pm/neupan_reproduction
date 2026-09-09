@@ -36,8 +36,8 @@ namespace finenav::core {
  * differ on:
  *   - ControlLayer  (commanded): a TaskWorker feeds it goals, an episode loop
  *     calls planOnce() at policy rate and publishes through the TaskChannel.
- *   - DecoratorNode (reactive): the upstream feedback callback fires planOnce()
- *     immediately and publishes straight to its feedback topic.
+ *   - DecoratorNode (feedback-driven): the upstream feedback callback fires
+ *     planOnce() immediately and publishes straight to its feedback topic.
  *
  * @tparam PlannerT  The planner type owned by this node.
  */
@@ -73,8 +73,8 @@ protected:
     ~PipelineNode() override;
 
     /// React to an upstream reference-trajectory message.  Default (commanded)
-    /// behaviour is to stash it for the next planOnce(); the reactive subclass
-    /// overrides this to fire a plan immediately.
+    /// behaviour is to stash it for the next planOnce(); the feedback-driven
+    /// subclass overrides this to fire a plan immediately.
     virtual void onPlanRef(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
 
     /// Stash the latest upstream reference (thread-safe).

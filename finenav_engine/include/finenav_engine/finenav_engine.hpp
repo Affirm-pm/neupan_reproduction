@@ -62,7 +62,7 @@ public:
     /**
      * @brief Operation with ControlLayer
      */
-    template <core::Planner PlannerT, typename PolicyT = core::SingleShotPolicy>
+    template <core::Planner PlannerT, typename PolicyT = core::EventDrivenPolicy>
     std::shared_ptr<core::ControlLayer<PlannerT>> // TODO： 统一命名，CreateControlLayer
     createLayer(const std::string& algo_name, const std::string& name, PolicyT policy = {});
 
@@ -94,7 +94,7 @@ public:
     std::shared_ptr<finenav::core::IPipelineNode> createLayerByMapView( // TODO: 改个api名字
         const std::string& mapview_name,
         const std::string& layer_name,
-        finenav::core::ExecutionPolicyVariant policy = finenav::core::SingleShotPolicy{});
+        finenav::core::ExecutionPolicyVariant policy = finenav::core::EventDrivenPolicy{});
 
     /// dlopen every .so under "pkg_name/sub_folder" so its self-registering
     /// algorithms become discoverable by name WITHOUT relinking.  Each entry is
@@ -126,8 +126,8 @@ public:
     ///       "detour":  ["route_planner", "recovery", "mppi"]
     ///     },
     ///     "layers": {
-    ///       "route_planner": { "algo": "astar_planner", "policy": "single_shot" },
-    ///       "mppi":          { "mapview": "dummy_mapview", "policy": { "continuous": 10.0 } }
+    ///       "route_planner": { "algo": "astar_planner", "policy": "event_driven" },
+    ///       "mppi":          { "mapview": "dummy_mapview", "policy": { "periodic": 10.0 } }
     ///     }
     ///   }
     /// }

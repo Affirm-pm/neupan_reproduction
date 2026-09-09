@@ -24,9 +24,9 @@ namespace finenav::core {
  * Inherits the plan-once pipeline (planner instance, planOnce(), MapView
  * attachment) from PipelineNode and adds the execution policy, which decides
  * how the node is triggered and where its output goes:
- *   - SingleShotPolicy  → commanded: one plan() per goal
- *   - ContinuousPolicy  → commanded: plan() loop at N Hz
- *   - ReactivePolicy    → commanded: listen for refs; plan() on each while STARTed
+ *   - PeriodicPolicy     → clock-driven: plan() loop at N Hz
+ *   - EventDrivenPolicy  → event-driven: plan() once per new goal / upstream
+ *     reference while STARTed
  *
  * @tparam PlannerT  The planner type owned by this layer.
  */
@@ -37,7 +37,7 @@ public:
         rclcpp::Node::SharedPtr node,
         const std::string& algo_name,
         const std::string& layer_name,
-        ExecutionPolicyVariant policy = SingleShotPolicy{},
+        ExecutionPolicyVariant policy = EventDrivenPolicy{},
         RobotStateProvider* state_provider = nullptr);
 
     ~ControlLayer() override;
@@ -47,23 +47,22 @@ protected:
 
 private:
     // ── construction: one policy → one plumbing set + one episode body ──────
-    void startWorker(std::function<void()> episode_body);   // all three policies
+    void startWorker(std::function<void()> episode_body);   // both policies
     bool waitForState();
 
     // ── episode bodies ──────────────────────────────────────────────────────
-    void runSingleShot();
-    void runContinuous();
-    void runReactive();
+    void runPeriodic();
+    void runEventDriven();
     void react();
 
     ExecutionPolicyVariant policy_;
 
-    // commanded plumbing (shared by all three policies); worker_ itself is
+    // commanded plumbing (shared by both policies); worker_ itself is
     // inherited from PipelineNode.
     std::thread        worker_thread_;
     std::atomic<bool>  stop_{false};
 
-    // reactive gating: true while the layer is STARTed and listening
+    // event gating: true while the layer is STARTed and listening
     std::atomic<bool>  started_{false};
 };
 

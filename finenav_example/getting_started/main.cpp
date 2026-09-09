@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
     //    back to their registered names ("dummy_planner" / "dummy_map"), reuses
     //    (or creates) the MapServer, builds the IMapView and attaches it.  The
     //    end user never names a planner or a map — only the MapView.
-    engine->createLayerByMapView("dummy_mapview", "my_layer", core::ContinuousPolicy{10.0});
+    engine->createLayerByMapView("dummy_mapview", "my_layer", core::PeriodicPolicy{10.0});
 
     // 3. Declare the control pipeline as a named branch.  A branch is an
     //    ordered sequence of layer names; the first stage implicitly consumes

@@ -23,29 +23,26 @@ namespace {
 
 /// Parse a JSON `policy` value into the framework's ExecutionPolicyVariant.
 /// Accepted forms (see the design spec §1.1):
-///   "single_shot" | "reactive" | "continuous" | "tracking"
-///   <number>                              → ContinuousPolicy{number}
-///   {"continuous": hz} | {"tracking": hz} | {"frequency_hz": hz}
-///   {"type": "single_shot"|"reactive"|"continuous"|"tracking", "frequency_hz": hz}
-/// Missing / null → SingleShotPolicy (safe default).
+///   "event_driven" | "periodic"
+///   <number>                                     → PeriodicPolicy{number}
+///   {"periodic": hz} | {"frequency_hz": hz}
+///   {"type": "periodic"|"event_driven", "frequency_hz": hz}
+/// Missing / null / unknown → EventDrivenPolicy (general server default).
 finenav::core::ExecutionPolicyVariant parsePolicy(const nlohmann::json& policy) { // TODO: 如果parse逻辑太多，考虑单独拆一个文件
-    using finenav::core::SingleShotPolicy;
-    using finenav::core::ContinuousPolicy;
-    using finenav::core::ReactivePolicy;
+    using finenav::core::PeriodicPolicy;
+    using finenav::core::EventDrivenPolicy;
 
-    if (policy.is_null()) return SingleShotPolicy{};
+    if (policy.is_null()) return EventDrivenPolicy{};
 
     auto policy_from_name = [](const std::string& s) -> finenav::core::ExecutionPolicyVariant {
-        if (s == "single_shot" || s == "single-shot" || s == "singleShot") return SingleShotPolicy{};
-        if (s == "reactive")                                               return ReactivePolicy{};
-        // "continuous" and the design doc's "tracking{...}" both mean the
-        // framework's ContinuousPolicy (loop plan() at a fixed rate).
-        return ContinuousPolicy{};
+        if (s == "event_driven") return EventDrivenPolicy{};
+        if (s == "periodic")     return PeriodicPolicy{};
+        return EventDrivenPolicy{};
     };
 
     if (policy.is_string()) return policy_from_name(policy.get<std::string>());
 
-    if (policy.is_number()) return ContinuousPolicy{policy.get<double>()};
+    if (policy.is_number()) return PeriodicPolicy{policy.get<double>()};
 
     if (policy.is_object()) {
         double hz = 10.0;
@@ -54,25 +51,23 @@ finenav::core::ExecutionPolicyVariant parsePolicy(const nlohmann::json& policy) 
             hz = policy["frequency_hz"].get<double>();
             have_hz = true;
         }
-        if (policy.contains("continuous") && policy["continuous"].is_number()) {
-            hz = policy["continuous"].get<double>();
-            have_hz = true;
-        }
-        if (policy.contains("tracking") && policy["tracking"].is_number()) {
-            hz = policy["tracking"].get<double>();
+        if (policy.contains("periodic") && policy["periodic"].is_number()) {
+            hz = policy["periodic"].get<double>();
             have_hz = true;
         }
         if (policy.contains("type") && policy["type"].is_string()) {
             const std::string t = policy["type"].get<std::string>();
-            if (t == "single_shot" || t == "single-shot" || t == "singleShot") return SingleShotPolicy{};
-            if (t == "reactive")                                               return ReactivePolicy{};
-            // continuous / tracking → fall through to ContinuousPolicy below.
+            if (t == "periodic")     return PeriodicPolicy{have_hz ? hz : 10.0};
+            if (t == "event_driven") return EventDrivenPolicy{};
+            // unknown type → fall through to the event-driven default below.
         }
-        return ContinuousPolicy{have_hz ? hz : 10.0};
+        if (have_hz) return PeriodicPolicy{hz};
+        // Object with no recognized key → event-driven default.
+        return EventDrivenPolicy{};
     }
 
-    // Non-null scalars we don't understand → single-shot default.
-    return SingleShotPolicy{}; // TODO: 不应该静默错误
+    // Non-null scalars we don't understand → event-driven default.
+    return EventDrivenPolicy{}; // TODO: 不应该静默错误
 }
 
 }  // namespace
@@ -338,7 +333,7 @@ bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
             if (layers_.count(layer_name)) continue;  // dedup: reuse existing layer
             const nlohmann::json& spec = it.value();
 
-            finenav::core::ExecutionPolicyVariant policy = finenav::core::SingleShotPolicy{};
+            finenav::core::ExecutionPolicyVariant policy = finenav::core::EventDrivenPolicy{};
             if (spec.is_object() && spec.contains("policy")) {
                 policy = parsePolicy(spec["policy"]);
             }

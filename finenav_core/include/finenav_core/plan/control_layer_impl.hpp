@@ -40,12 +40,10 @@ ControlLayer<PlannerT>::ControlLayer(
     // 2) Plumbing + episode body: one branch per policy (exhaustive).
     std::visit([this](auto& p) {
         using P = std::decay_t<decltype(p)>;
-        if constexpr (std::is_same_v<P, SingleShotPolicy>) {
-            startWorker([this] { runSingleShot(); });
-        } else if constexpr (std::is_same_v<P, ContinuousPolicy>) {
-            startWorker([this] { runContinuous(); });
-        } else if constexpr (std::is_same_v<P, ReactivePolicy>) {
-            startWorker([this] { runReactive(); });
+        if constexpr (std::is_same_v<P, PeriodicPolicy>) {
+            startWorker([this] { runPeriodic(); });
+        } else if constexpr (std::is_same_v<P, EventDrivenPolicy>) {
+            startWorker([this] { runEventDriven(); });
         }
     }, policy_);
 }
@@ -94,27 +92,8 @@ bool ControlLayer<PlannerT>::waitForState() {
 // ==============================================================================
 
 template <Planner PlannerT>
-void ControlLayer<PlannerT>::runSingleShot() {
-    if (this->worker_->shouldStop()) {
-        this->worker_->publishFailed();
-        return;
-    }
-
-    auto out = this->planOnce();
-    if (!out) {
-        FINENAV_LOG_ERROR(this->pnode_->get_logger(), "SingleShot: plan() failed.");
-        this->worker_->publishFailed();
-        return;
-    }
-
-    this->worker_->publishRunning(std::move(*out));
-    this->worker_->publishCompleted({});
-    FINENAV_LOG_INFO(this->pnode_->get_logger(), "SingleShot: goal succeeded.");
-}
-
-template <Planner PlannerT>
-void ControlLayer<PlannerT>::runContinuous() {
-    rclcpp::Rate rate(std::get<ContinuousPolicy>(policy_).frequency_hz);
+void ControlLayer<PlannerT>::runPeriodic() {
+    rclcpp::Rate rate(std::get<PeriodicPolicy>(policy_).frequency_hz);
 
     while (rclcpp::ok()) {
         if (this->worker_->shouldStop()) {
@@ -124,7 +103,7 @@ void ControlLayer<PlannerT>::runContinuous() {
 
         auto out = this->planOnce();
         if (!out) {
-            FINENAV_LOG_ERROR(this->pnode_->get_logger(), "Tracking: plan() failed — aborting.");
+            FINENAV_LOG_ERROR(this->pnode_->get_logger(), "Periodic: plan() failed — aborting.");
             this->worker_->publishFailed();
             return;
         }
@@ -134,7 +113,7 @@ void ControlLayer<PlannerT>::runContinuous() {
 }
 
 // ==============================================================================
-// Reactive trigger
+// Event-driven trigger
 // ==============================================================================
 
 template <Planner PlannerT>
@@ -145,14 +124,14 @@ void ControlLayer<PlannerT>::onPlanRef(
 
     std::visit([this](auto& p) {
         using P = std::decay_t<decltype(p)>;
-        if constexpr (std::is_same_v<P, ReactivePolicy>) {
+        if constexpr (std::is_same_v<P, EventDrivenPolicy>) {
             if (started_.load()) react();
         }
     }, policy_);
 }
 
 template <Planner PlannerT>
-void ControlLayer<PlannerT>::runReactive() {
+void ControlLayer<PlannerT>::runEventDriven() {
     // While STARTed, keep listening; the subscription callback (onPlanRef)
     // fires react() for every incoming reference.  STOP flips started_ off so
     // later references are only stashed until the next START.
@@ -165,8 +144,8 @@ void ControlLayer<PlannerT>::runReactive() {
 
 template <Planner PlannerT>
 void ControlLayer<PlannerT>::react() {
-    // A reactive node reacts to the upstream reference trajectory alone (the
-    // goal is its last pose).  Runs on the subscription callback thread.
+    // An event-driven node reacts to the upstream reference trajectory alone
+    // (the goal is its last pose).  Runs on the subscription callback thread.
     auto out = this->planOnce();
     if (!out) return;
     this->worker_->publishRunning(std::move(*out));

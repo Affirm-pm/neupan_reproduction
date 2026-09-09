@@ -148,8 +148,8 @@ int  cost     = model.checkCost([](const Position3D& p) { return map.getCost(p);
 
 ### Two Planning Policies (`finenav_core/include/finenav_core/plan/execution_policy.hpp`)
 
-- **`SingleShotPolicy`** — Action goal → one `plan()` call → succeed. For offline/A*-BFS.
-- **`TrackingPolicy{20.0}`** — Action goal → loop `plan()` at N Hz until canceled or goal reached. For MPPI.
+- **`EventDrivenPolicy`** — Action goal → fires one `plan()` per new goal / upstream input; stays RUNNING until STOP. General server default (route planners, decorators).
+- **`PeriodicPolicy{20.0}`** — Action goal → loop `plan()` at N Hz until canceled or goal reached. For fixed-rate controllers (MPPI).
 
 ### Plan Lifecycle (per ControlLayer)
 
@@ -168,7 +168,7 @@ Goal arrives → execute()
 
 Multiple `ControlLayer`s can be chained via `FineNavEngine::registerPipeline()`:
 ```
-line_path → [RoutePlanner (SingleShot)] → mppi_layer_plan → [MPPIController (Tracking)] → /cmd_vel
+line_path → [RoutePlanner (EventDriven)] → mppi_layer_plan → [MPPIController (Periodic)] → /cmd_vel
 ```
 
 ---

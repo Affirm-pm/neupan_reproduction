@@ -13,31 +13,21 @@
 namespace finenav::core {
 
 /**
- * @brief SingleShotPolicy — runs plan() exactly once per action goal.
+ * @brief PeriodicPolicy — runs plan() in a loop at a fixed frequency.
  *
- * Used for one-shot planners (A*, BFS, route search) where a single call
- * produces the complete result.  Has no tunable parameters.
- */
-struct SingleShotPolicy {
-    static void declare_parameters(rclcpp::Node&) {}
-};
-
-/**
- * @brief ContinuousPolicy — runs plan() in a loop at a fixed frequency.
- *
- * Used for continuous-output planners (MPPI, D*-lite) that need warm-start
- * state across cycles.  The loop continues until the action is canceled or
- * an external state monitor signals goal_reached.
+ * Used for fixed-rate output planners (MPPI) that need warm-start state across
+ * cycles.  The loop continues until the action is canceled or an external
+ * state monitor signals goal_reached.
  *
  * @param frequency_hz  Control loop rate (Hz), default 10.0.
  */
-struct ContinuousPolicy {
+struct PeriodicPolicy {
     double frequency_hz = 10.0;
 
     void declare_parameters(rclcpp::Node& node) {
         rcl_interfaces::msg::ParameterDescriptor desc;
         desc.description =
-            "Control loop frequency for ContinuousPolicy (Hz). Must be > 0.0.";
+            "Control loop frequency for PeriodicPolicy (Hz). Must be > 0.0.";
 
         node.declare_parameter<double>("frequency_hz", frequency_hz, desc);
         frequency_hz = node.get_parameter("frequency_hz").as_double();
@@ -52,20 +42,21 @@ struct ContinuousPolicy {
 };
 
 /**
- * @brief ReactivePolicy — command-controlled listening transform.
+ * @brief EventDrivenPolicy — event-triggered listening transform.
  *
- * Controlled by TaskCmd START/STOP like the other policies.  While STARTed it
- * continuously listens for an upstream reference trajectory (the __feedback
- * subscription) and reacts immediately — one planOnce() + RUNNING publish —
- * for every incoming reference; while STOPped it only stashes the reference.
- * Used by map-less trajectory decorators (seek / smooth / trim) wired as
- * intermediate pipeline stages.
+ * Controlled by TaskCmd START/STOP like the other policy.  While STARTed it
+ * listens for a new upstream input (a goal or an upstream reference trajectory
+ * on the __feedback subscription) and reacts immediately — one planOnce() +
+ * RUNNING publish — for every incoming event; while STOPped it only stashes the
+ * reference.  Used by map-less trajectory decorators (seek / smooth / trim)
+ * wired as intermediate pipeline stages, and as the general server default for
+ * one-shot route planners that replan on each new goal.
  */
-struct ReactivePolicy {
+struct EventDrivenPolicy {
     static void declare_parameters(rclcpp::Node&) {}
 };
 
 using ExecutionPolicyVariant =
-    std::variant<SingleShotPolicy, ContinuousPolicy, ReactivePolicy>;
+    std::variant<PeriodicPolicy, EventDrivenPolicy>;
 
 } // namespace finenav::core
