@@ -78,7 +78,7 @@ void ControlLayer<PlannerT>::startWorker(std::function<void()> episode_body) {
 }
 
 template <Planner PlannerT>
-bool ControlLayer<PlannerT>::waitForState() {
+bool ControlLayer<PlannerT>::waitForState() {   // TODO: 为什么要 Wait?
     while (rclcpp::ok() && !this->worker_->shouldStop()) {
         if (this->state_provider_ && this->state_provider_->getRobotState().has_value()) {
             return true;
