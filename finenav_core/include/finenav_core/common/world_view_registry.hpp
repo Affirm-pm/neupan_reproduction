@@ -8,23 +8,26 @@
 #include <memory>
 #include <string>
 #include <typeinfo>
+#include <utility>
 #include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 
+#include "finenav_core/common/algo_register_details.hpp"
 #include "finenav_core/common/named_registry.hpp"
 #include "finenav_core/map/map_access.hpp"
+#include "finenav_core/plan/i_pipeline_node.hpp"
+#include "finenav_core/plan/planner_concept.hpp"  // PlanningContext<PlannerT>
 
 namespace finenav::core {
 
 /// One WorldView's registry row: name → { planner type, map types, build }.
-/// (No config loader — a WorldView is not an algorithm, so it carries no params.)
 struct WorldViewEntry {
-    using BuildFn = std::function<std::shared_ptr<void>(MapAccess&, rclcpp::Node::SharedPtr)>;
+    using BuildFn = std::function<BuiltWorldView(MapAccess&, rclcpp::Node::SharedPtr)>;
 
     std::string              planner_type;  ///< typeid(PlannerT).name()
     std::vector<std::string> map_types;     ///< typeid(MapT).name() per depended map
-    BuildFn                  build;         ///< (MapAccess&, node) → erased IWorldView
+    BuildFn                  build;         ///< (MapAccess&, node) → BuiltWorldView
 };
 
 /**
@@ -78,14 +81,44 @@ std::vector<std::string> typeNames() {
  * resolved maps follow as the constructor's map arguments.
  *
  * Upcasts to PlannerT::IWorldView BEFORE erasing to void*, so the erased pointer
- * already points at the base subobject — ControlLayer's static cast back to
+ * already points at the base subobject — PipelineNode's static cast back to
  * PlannerT::IWorldView is then an identity cast (no undefined pointer adjustment).
+ *
+ * Also mints the type-erased prepare() invoker.  It has to be created HERE,
+ * where ViewT is concrete: downstream the view's static type is only
+ * PlannerT::IWorldView, so prepare() would be undetectable there.
+ *
+ * @return {erased view, erased prepare invoker}
  */
 template <typename ViewT, typename PlannerT, typename... MapTs>
-std::shared_ptr<void> makeWorldView(MapAccess& maps, rclcpp::Node::SharedPtr node) {
-    std::shared_ptr<typename PlannerT::IWorldView> view =
-        std::make_shared<ViewT>(node, maps.get<MapTs>()...);
-    return view;
+std::pair<std::shared_ptr<void>, BuiltWorldView::PrepareFn>
+makeWorldView(MapAccess& maps, rclcpp::Node::SharedPtr node) {
+    auto concrete = std::make_shared<ViewT>(node, maps.get<MapTs>()...);
+    // The view outlives this invoker (both are owned by the same PipelineNode,
+    // and prepare_ is only ever called while view_ is set), so a raw borrow is
+    // enough — no need to keep a second shared_ptr alive.
+    ViewT* borrowed = concrete.get();
+    BuiltWorldView::PrepareFn prepare = [borrowed](const void* ctx) {
+        borrowed->prepare(*static_cast<const PlanningContext<PlannerT>*>(ctx));
+    };
+    std::shared_ptr<typename PlannerT::IWorldView> view = std::move(concrete);
+    return {std::move(view), std::move(prepare)};
+}
+
+/**
+ * @brief Wire a WorldView's parameter channel from its generate_parameter_library
+ *        YAML: runs configure(params) once, re-runs it on every `ros2 param set`,
+ *        and duck-type injects setLogger() / setVisualizer() when declared.
+ *
+ * The erased pointer targets the PlannerT::IWorldView base subobject, so it must
+ * be cast back down to ViewT before the concrete configure() can be called.
+ */
+template <typename ViewT, typename ParamsT, typename ListenerT, typename PlannerT>
+std::shared_ptr<IParamPollable> makeWorldViewParams(
+    rclcpp::Node::SharedPtr node, const std::shared_ptr<void>& view, std::string_view name) {
+    auto* base = static_cast<typename PlannerT::IWorldView*>(view.get());
+    auto* concrete = static_cast<ViewT*>(base);
+    return makeParamPollable<ViewT, ParamsT, ListenerT>(node, *concrete, name);
 }
 
 template <typename ViewT>

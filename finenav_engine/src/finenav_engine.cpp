@@ -194,19 +194,19 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldV
     }
     finenav::core::MapAccess access(std::move(handles));
 
-    // 3) build the view, injecting the layer's pnode
-    auto view = entry->build(access, layer->getPrivateNode());
-    if (!view) {
+    // 3) build the view (its constructor runs here), injecting the layer's pnode
+    auto built = entry->build(access, layer->getPrivateNode());
+    if (!built.view) {
         // The layer was already registered in layers_/navigator master by
         // createLayerByName(); reclaim it so no orphan layer is left behind.
         removeControlLayer(layer_name);
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createLayerByWorldView('{}'): build() returned null.", world_view_name);
+            "createLayerByWorldView('{}'): build() returned no view.", world_view_name);
         return nullptr;
     }
 
-    // 4) attach
-    layer->attachWorldView(std::move(view), std::move(map_resources));
+    // 4) attach the view + its param pollable + its prepare() invoker
+    layer->attachWorldView(std::move(built), std::move(map_resources));
     FINENAV_LOG_INFO(node_->get_logger(),
         "createLayerByWorldView('{}', '{}'): assembled layer over planner '{}'.",
         world_view_name, layer_name, *planner_name);

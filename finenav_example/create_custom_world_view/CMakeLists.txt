@@ -1,6 +1,11 @@
+find_package(generate_parameter_library REQUIRED)
+
+generate_parameter_library(dummy_world_view_params dummy_world_view.yaml)
+
 add_library(dummy_world_view SHARED src/dummy_world_view.cpp)
 target_include_directories(dummy_world_view PUBLIC include)
 target_link_libraries(dummy_world_view
+    dummy_world_view_params
     dummy_map
     dummy_map_params
     dummy_planner

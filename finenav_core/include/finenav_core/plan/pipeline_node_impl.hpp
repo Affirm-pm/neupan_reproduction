@@ -79,19 +79,24 @@ rclcpp::Node::SharedPtr PipelineNode<PlannerT>::getPrivateNode() const { return 
 
 template <Planner PlannerT>
 void PipelineNode<PlannerT>::attachWorldView(
-    std::shared_ptr<void> view,
+    BuiltWorldView built,
     std::vector<std::shared_ptr<IMapResource>> maps)
 {
     if constexpr (HasWorldView<PlannerT>) {
         // Stored type-erased: the pointer already targets the PlannerT::IWorldView
         // base subobject (WorldViewRegistry upcasts before erasing), so planOnce
         // recovers the typed pointer with a static cast.
-        view_ = std::move(view);
+        view_ = std::move(built.view);
+        prepare_ = std::move(built.prepare);
         map_resources_ = std::move(maps);
+        // The view's parameter pollable also owns its visualizer (and holds a
+        // borrow of the view).  param_keeper_ is declared BEFORE view_, so it is
+        // destroyed AFTER it — the view never outlives its own resources.
+        param_keeper_.keep_alive(std::move(built.params));
     } else {
         // Map-less planner: it declares no IWorldView, so no view can target it
         // (a WorldView can never be registered against it either).
-        (void)view;
+        (void)built;
         (void)maps;
         FINENAV_LOG_WARN(pnode_->get_logger(),
             "attachWorldView ignored: '{}' (layer '{}') is a map-less planner.",
@@ -206,6 +211,11 @@ PipelineNode<PlannerT>::planOnce() {
     for (const auto& res : map_resources_) {
         map_locks.push_back(res->lockRead());
     }
+
+    // WorldView heavy-derivation hook: once per plan, inside the map read lock
+    // and before plan().  This is where inflation / terrain analysis / cost-field
+    // construction belongs; plan() must only read what prepare() left behind.
+    if (prepare_) prepare_(std::addressof(ctx));
 
     auto result = [&]() -> std::optional<OutputTrajectoryT<PlannerT>> {
         if constexpr (HasWorldView<PlannerT>) {

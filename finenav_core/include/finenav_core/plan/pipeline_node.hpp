@@ -55,7 +55,7 @@ public:
 
     /// IPipelineNode — attach a pre-built WorldView plus its backing map resources.
     void attachWorldView(
-        std::shared_ptr<void> view,
+        BuiltWorldView built,
         std::vector<std::shared_ptr<IMapResource>> maps) override;
 
     // ── Configuration ──────────────────────────────────────────────────────
@@ -108,9 +108,10 @@ protected:
     PlannerT      planner_instance_;
     std::string   planner_name_;
 
-    // ── Map view + callbacks ───────────────────────────────────────────────
+    // ── World view + callbacks ─────────────────────────────────────────────
 
     std::shared_ptr<void>       view_;              ///< type-erased IWorldView (map-reading planners only)
+    BuiltWorldView::PrepareFn   prepare_;           ///< per-plan hook, run under the map read lock
     std::vector<std::shared_ptr<IMapResource>> map_resources_;  ///< maps to read-lock per plan
     PrePlanCallback             on_pre_plan_;
     PostPlanCallback            on_post_plan_;
