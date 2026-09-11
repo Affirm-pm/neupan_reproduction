@@ -28,11 +28,11 @@ void SimpleWorldView::prepare(const finenav::core::PlanningContext<DummyPlanner>
 // ("dummy_planner" / "dummy_map") at assembly time — so the WorldView author
 // never writes a planner/map name by hand, and plugin load order is irrelevant.
 //
-// Arguments: (registration name, view type, param namespace, planner type, maps...)
-// The registration name doubles as the WorldView's parameter namespace, so it
-// must match the top-level key of dummy_world_view.yaml.
+// Arguments: (view type, param namespace, planner type, maps...).  As with
+// FINENAV_REGISTER_PLANNER / _MAP, that one namespace token is also the
+// registration name — so it must match the top-level key of
+// dummy_world_view.yaml.
 FINENAV_REGISTER_WORLDVIEW(
-    dummy_world_view,
     finenav::example::SimpleWorldView,
     dummy_world_view,
     finenav::example::DummyPlanner,
