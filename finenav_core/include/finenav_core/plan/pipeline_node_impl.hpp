@@ -78,23 +78,23 @@ template <Planner PlannerT>
 rclcpp::Node::SharedPtr PipelineNode<PlannerT>::getPrivateNode() const { return pnode_; }
 
 template <Planner PlannerT>
-void PipelineNode<PlannerT>::attachMapView(
+void PipelineNode<PlannerT>::attachWorldView(
     std::shared_ptr<void> view,
     std::vector<std::shared_ptr<IMapResource>> maps)
 {
-    if constexpr (HasMapView<PlannerT>) {
-        // Stored type-erased: the pointer already targets the PlannerT::IMapView
-        // base subobject (MapViewRegistry upcasts before erasing), so planOnce
+    if constexpr (HasWorldView<PlannerT>) {
+        // Stored type-erased: the pointer already targets the PlannerT::IWorldView
+        // base subobject (WorldViewRegistry upcasts before erasing), so planOnce
         // recovers the typed pointer with a static cast.
         view_ = std::move(view);
         map_resources_ = std::move(maps);
     } else {
-        // Map-less planner: it declares no IMapView, so no view can target it
-        // (a MapView can never be registered against it either).
+        // Map-less planner: it declares no IWorldView, so no view can target it
+        // (a WorldView can never be registered against it either).
         (void)view;
         (void)maps;
         FINENAV_LOG_WARN(pnode_->get_logger(),
-            "attachMapView ignored: '{}' (layer '{}') is a map-less planner.",
+            "attachWorldView ignored: '{}' (layer '{}') is a map-less planner.",
             planner_name_, layer_name_);
     }
 }
@@ -136,10 +136,10 @@ void PipelineNode<PlannerT>::resetPlanner() {
 template <Planner PlannerT>
 std::optional<finenav_interfaces::msg::Trajectory>
 PipelineNode<PlannerT>::planOnce() {
-    if constexpr (HasMapView<PlannerT>) {
+    if constexpr (HasWorldView<PlannerT>) {
         if (!view_) {
             FINENAV_LOG_ERROR(pnode_->get_logger(),
-                "MapView not attached — call attachMapView() or createLayerByMapView() first.");
+                "WorldView not attached — call attachWorldView() or createLayerByWorldView() first.");
             return std::nullopt;
         }
     }
@@ -208,11 +208,11 @@ PipelineNode<PlannerT>::planOnce() {
     }
 
     auto result = [&]() -> std::optional<OutputTrajectoryT<PlannerT>> {
-        if constexpr (HasMapView<PlannerT>) {
-            // view_ is type-erased (already targeting the PlannerT::IMapView base
+        if constexpr (HasWorldView<PlannerT>) {
+            // view_ is type-erased (already targeting the PlannerT::IWorldView base
             // subobject); recover the typed pointer here.  This branch is only
             // compiled for map-reading planners.
-            auto typed_view = std::static_pointer_cast<typename PlannerT::IMapView>(view_);
+            auto typed_view = std::static_pointer_cast<typename PlannerT::IWorldView>(view_);
             return planner_instance_.plan(ctx, *typed_view);
         } else {
             return planner_instance_.plan(ctx);

@@ -17,10 +17,10 @@
 
 namespace finenav::example {
 
-class DummyMapView {
+class DummyWorldView {
 public:
     virtual bool isWalkable(const finenav::core::Position3D&) const = 0;
-    virtual ~DummyMapView() = default;
+    virtual ~DummyWorldView() = default;
 };
 
 /**
@@ -44,7 +44,7 @@ public:
 class DummyPlanner {
 public:
     using ConfigType    = dummy_planner::Params;
-    using IMapView      = DummyMapView;
+    using IWorldView      = DummyWorldView;
 
     static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
     static constexpr finenav::core::IOProfile OutputProfile{false, true, false, false};
@@ -71,7 +71,7 @@ public:
     using Context = finenav::core::PlanningContext<DummyPlanner>;
     using Result  = std::optional<finenav::core::OutputTrajectoryT<DummyPlanner>>;
 
-    Result plan(const Context& ctx,const IMapView& map_view);
+    Result plan(const Context& ctx,const IWorldView& map_view);
 
 private:
     double linear_speed_  = 0.5;

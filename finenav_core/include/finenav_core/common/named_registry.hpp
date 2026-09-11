@@ -21,7 +21,7 @@
 
 namespace finenav::core {
 
-/// Type-erased parameter loader shared by planner / map / mapview registries.
+/// Type-erased parameter loader shared by planner / map / world_view registries.
 /// (node, void* instance) → IParamPollable; `instance` is cast back to the
 /// concrete algorithm type inside the loader closure.
 using ConfigLoader = std::function<std::shared_ptr<IParamPollable>(

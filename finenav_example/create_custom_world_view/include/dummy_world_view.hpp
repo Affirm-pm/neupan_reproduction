@@ -12,10 +12,10 @@
 namespace finenav::example {
 
 /**
- * @brief SimpleMapView — the bridge between DummyMap and DummyPlanner::IMapView.
+ * @brief SimpleWorldView — the bridge between DummyMap and DummyPlanner::IWorldView.
  *
  * This is the ONE artifact that knows both concrete types.  It is written once
- * by the navigation-logic author and registered via FINENAV_REGISTER_MAPVIEW;
+ * by the navigation-logic author and registered via FINENAV_REGISTER_WORLDVIEW;
  * the end user then assembles the ControlLayer by NAME without ever seeing
  * either DummyMap or DummyPlanner.
  *
@@ -24,9 +24,9 @@ namespace finenav::example {
  * framework uses to auto-build the view from the maps it resolved at assembly
  * time — the author only declares the map types in the registration macro.
  */
-class SimpleMapView : public DummyPlanner::IMapView {
+class SimpleWorldView : public DummyPlanner::IWorldView {
 public:
-    explicit SimpleMapView(rclcpp::Node::SharedPtr node, const DummyMap& map) : map_(map) {
+    explicit SimpleWorldView(rclcpp::Node::SharedPtr node, const DummyMap& map) : map_(map) {
         (void)node;  // node 保留备用；纯只读桥当前不需要订阅
     }
 

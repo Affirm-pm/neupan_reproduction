@@ -36,7 +36,7 @@ struct MapEntry {
  *
  * A map .so self-registers here (via FINENAV_REGISTER_MAP): name →
  * { factory, config loader, type }.  The engine looks the factory up by name to
- * build a MapServer, and reverse-resolves type→name when assembling a MapView.
+ * build a MapServer, and reverse-resolves type→name when assembling a WorldView.
  */
 class MapRegistry : public RegistryTable<MapEntry> {
 public:

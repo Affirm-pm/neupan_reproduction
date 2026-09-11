@@ -14,7 +14,7 @@
 
 #include "finenav_core/common/plan_registry.hpp"
 #include "finenav_core/common/map_registry.hpp"
-#include "finenav_core/common/mapview_registry.hpp"
+#include "finenav_core/common/world_view_registry.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
@@ -143,16 +143,16 @@ std::shared_ptr<finenav::core::IMapResource> FineNavEngine::ensureMapServer(
     return createMapServerByName(algo_name, algo_name);
 }
 
-std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByMapView(
-    const std::string& mapview_name, const std::string& layer_name,
+std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldView(
+    const std::string& world_view_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
-    auto entry = finenav::core::MapViewRegistry::instance().lookup(mapview_name);
+    auto entry = finenav::core::WorldViewRegistry::instance().lookup(world_view_name);
     if (!entry) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createLayerByMapView: MapView '{}' is not registered. "
+            "createLayerByWorldView: WorldView '{}' is not registered. "
             "Call loadAlgoPlugins() first if it lives in a plugin .so.",
-            mapview_name);
+            world_view_name);
         return nullptr;
     }
 
@@ -163,8 +163,8 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByMapVie
     auto planner_name = plans.findPlannerNameByType(entry->planner_type);
     if (!planner_name) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createLayerByMapView('{}'): planner type '{}' is not registered as an algo.",
-            mapview_name, entry->planner_type);
+            "createLayerByWorldView('{}'): planner type '{}' is not registered as an algo.",
+            world_view_name, entry->planner_type);
         return nullptr;
     }
 
@@ -175,8 +175,8 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByMapVie
         auto map_name = maps.findMapNameByType(map_type);
         if (!map_name) {
             FINENAV_LOG_ERROR(node_->get_logger(),
-                "createLayerByMapView('{}'): map type '{}' is not registered as an algo.",
-                mapview_name, map_type);
+                "createLayerByWorldView('{}'): map type '{}' is not registered as an algo.",
+                world_view_name, map_type);
             return nullptr;
         }
         map_resources.push_back(ensureMapServer(*map_name));
@@ -201,15 +201,15 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByMapVie
         // createLayerByName(); reclaim it so no orphan layer is left behind.
         removeControlLayer(layer_name);
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createLayerByMapView('{}'): build() returned null.", mapview_name);
+            "createLayerByWorldView('{}'): build() returned null.", world_view_name);
         return nullptr;
     }
 
     // 4) attach
-    layer->attachMapView(std::move(view), std::move(map_resources));
+    layer->attachWorldView(std::move(view), std::move(map_resources));
     FINENAV_LOG_INFO(node_->get_logger(),
-        "createLayerByMapView('{}', '{}'): assembled layer over planner '{}'.",
-        mapview_name, layer_name, *planner_name);
+        "createLayerByWorldView('{}', '{}'): assembled layer over planner '{}'.",
+        world_view_name, layer_name, *planner_name);
     return layer;
 }
 
@@ -338,15 +338,15 @@ bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
                 policy = parsePolicy(spec["policy"]);
             }
 
-            std::string algo, mapview;
+            std::string algo, world_view;
             if (spec.is_string()) {
                 algo = spec.get<std::string>();       // shorthand: algo name
             } else if (spec.is_object()) {
                 if (spec.contains("algo") && spec["algo"].is_string()) algo = spec["algo"].get<std::string>();
-                if (spec.contains("mapview") && spec["mapview"].is_string()) mapview = spec["mapview"].get<std::string>();
-                if (!algo.empty() && !mapview.empty()) {
+                if (spec.contains("world_view") && spec["world_view"].is_string()) world_view = spec["world_view"].get<std::string>();
+                if (!algo.empty() && !world_view.empty()) {
                     FINENAV_LOG_ERROR(node_->get_logger(),
-                        "loadControlPipeline: layer '{}' declares both 'algo' and 'mapview'.", layer_name);
+                        "loadControlPipeline: layer '{}' declares both 'algo' and 'world_view'.", layer_name);
                     ok = false;
                     continue;
                 }
@@ -358,8 +358,8 @@ bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
             }
 
             std::shared_ptr<finenav::core::IPipelineNode> node;
-            if (!mapview.empty()) {
-                node = createLayerByMapView(mapview, layer_name, std::move(policy));
+            if (!world_view.empty()) {
+                node = createLayerByWorldView(world_view, layer_name, std::move(policy));
             } else if (!algo.empty()) {
                 node = createLayerByName(algo, layer_name, std::move(policy));
             }

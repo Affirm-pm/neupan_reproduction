@@ -79,7 +79,7 @@ public:
     MapServer& operator=(MapServer&&) = delete;
     ~MapServer() = default;
 
-    // ── IMapResource introspection (type-erased, for MapView assembly) ─────
+    // ── IMapResource introspection (type-erased, for WorldView assembly) ─────
     std::string       mapTypeId() const override;
     const void*       mapData() const override;
     std::shared_ptr<void> lockRead() override;

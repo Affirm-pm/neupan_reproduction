@@ -17,21 +17,21 @@
 
 namespace finenav::core {
 
-/// One MapView's registry row: name → { planner type, map types, build }.
-/// (No config loader — a MapView is not an algorithm, so it carries no params.)
-struct MapViewEntry {
+/// One WorldView's registry row: name → { planner type, map types, build }.
+/// (No config loader — a WorldView is not an algorithm, so it carries no params.)
+struct WorldViewEntry {
     using BuildFn = std::function<std::shared_ptr<void>(MapAccess&, rclcpp::Node::SharedPtr)>;
 
     std::string              planner_type;  ///< typeid(PlannerT).name()
     std::vector<std::string> map_types;     ///< typeid(MapT).name() per depended map
-    BuildFn                  build;         ///< (MapAccess&, node) → erased IMapView
+    BuildFn                  build;         ///< (MapAccess&, node) → erased IWorldView
 };
 
 /**
- * @brief MapViewRegistry — runtime discovery table for planner↔map bridges.
+ * @brief WorldViewRegistry — runtime discovery table for planner↔map bridges.
  *
- * A MapView is a framework-independent bridge between a concrete map and a
- * planner's IMapView.  Its .so self-registers here via FINENAV_REGISTER_MAPVIEW,
+ * A WorldView is a framework-independent bridge between a concrete map and a
+ * planner's IWorldView.  Its .so self-registers here via FINENAV_REGISTER_WORLDVIEW,
  * declaring only the planner type + map types it bridges plus a build function.
  *
  * The framework later assembles a navigation system by name: it looks up the
@@ -42,14 +42,14 @@ struct MapViewEntry {
  * Shares the RegistryTable bottom with PlanRegistry / MapRegistry, so the same
  * cross-DSO-singleton discipline + "keep-first" name semantics apply.
  */
-class MapViewRegistry : public RegistryTable<MapViewEntry> {
+class WorldViewRegistry : public RegistryTable<WorldViewEntry> {
 public:
-    using BuildFn = MapViewEntry::BuildFn;
-    using Entry   = MapViewEntry;
+    using BuildFn = WorldViewEntry::BuildFn;
+    using Entry   = WorldViewEntry;
 
     /// Non-inline function-local singleton defined in finenav_core.so so every
     /// DSO shares ONE table (same mechanism as PlanRegistry / MapRegistry).
-    static MapViewRegistry& instance();
+    static WorldViewRegistry& instance();
 
     /// Duplicate names keep the FIRST registrant (with a WARN).
     void registerEntry(std::string name, Entry entry);
@@ -71,29 +71,29 @@ std::vector<std::string> typeNames() {
 }
 
 /**
- * @brief Auto-build a MapView from its typed constructor
+ * @brief Auto-build a WorldView from its typed constructor
  *        ViewT(rclcpp::Node::SharedPtr, const Map1&, const Map2&, ...).
  *
  * The layer's private sub-node is handed in first (node-first convention); the
  * resolved maps follow as the constructor's map arguments.
  *
- * Upcasts to PlannerT::IMapView BEFORE erasing to void*, so the erased pointer
+ * Upcasts to PlannerT::IWorldView BEFORE erasing to void*, so the erased pointer
  * already points at the base subobject — ControlLayer's static cast back to
- * PlannerT::IMapView is then an identity cast (no undefined pointer adjustment).
+ * PlannerT::IWorldView is then an identity cast (no undefined pointer adjustment).
  */
 template <typename ViewT, typename PlannerT, typename... MapTs>
-std::shared_ptr<void> makeMapView(MapAccess& maps, rclcpp::Node::SharedPtr node) {
-    std::shared_ptr<typename PlannerT::IMapView> view =
+std::shared_ptr<void> makeWorldView(MapAccess& maps, rclcpp::Node::SharedPtr node) {
+    std::shared_ptr<typename PlannerT::IWorldView> view =
         std::make_shared<ViewT>(node, maps.get<MapTs>()...);
     return view;
 }
 
 template <typename ViewT>
-struct MapViewRegistrationSlot {};
+struct WorldViewRegistrationSlot {};
 
-struct MapViewSelfRegistrar {
-    MapViewSelfRegistrar(std::string name, MapViewEntry entry) {
-        MapViewRegistry::instance().registerEntry(std::move(name), std::move(entry));
+struct WorldViewSelfRegistrar {
+    WorldViewSelfRegistrar(std::string name, WorldViewEntry entry) {
+        WorldViewRegistry::instance().registerEntry(std::move(name), std::move(entry));
     }
 };
 

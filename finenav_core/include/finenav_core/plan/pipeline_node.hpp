@@ -29,7 +29,7 @@ namespace finenav::core {
  * @brief PipelineNode — the shared core of a single-planner pipeline stage.
  *
  * Holds the planner instance and the whole plan-once pipeline:
- *   pre-callback → read-lock MapView → planner.plan() → post-callback → result.
+ *   pre-callback → read-lock WorldView → planner.plan() → post-callback → result.
  *
  * It deliberately knows nothing about *how* a plan is triggered or *where* the
  * result is published — that is the single dimension the two concrete node types
@@ -53,8 +53,8 @@ public:
 
     rclcpp::Node::SharedPtr getPrivateNode() const override;
 
-    /// IPipelineNode — attach a pre-built MapView plus its backing map resources.
-    void attachMapView(
+    /// IPipelineNode — attach a pre-built WorldView plus its backing map resources.
+    void attachWorldView(
         std::shared_ptr<void> view,
         std::vector<std::shared_ptr<IMapResource>> maps) override;
 
@@ -84,7 +84,7 @@ protected:
     void resetPlanner();
 
     /**
-     * @brief Run one planning step: pre-cb → read-lock MapView → plan() → post-cb.
+     * @brief Run one planning step: pre-cb → read-lock WorldView → plan() → post-cb.
      *
      * The goal is read from the stashed reference trajectory
      * (`ref_traj.poses.back()`), so no goal argument is needed.
@@ -110,7 +110,7 @@ protected:
 
     // ── Map view + callbacks ───────────────────────────────────────────────
 
-    std::shared_ptr<void>       view_;              ///< type-erased IMapView (map-reading planners only)
+    std::shared_ptr<void>       view_;              ///< type-erased IWorldView (map-reading planners only)
     std::vector<std::shared_ptr<IMapResource>> map_resources_;  ///< maps to read-lock per plan
     PrePlanCallback             on_pre_plan_;
     PostPlanCallback            on_post_plan_;

@@ -48,6 +48,18 @@ public:
     [[nodiscard]] const std::string& getDefaultBehaviorTree() const { return default_bt_id_; }
 
     /**
+     * @brief Read-only access to the current robot state.
+     *
+     * Returns the narrow read-only query interface of the localizer (the
+     * RobotStateProvider base); `pushState()` is protected, so callers can only
+     * query — `getRobotState()` / `getRobotState(t)`.  The engine owns the
+     * provider, so the returned pointer is valid for the engine's lifetime.
+     */
+    [[nodiscard]] const core::RobotStateProvider* robotStateProvider() const {
+        return localizer_.get();
+    }
+
+    /**
      * @brief Operation with MapServer
      */
     template <core::Map MapT>
@@ -90,9 +102,9 @@ public:
     std::shared_ptr<finenav::core::IMapResource> createMapServerByName(
         const std::string& algo_name, const std::string& server_name);
 
-    /// Assemble a complete ControlLayer from a registered MapView bridge by name.
-    std::shared_ptr<finenav::core::IPipelineNode> createLayerByMapView( // TODO: 改个api名字
-        const std::string& mapview_name,
+    /// Assemble a complete ControlLayer from a registered WorldView bridge by name.
+    std::shared_ptr<finenav::core::IPipelineNode> createLayerByWorldView( // TODO: 改个api名字
+        const std::string& world_view_name,
         const std::string& layer_name,
         finenav::core::ExecutionPolicyVariant policy = finenav::core::EventDrivenPolicy{});
 
@@ -127,7 +139,7 @@ public:
     ///     },
     ///     "layers": {
     ///       "route_planner": { "algo": "astar_planner", "policy": "event_driven" },
-    ///       "mppi":          { "mapview": "dummy_mapview", "policy": { "periodic": 10.0 } }
+    ///       "mppi":          { "world_view": "dummy_world_view", "policy": { "periodic": 10.0 } }
     ///     }
     ///   }
     /// }
@@ -145,7 +157,7 @@ public:
 
 private:
     /// Return the MapServer already created under @p algo_name, or create one
-    /// (server name == algo name) on first use — so multiple MapViews sharing a
+    /// (server name == algo name) on first use — so multiple WorldViews sharing a
     /// map type reuse one server.
     std::shared_ptr<finenav::core::IMapResource> ensureMapServer(const std::string& algo_name); // TODO: 这是干嘛的
 

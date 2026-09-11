@@ -38,7 +38,7 @@ struct PlanEntry {
  * A planner .so self-registers here (via FINENAV_REGISTER_PLANNER): name →
  * { factory, config loader, type }.  The engine looks the factory up by name to
  * build a ControlLayer, and reverse-resolves type→name when assembling a
- * MapView.
+ * WorldView.
  */
 class PlanRegistry : public RegistryTable<PlanEntry> {
 public:

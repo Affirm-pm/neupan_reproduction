@@ -1,6 +1,6 @@
 add_executable(hello_finenav main.cpp)
 
-# The algorithm .so's (planner, map, mapview) are deliberately NOT linked here:
+# The algorithm .so's (planner, map, world_view) are deliberately NOT linked here:
 # a self-registering library the executable references no symbol from is dropped
 # by --as-needed, silently skipping its static-init registrar.  Instead they are
 # dlopened via FineNavEngine::loadAlgoPlugins() (see main.cpp).  The name-only

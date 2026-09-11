@@ -21,7 +21,7 @@ namespace finenav::core {
  * @brief ControlLayer — a single-planner pipeline stage driven by an
  *        ExecutionPolicyVariant.
  *
- * Inherits the plan-once pipeline (planner instance, planOnce(), MapView
+ * Inherits the plan-once pipeline (planner instance, planOnce(), WorldView
  * attachment) from PipelineNode and adds the execution policy, which decides
  * how the node is triggered and where its output goes:
  *   - PeriodicPolicy     → clock-driven: plan() loop at N Hz
