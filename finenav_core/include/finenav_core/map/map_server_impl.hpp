@@ -9,7 +9,7 @@
 #include <string>
 #include <typeinfo>
 
-#include "finenav_core/common/map_registry.hpp"
+#include "finenav_core/map/map_registry.hpp"
 #include "finenav_util/common/log_macros.hpp"
 #include "finenav_util/common/stopwatch.hpp"
 #include "finenav_util/ros/node_thread.hpp"

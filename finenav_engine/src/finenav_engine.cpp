@@ -12,9 +12,9 @@
 #include <behaviortree_cpp/utils/shared_library.h>
 #include <nlohmann/json.hpp>
 
-#include "finenav_core/common/plan_registry.hpp"
-#include "finenav_core/common/map_registry.hpp"
-#include "finenav_core/common/world_view_registry.hpp"
+#include "finenav_core/plan/plan_registry.hpp"
+#include "finenav_core/map/map_registry.hpp"
+#include "finenav_core/worldview/world_view_registry.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {

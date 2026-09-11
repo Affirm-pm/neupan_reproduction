@@ -6,7 +6,7 @@
 
 #include <cmath>
 
-#include "finenav_core/common/algo_register_macros.hpp"
+#include "finenav_core/plan/planner_macros.hpp"
 
 namespace finenav::example {
 

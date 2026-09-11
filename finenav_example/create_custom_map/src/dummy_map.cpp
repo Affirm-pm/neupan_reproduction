@@ -4,7 +4,7 @@
 
 #include "dummy_map.hpp"
 
-#include "finenav_core/common/algo_register_macros.hpp"
+#include "finenav_core/map/map_macros.hpp"
 
 namespace finenav::example {
 

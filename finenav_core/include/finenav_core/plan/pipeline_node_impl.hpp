@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "finenav_core/common/plan_registry.hpp"
+#include "finenav_core/plan/plan_registry.hpp"
 #include "finenav_core/plan/ros_conversions.hpp"
 #include "finenav_util/common/log_macros.hpp"
 

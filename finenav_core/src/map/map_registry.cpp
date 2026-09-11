@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_core/common/map_registry.hpp"
+#include "finenav_core/map/map_registry.hpp"
 
 #include "finenav_util/common/log_macros.hpp"
 

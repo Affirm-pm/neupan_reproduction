@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "finenav_core/common/world_view_registry.hpp"
-#include "finenav_core/map/world_view_concept.hpp"
+#include "finenav_core/worldview/world_view_registry.hpp"
+#include "finenav_core/worldview/world_view_concept.hpp"
 
 /**
  * @brief Registers a WorldView (a planner↔map bridge) into the framework.
