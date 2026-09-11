@@ -121,9 +121,6 @@ std::shared_ptr<IParamPollable> makeWorldViewParams(
     return makeParamPollable<ViewT, ParamsT, ListenerT>(node, *concrete, name);
 }
 
-template <typename ViewT>
-struct WorldViewRegistrationSlot {};
-
 struct WorldViewSelfRegistrar {
     WorldViewSelfRegistrar(std::string name, WorldViewEntry entry) {
         WorldViewRegistry::instance().registerEntry(std::move(name), std::move(entry));

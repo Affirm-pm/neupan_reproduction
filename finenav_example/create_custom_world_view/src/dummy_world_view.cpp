@@ -4,7 +4,7 @@
 
 #include "dummy_world_view.hpp"
 
-#include "finenav_core/worldview/world_view_macros.hpp"
+#include "finenav_core/algo_register_macros.hpp"
 
 namespace finenav::example {
 

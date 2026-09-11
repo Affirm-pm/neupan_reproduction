@@ -18,11 +18,25 @@ namespace finenav::core {
 namespace detail {
 
 /**
- * @brief Compile-time registration slot for an algorithm (map or planner).
+ * @brief Compile-time registration slot for a MAP or a PLANNER.
  * @tparam AlgoT  Algorithm type.
+ *
+ * Both macros specialize this one template, which is safe because a type is
+ * never both a map and a planner.
  */
 template <typename AlgoT>
 struct RegistrationSlot {};
+
+/**
+ * @brief Compile-time registration slot for a WORLDVIEW.
+ *
+ * Deliberately a SEPARATE primary template rather than a second use of
+ * RegistrationSlot: a WorldView is never also a planner or a map, so a distinct
+ * template costs nothing and turns an accidental double registration into a
+ * compile error instead of a silent slot overwrite.
+ */
+template <typename ViewT>
+struct WorldViewRegistrationSlot {};
 
 template <typename AlgoT>
 void injectLogger(rclcpp::Node::SharedPtr node, AlgoT& algo, std::string_view name) {
