@@ -295,8 +295,8 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
         }
     }
 
-    // ── Robot-inside-window check ────────────────────────────────────────
-    {
+    // ── Robot-inside-window check (windowed maps only) ───────────────────
+    if constexpr (ShiftableMap<MapT>) {
         const auto maybe_state = state_provider_->getRobotState();
         if (!maybe_state) {
             return;
