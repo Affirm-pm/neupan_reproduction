@@ -2,13 +2,13 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-// This file is included at the bottom of map/observation_source.hpp.
+// This file is included at the bottom of map/detail/observation_source.hpp.
 // It contains the out-of-line template method definitions for ObservationSource.
-// Do NOT include this file directly — include observation_source.hpp instead.
+// Do NOT include this file directly — include map/detail/observation_source.hpp instead.
 
 #pragma once
 
-namespace finenav::core {
+namespace finenav::core::detail {
 
 template <typename MsgT>
 ObservationSource<MsgT>::ObservationSource(
@@ -117,4 +117,4 @@ void ObservationSource<MsgT>::pruneExpired(const rclcpp::Time& now) {
     }
 }
 
-} // namespace finenav::core
+} // namespace finenav::core::detail

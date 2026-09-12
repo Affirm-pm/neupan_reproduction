@@ -16,13 +16,13 @@
 #include <behaviortree_cpp/utils/shared_library.h>
 
 #include "finenav_interfaces/action/navigate_to_pose.hpp"
-#include "finenav_core/map/map_server.hpp"
-#include "finenav_core/plan/control_layer.hpp"
+#include "finenav_core/map/i_map_resource.hpp"
+#include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
+#include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/navigator.hpp"
-#include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
 

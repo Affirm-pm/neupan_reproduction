@@ -11,7 +11,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include "finenav_core/common/detail/named_registry.hpp"
-#include "finenav_core/common/param_pollable_keeper.hpp"
+#include "finenav_core/common/i_param_pollable.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
 
 namespace finenav::core::detail {

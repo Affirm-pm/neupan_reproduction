@@ -9,7 +9,8 @@
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
-#include "finenav_core/map/observation_source.hpp"
+#include "finenav_core/map/detail/observation_source.hpp"
+#include "finenav_core/map/observation_buffer_policy.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
@@ -144,7 +145,7 @@ private:
     rclcpp::Logger logger_;
     std::vector<Hook> pre_hooks_;
     std::vector<Hook> post_hooks_;
-    std::vector<std::shared_ptr<IObservationSource>> observation_sources_;
+    std::vector<std::shared_ptr<detail::IObservationSource>> observation_sources_;
     std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;
 };
 

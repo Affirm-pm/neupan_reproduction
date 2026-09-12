@@ -9,12 +9,12 @@
 #include <shared_mutex>
 #include <string>
 
-#include "finenav_core/common/param_pollable_keeper.hpp"
+#include "finenav_core/common/detail/param_pollable_keeper.hpp"
+#include "finenav_core/common/i_param_pollable.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/map/map_runtime.hpp"
-#include "finenav_core/map/observation_source.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_util/ros/node_thread.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -106,7 +106,7 @@ private:
     // ---- Framework resource (visualizer lives here) ----
     // Declared BEFORE map_instance_ so it is destroyed AFTER it: the map holds
     // a raw pointer into the visualizer, so it must die first.
-    ParamPollableKeeper param_keeper_;
+    detail::ParamPollableKeeper param_keeper_;
 
     // ---- Map data & lock ----
     std::unique_ptr<MapT> map_instance_;

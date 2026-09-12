@@ -7,20 +7,21 @@
 #include <memory>
 #include <vector>
 
-namespace finenav::core {
+#include "finenav_core/common/i_param_pollable.hpp"
 
-/**
- * @brief IParamPollable -- Abstract interface for a pollable parameter object.
- */
-class IParamPollable {
-public:
-    virtual ~IParamPollable() = default;
-    virtual void poll() = 0;
-};
+namespace finenav::core::detail {
 
 /**
  * @brief ParamPollableKeeper -- Owns IParamPollable objects and provides a
  *        single pollAll() entry point for periodic dynamic-parameter updates.
+ *
+ * A private member of PipelineNode and MapServer, and nothing else: no user
+ * ever names this type, so it is detail while the interface it stores
+ * (IParamPollable) stays public.
+ *
+ * Declaration order matters where it is used — it must be declared BEFORE the
+ * planner/map instance so it is destroyed AFTER it (the algorithm holds a
+ * borrowed pointer into the visualizer its pollable owns).
  */
 class ParamPollableKeeper {
 public:
@@ -38,4 +39,4 @@ private:
     std::vector<std::shared_ptr<IParamPollable>> pollables_;
 };
 
-}  // namespace finenav::core
+}  // namespace finenav::core::detail

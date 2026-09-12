@@ -17,7 +17,7 @@ std::function<void(MsgT&&, const rclcpp::Time&)> MapRuntime::addObservationSourc
     ObservationBufferPolicy policy,
     Fuser<MsgT> fuser)
 {
-    using Source = ObservationSource<MsgT>;
+    using Source = detail::ObservationSource<MsgT>;
     auto source = std::make_shared<Source>(
         source_name, policy, std::move(fuser), logger_);
     observation_sources_.push_back(source);

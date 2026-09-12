@@ -21,7 +21,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/param_pollable_keeper.hpp"
+#include "finenav_core/common/i_param_pollable.hpp"
 
 namespace finenav::core::detail {
 

@@ -13,7 +13,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/param_pollable_keeper.hpp"
+#include "finenav_core/common/detail/param_pollable_keeper.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
@@ -99,7 +99,7 @@ protected:
     // ── Framework resource (visualizer lives here) ─────────────────────────
     // Declared BEFORE planner_instance_ so it is destroyed AFTER it: the
     // planner holds a raw pointer into the visualizer, so it must die first.
-    ParamPollableKeeper param_keeper_;
+    detail::ParamPollableKeeper param_keeper_;
 
     // ── Planner state ──────────────────────────────────────────────────────
 

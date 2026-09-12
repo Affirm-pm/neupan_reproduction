@@ -1,6 +1,7 @@
 // Copyright (c) 2026.
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
+
 #pragma once
 
 #include <deque>
@@ -9,20 +10,11 @@
 #include <string>
 
 #include "rclcpp/rclcpp.hpp"
-#include "finenav_util/common/log_macros.hpp"
+#include "finenav_core/map/observation_buffer_policy.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
+#include "finenav_util/common/log_macros.hpp"
 
-namespace finenav::core {
-
-/**
- * @brief ObservationBufferPolicy — buffer and timeout parameters for one sensor stream.
- */
-struct ObservationBufferPolicy {
-    std::size_t max_buffer_size{32};           ///< Max buffered frames (0 = unbounded)
-    double observation_keep_time_sec{0.0};     ///< Max message age before eviction (0 = keep forever)
-    double source_timeout_sec{0.0};            ///< Source timeout threshold (0 = disabled)
-    double expected_update_rate_hz{0.0};       ///< Expected sensor rate; warns on starvation (0 = disabled)
-};
+namespace finenav::core::detail {
 
 /**
  * @brief IObservationSource — type-erased base for all observation sources.
@@ -39,6 +31,10 @@ public:
 
 /**
  * @brief ObservationSource — manages the data buffer for one sensor stream.
+ *
+ * Created only by MapRuntime::addObservationSource(); a Map developer never
+ * names it, and the handle they do keep is the type-erased push callable that
+ * MapRuntime returns.
  *
  * @tparam MsgT  Sensor message type.
  */
@@ -80,6 +76,6 @@ private:
     bool has_seen_message_{false};
 };
 
-} // namespace finenav::core
+}  // namespace finenav::core::detail
 
 #include "finenav_core/map/detail/observation_source_impl.hpp"
