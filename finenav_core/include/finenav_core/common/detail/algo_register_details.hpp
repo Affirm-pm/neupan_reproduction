@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -37,9 +38,16 @@ struct RegistrationSlot {};
 template <typename ViewT>
 struct WorldViewRegistrationSlot {};
 
+// The probe must ask about the TYPE, never build a value of it.  `setLogger(
+// rclcpp::Logger{})` reads naturally but is ill-formed: both of Logger's
+// constructors are private (only rclcpp::get_logger and NodeLogging are
+// friends), so the expression never compiles and the branch below is silently
+// dead — the algorithm keeps whatever logger it made for itself.  declval poses
+// the same question without constructing anything, which is the only way to
+// probe this type.
 template <typename AlgoT>
 void injectLogger(rclcpp::Node::SharedPtr node, AlgoT& algo, std::string_view name) {
-    if constexpr (requires { algo.setLogger(rclcpp::Logger{}); }) {
+    if constexpr (requires { algo.setLogger(std::declval<const rclcpp::Logger&>()); }) {
         algo.setLogger(node->get_logger().get_child(std::string{name}));
     }
 }
