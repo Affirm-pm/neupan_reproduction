@@ -34,7 +34,16 @@ int main(int argc, char** argv) {
     //    back to their registered names ("dummy_planner" / "dummy_map"), reuses
     //    (or creates) the MapServer, builds the IWorldView and attaches it.  The
     //    end user never names a planner or a map — only the WorldView.
-    engine->createLayerByWorldView("dummy_world_view", "my_layer", core::PeriodicPolicy{10.0});
+    //    The factory reports success rather than handing back a layer handle:
+    //    the assembled stage is the algorithm developer's to drive, so the
+    //    application only learns whether assembly worked.
+    if (!engine->createLayerByWorldView("dummy_world_view", "my_layer",
+                                        core::PeriodicPolicy{10.0})) {
+        RCLCPP_ERROR(node->get_logger(),
+            "Failed to assemble 'my_layer' from WorldView 'dummy_world_view'.");
+        rclcpp::shutdown();
+        return 1;
+    }
 
     // 3. Declare the control pipeline as a named branch.  A branch is an
     //    ordered sequence of layer names; the first stage implicitly consumes

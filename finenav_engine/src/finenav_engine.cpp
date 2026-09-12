@@ -99,7 +99,14 @@ bool FineNavEngine::removeControlLayer(const std::string& name) {
     return was_registered;
 }
 
-std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByName(
+bool FineNavEngine::createLayerByName(
+    const std::string& algo_name, const std::string& layer_name,
+    finenav::core::ExecutionPolicyVariant policy)
+{
+    return makeLayerByName(algo_name, layer_name, std::move(policy)) != nullptr;
+}
+
+std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::makeLayerByName(
     const std::string& algo_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
@@ -119,7 +126,13 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByName(
     return layer;
 }
 
-std::shared_ptr<finenav::core::IMapResource> FineNavEngine::createMapServerByName(
+bool FineNavEngine::createMapServerByName(
+    const std::string& algo_name, const std::string& server_name)
+{
+    return makeMapServerByName(algo_name, server_name) != nullptr;
+}
+
+std::shared_ptr<finenav::core::IMapResource> FineNavEngine::makeMapServerByName(
     const std::string& algo_name, const std::string& server_name)
 {
     auto server = finenav::core::detail::MapRegistry::instance().createMap(
@@ -142,10 +155,10 @@ std::shared_ptr<finenav::core::IMapResource> FineNavEngine::ensureMapServer(
 {
     auto it = maps_.find(algo_name);
     if (it != maps_.end()) return it->second;
-    return createMapServerByName(algo_name, algo_name);
+    return makeMapServerByName(algo_name, algo_name);
 }
 
-std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldView(
+bool FineNavEngine::createLayerByWorldView(
     const std::string& world_view_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
@@ -155,7 +168,7 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldV
             "createLayerByWorldView: WorldView '{}' is not registered. "
             "Call loadAlgoPlugins() first if it lives in a plugin .so.",
             world_view_name);
-        return nullptr;
+        return false;
     }
 
     auto& plans = finenav::core::detail::PlanRegistry::instance();
@@ -167,7 +180,7 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldV
         FINENAV_LOG_ERROR(node_->get_logger(),
             "createLayerByWorldView('{}'): planner type '{}' is not registered as an algo.",
             world_view_name, entry->planner_type);
-        return nullptr;
+        return false;
     }
 
     // Resolve + dedup the map server(s) the view depends on.
@@ -179,14 +192,14 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldV
             FINENAV_LOG_ERROR(node_->get_logger(),
                 "createLayerByWorldView('{}'): map type '{}' is not registered as an algo.",
                 world_view_name, map_type);
-            return nullptr;
+            return false;
         }
         map_resources.push_back(ensureMapServer(*map_name));
     }
 
     // 1) create the layer FIRST — its pnode must exist before build
-    auto layer = createLayerByName(*planner_name, layer_name, std::move(policy));
-    if (!layer) return nullptr;
+    auto layer = makeLayerByName(*planner_name, layer_name, std::move(policy));
+    if (!layer) return false;
 
     // 2) build MapAccess carrying the resolved maps
     std::vector<finenav::core::MapHandle> handles;
@@ -200,11 +213,11 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldV
     auto built = entry->build(access, layer->getPrivateNode());
     if (!built.view) {
         // The layer was already registered in layers_/navigator master by
-        // createLayerByName(); reclaim it so no orphan layer is left behind.
+        // makeLayerByName(); reclaim it so no orphan layer is left behind.
         removeControlLayer(layer_name);
         FINENAV_LOG_ERROR(node_->get_logger(),
             "createLayerByWorldView('{}'): build() returned no view.", world_view_name);
-        return nullptr;
+        return false;
     }
 
     // 4) attach the view + its param pollable + its prepare() invoker
@@ -212,7 +225,7 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldV
     FINENAV_LOG_INFO(node_->get_logger(),
         "createLayerByWorldView('{}', '{}'): assembled layer over planner '{}'.",
         world_view_name, layer_name, *planner_name);
-    return layer;
+    return true;
 }
 
 bool FineNavEngine::loadAlgoPlugins(const std::vector<std::string>& plugins)
@@ -359,13 +372,13 @@ bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
                 continue;
             }
 
-            std::shared_ptr<finenav::core::IPipelineNode> node;
+            bool created = false;
             if (!world_view.empty()) {
-                node = createLayerByWorldView(world_view, layer_name, std::move(policy));
+                created = createLayerByWorldView(world_view, layer_name, std::move(policy));
             } else if (!algo.empty()) {
-                node = createLayerByName(algo, layer_name, std::move(policy));
+                created = createLayerByName(algo, layer_name, std::move(policy));
             }
-            if (!node) {
+            if (!created) {
                 FINENAV_LOG_ERROR(node_->get_logger(),
                     "loadControlPipeline: failed to create layer '{}'.", layer_name);
                 ok = false;

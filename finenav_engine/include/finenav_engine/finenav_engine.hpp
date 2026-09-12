@@ -74,18 +74,30 @@ public:
     // back handles that reached into a layer's or a map's flow.  The downstream
     // user assembles by name and tunes parameters; the flow belongs to the
     // algorithm developer.
+    //
+    // For the same reason these three report success, not a handle.  A returned
+    // IPipelineNode would hand the caller connectFrom() / attachWorldView() /
+    // getPrivateNode() — the very flow the by-name factory exists to keep on the
+    // algorithm developer's side of the line — and the only thing the caller can
+    // legitimately do with it is test whether the assembly worked.  The
+    // pointer-returning forms live in make*() below, where the ENGINE still has
+    // to drive what it just built.
 
-    /// Create a ControlLayer for a planner registered under @p algo_name.
-    std::shared_ptr<finenav::core::IPipelineNode> createLayerByName( // TODO: CreateControl
+    /// Assemble the pipeline layer for the planner registered under @p algo_name.
+    /// @return false if no planner is registered under that name (ERROR logged).
+    [[nodiscard]] bool createLayerByName( // TODO: CreateControl
         const std::string& algo_name, const std::string& layer_name,
         finenav::core::ExecutionPolicyVariant policy);
 
-    /// Create a MapServer for a map registered under @p algo_name.
-    std::shared_ptr<finenav::core::IMapResource> createMapServerByName(
+    /// Create the map server for the map registered under @p algo_name.
+    /// @return false if no map is registered under that name (ERROR logged).
+    [[nodiscard]] bool createMapServerByName(
         const std::string& algo_name, const std::string& server_name);
 
-    /// Assemble a complete ControlLayer from a registered WorldView bridge by name.
-    std::shared_ptr<finenav::core::IPipelineNode> createLayerByWorldView( // TODO: 改个api名字
+    /// Assemble a complete layer from a registered WorldView bridge by name.
+    /// @return false if the WorldView, its planner or one of its maps is not
+    ///         registered, or if building the view failed (ERROR logged).
+    [[nodiscard]] bool createLayerByWorldView( // TODO: 改个api名字
         const std::string& world_view_name,
         const std::string& layer_name,
         finenav::core::ExecutionPolicyVariant policy = finenav::core::EventDrivenPolicy{});
@@ -138,6 +150,19 @@ public:
     void cancelNavigation();
 
 private:
+    // ── Pointer-returning factory forms ──────────────────────────────────────
+    // Everything the public bool API does, but handing back the object.  Private
+    // because holding one of these IS the capability the public form withholds:
+    // assembling a WorldView needs the layer's private sub-node and its
+    // attachWorldView(); resolving a cached map needs its resource handle.
+
+    std::shared_ptr<finenav::core::IPipelineNode> makeLayerByName(
+        const std::string& algo_name, const std::string& layer_name,
+        finenav::core::ExecutionPolicyVariant policy);
+
+    std::shared_ptr<finenav::core::IMapResource> makeMapServerByName(
+        const std::string& algo_name, const std::string& server_name);
+
     /// Return the MapServer already created under @p algo_name, or create one
     /// (server name == algo name) on first use — so multiple WorldViews sharing a
     /// map type reuse one server.
