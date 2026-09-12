@@ -90,7 +90,13 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
 
 
 bool FineNavEngine::removeControlLayer(const std::string& name) {
-    return layers_.erase(name) > 0;
+    const bool was_registered = layers_.erase(name) > 0;
+    // createLayerByName() registered this layer's channel with the master
+    // (manageLayer), so dropping it from `layers_` alone would leave the master
+    // holding a live publisher + subscription pair for a layer that no longer
+    // exists — the orphan this call exists to prevent.
+    navigator_->master().unmanageLayer(name);
+    return was_registered;
 }
 
 std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByName(
