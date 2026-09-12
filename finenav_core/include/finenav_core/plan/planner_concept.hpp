@@ -15,14 +15,31 @@
 namespace finenav::core {
 
 /**
- * @brief PrePlanContext — context passed to pre-plan callbacks
+ * @brief Why there is no pre-plan / post-plan callback.
+ *
+ * Earlier revisions exposed `set_on_pre_plan` / `set_on_post_plan` on the
+ * pipeline node.  They were removed before 1.0, and the reasoning is worth
+ * keeping because the same request will come back:
+ *
+ *   - The pre-plan callback could not do the job it existed for.  Its
+ *     `ref_traj` was a read-only view of the *incoming ROS message*, while the
+ *     planner reads a different object (`cached_ref_`), so a rewrite in the
+ *     callback would not have reached the planner even if the field had been
+ *     mutable.  What the old demo built on it — pose-dependent seek, smooth and
+ *     trim of the reference — belongs to an upstream decorator stage.
+ *
+ *   - The post-plan callback returned a `bool` that OVERRODE the plan outcome.
+ *     A callback returning `true` unconditionally turned a failed plan into a
+ *     default-constructed trajectory reported as success.  Discarding or
+ *     clamping a result belongs to `navigator::IChassisCommand::validate()`.
+ *
+ *   - Visualisation, the other historical use, is served by injecting a
+ *     `finenav::viz::FineNavVisualizer` into the algorithm.
+ *
+ * Anything added to this concept is a permanent compatibility promise.  If a
+ * need reappears, give it a named concept of its own with a signature that
+ * cannot be misused, rather than reopening a general-purpose callback slot.
  */
-
-struct PrePlanContext {
-    const std::string&                     active_planner_id;  ///< ID of the planner that is about to run (const) // TODO: 要删掉
-    const RobotState&                      robot_state;        ///< Current robot state (read-only view)
-    const finenav_interfaces::msg::Trajectory& ref_traj;       ///< Reference trajectory (read-only view)
-};
 
 /**
  * @brief PlanningContext — context passed to planner.plan() calls.
@@ -41,16 +58,6 @@ struct PlanningContext {
     const RobotState&                    robot_state;  ///< Current robot state (read-only view)
     const InputTrajectoryT<PlannerT>&    ref_traj;     ///< Reference trajectory (read-only view)
 };
-
-/**
- * @brief PostPlanContext — context passed to post-plan callbacks.
- */
-struct PostPlanContext {
-    const std::string&                    active_planner_id;  ///< ID of the planner that just ran (const)
-    const bool                            is_success;         ///< Whether the planning is success or not (const)
-    finenav_interfaces::msg::Trajectory&  result_traj;        ///< Reference trajectory for the current planning episode
-};
-
 
 /**
  * @brief HasWorldView — does the planner declare an IWorldView (i.e. read a map)?

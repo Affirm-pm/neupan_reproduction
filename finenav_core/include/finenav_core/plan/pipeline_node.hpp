@@ -29,7 +29,13 @@ namespace finenav::core {
  * @brief PipelineNode — the shared core of a single-planner pipeline stage.
  *
  * Holds the planner instance and the whole plan-once pipeline:
- *   pre-callback → read-lock WorldView → planner.plan() → post-callback → result.
+ *   read-lock WorldView → WorldView::prepare() → planner.plan() → result.
+ *
+ * There is deliberately NO user callback anywhere in this sequence.  What used
+ * to be `on_pre_plan` / `on_post_plan` is now served by the pieces that own the
+ * work: reference manipulation by an upstream decorator stage, result handling
+ * by `navigator::IChassisCommand`, and visualization by the injected
+ * `FineNavVisualizer`.  See the API review note in planner_concept.hpp.
  *
  * It deliberately knows nothing about *how* a plan is triggered or *where* the
  * result is published — that is the single dimension the two concrete node types
@@ -44,9 +50,6 @@ namespace finenav::core {
 template <Planner PlannerT>
 class PipelineNode : public IPipelineNode {
 public:
-    using PrePlanCallback  = std::function<bool(PrePlanContext&)>;
-    using PostPlanCallback = std::function<bool(PostPlanContext&)>;
-
     // ── IPipelineNode ─────────────────────────────────────────────────────
 
     void connectFrom(const std::string& parent_name) override;
@@ -57,11 +60,6 @@ public:
     void attachWorldView(
         BuiltWorldView built,
         std::vector<std::shared_ptr<IMapResource>> maps) override;
-
-    // ── Configuration ──────────────────────────────────────────────────────
-
-    void set_on_pre_plan(PrePlanCallback cb)   { on_pre_plan_  = std::move(cb); }
-    void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
 
 protected:
     PipelineNode(
@@ -108,13 +106,11 @@ protected:
     PlannerT      planner_instance_;
     std::string   planner_name_;
 
-    // ── World view + callbacks ─────────────────────────────────────────────
+    // ── World view ─────────────────────────────────────────────────────────
 
     std::shared_ptr<void>       view_;              ///< type-erased IWorldView (map-reading planners only)
     BuiltWorldView::PrepareFn   prepare_;           ///< per-plan hook, run under the map read lock
     std::vector<std::shared_ptr<IMapResource>> map_resources_;  ///< maps to read-lock per plan
-    PrePlanCallback             on_pre_plan_;
-    PostPlanCallback            on_post_plan_;
     RobotStateProvider*         state_provider_{nullptr};
 
     // ── Data ───────────────────────────────────────────────────────────────

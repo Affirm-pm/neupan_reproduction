@@ -178,18 +178,6 @@ std::shared_ptr<void> MapServer<MapT>::lockRead() {
     return std::make_shared<LockedMapRO<MapT>>(getLockedReadView());
 }
 
-// --- MapServer::registerPreUpdateHook  (see map_server.hpp) --------------------
-template <Map MapT>
-void MapServer<MapT>::registerPreUpdateHook(PreUpdateHook hook) {
-    pre_update_hook_ = std::move(hook);
-}
-
-// --- MapServer::registerPostUpdateHook  (see map_server.hpp) -------------------
-template <Map MapT>
-void MapServer<MapT>::registerPostUpdateHook(PostUpdateHook hook) {
-    post_update_hook_ = std::move(hook);
-}
-
 // --- MapServer::getLockedReadView  (see map_server.hpp) ------------------------
 template <Map MapT>
 LockedMapRO<MapT> MapServer<MapT>::getLockedReadView() {
@@ -202,47 +190,6 @@ LockedMapRW<MapT> MapServer<MapT>::getLockedWriteView() {
     return LockedMapRW<MapT>(*map_instance_, rw_mutex_);
 }
 
-// --- MapServer::addObservationSource (manual injector)  (see map_server.hpp) ---
-template <Map MapT>
-template <typename MsgT>
-std::function<void(MsgT&&, const rclcpp::Time&)>
-MapServer<MapT>::addObservationSource(
-    const std::string& source_name,
-    ObservationBufferPolicy policy,
-    Fuser<MsgT> fuser)
-{
-    // Wrap the user-facing Fuser (MsgT, Time, State, MapT&) → MapRuntime Fuser
-    // (MsgT, Time, State) by capturing `this` to provide MapT&.
-    return runtime_.addObservationSource<MsgT>(
-        source_name, policy,
-        [this, fuser = std::move(fuser)](
-            const MsgT& msg, const rclcpp::Time& stamp, const RobotState& state) {
-            fuser(msg, stamp, state, *map_instance_);
-        });
-}
-
-// --- MapServer::addObservationSource (topic-based)  (see map_server.hpp) -------
-template <Map MapT>
-template <typename MsgT>
-void MapServer<MapT>::addObservationSource(
-    const std::string& source_name,
-    const std::string& topic_name,
-    const rclcpp::QoS& qos,
-    ObservationBufferPolicy policy,
-    Fuser<MsgT> fuser)
-{
-    runtime_.addObservationSource<MsgT>(
-        source_name, topic_name, qos, policy,
-        [this, fuser = std::move(fuser)](
-            const MsgT& msg, const rclcpp::Time& stamp, const RobotState& state) {
-            fuser(msg, stamp, state, *map_instance_);
-        });
-
-    FINENAV_LOG_INFO(node_->get_logger(),
-        "MapServer '{}': subscribed to '{}' for observation source '{}'.",
-        server_name_, topic_name, source_name);
-}
-
 // --- MapServer::runUpdateCycle  (private, see map_server.hpp) ------------------
 template <Map MapT>
 void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
@@ -252,7 +199,7 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
 
     std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
-    // ── Map-developer pre-update hooks (via MapRuntime) ──────────────────
+    // ── Map pre-update hooks (via MapRuntime) ────────────────────────────
     if (auto maybe_rs = state_provider_->getRobotState()) {
         runtime_.applyPreHooks(*maybe_rs);
     } else {
@@ -261,38 +208,16 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
             server_name_);
     }
 
-    // ── User-facing pre-update hook (with MapT&) ─────────────────────────
-    if (pre_update_hook_) {
-        if (auto maybe_rs = state_provider_->getRobotState()) {
-            pre_update_hook_(*maybe_rs, *map_instance_);
-        } else {
-            FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
-                "MapServer '{}': robot state unavailable — skipping user pre-update hook.",
-                server_name_);
-        }
-    }
-
-    // ── All observation sources (both dev and user) ──────────────────────
+    // ── All observation sources ──────────────────────────────────────────
     runtime_.applyObservationSources(now, state_provider_);
 
-    // ── Map-developer post-update hooks (via MapRuntime) ─────────────────
+    // ── Map post-update hooks (via MapRuntime) ───────────────────────────
     if (auto maybe_rs = state_provider_->getRobotState()) {
         runtime_.applyPostHooks(*maybe_rs);
     } else {
         FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
             "MapServer '{}': robot state unavailable — skipping post-update hooks.",
             server_name_);
-    }
-
-    // ── User-facing post-update hook (with MapT&) ────────────────────────
-    if (post_update_hook_) {
-        if (auto maybe_rs = state_provider_->getRobotState()) {
-            post_update_hook_(*maybe_rs, *map_instance_);
-        } else {
-            FINENAV_LOG_WARN_THROTTLE(node_->get_logger(), 2000,
-                "MapServer '{}': robot state unavailable — skipping user post-update hook.",
-                server_name_);
-        }
     }
 
     // ── Robot-inside-window check (windowed maps only) ───────────────────

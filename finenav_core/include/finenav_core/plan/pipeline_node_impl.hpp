@@ -191,18 +191,6 @@ PipelineNode<PlannerT>::planOnce() {
 
     param_keeper_.pollAll(); // Apply pending dynamic parameter updates
 
-    bool plan_success = false;
-    finenav_interfaces::msg::Trajectory output_traj_msg;
-
-    const finenav_interfaces::msg::Trajectory empty_ref;  // fallback when no reference yet
-    PrePlanContext pre_ctx{
-        planner_name_, current_robot_state,
-        has_ref ? ref_holder->trajectory : empty_ref};
-
-    if (on_pre_plan_ && !on_pre_plan_(pre_ctx)) {
-        return std::nullopt;
-    }
-
     PlanningContext<PlannerT> ctx{current_robot_state, cached_ref_};
 
     // Acquire read locks on every map this view reads, held until plan() returns.
@@ -228,22 +216,14 @@ PipelineNode<PlannerT>::planOnce() {
             return planner_instance_.plan(ctx);
         }
     }();
-    if (result.has_value()) {
-        plan_success = true;
-        toROSMsg(std::move(result.value()), output_traj_msg);
-    } else {
+    if (!result.has_value()) {
         FINENAV_LOG_WARN(pnode_->get_logger(), "plan() returned nullopt.");
+        return std::nullopt;
     }
 
-    if (on_post_plan_) {
-        PostPlanContext post_ctx{planner_name_, plan_success, output_traj_msg};
-        plan_success = on_post_plan_(post_ctx);
-    }
-
-    if (plan_success) {
-        return output_traj_msg;
-    }
-    return std::nullopt;
+    finenav_interfaces::msg::Trajectory output_traj_msg;
+    toROSMsg(std::move(result.value()), output_traj_msg);
+    return output_traj_msg;
 }
 
 } // namespace finenav::core

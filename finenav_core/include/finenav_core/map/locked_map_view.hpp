@@ -36,7 +36,8 @@ private:
  *
  * Acquired via MapServer::getLockedWriteView(). Construction acquires an
  * exclusive (write) lock, blocking until all active LockedMapRO handles are
- * released. Use sparingly — prefer addObservationSource() for routine data injection.
+ * released. Use sparingly — prefer MapRuntime::addObservationSource() for
+ * routine data injection.
  */
 template <Map MapT>
 class LockedMapRW {

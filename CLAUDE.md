@@ -157,12 +157,17 @@ int  cost     = model.checkCost([](const Position3D& p) { return map.getCost(p);
 Goal arrives → execute()
   → resetActivePlanner()         [episode boundary]
   → planOnce(goal):
-      1. on_pre_plan(ctx)         [user callback: trim reference traj, smooth, etc.]
-      2. build PlanningContext    [robot_state from Localizer, goal_pose, ref_traj]
-      3. map_view_factory()       [RAII read lock, build IMapView from MapT]
+      1. build PlanningContext    [robot_state from Localizer, ref_traj]
+      2. map read locks           [RAII shared lock on every map the view reads]
+      3. WorldView::prepare(ctx)  [per-plan heavy derivation, under the read lock]
       4. planner.plan(ctx, view)  [algorithm execution]
-      5. on_post_plan(ctx)        [user callback: publish cmd_vel, etc.]
 ```
+
+There is deliberately **no** pre-plan / post-plan user callback. Reference
+manipulation (seek / smooth / trim) is an upstream decorator stage, result
+handling is `navigator::IChassisCommand`, and visualization is the injected
+`FineNavVisualizer`. See the note in
+`finenav_core/include/finenav_core/plan/planner_concept.hpp`.
 
 ### Pipeline Chaining
 

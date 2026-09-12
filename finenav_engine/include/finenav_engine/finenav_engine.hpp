@@ -59,39 +59,21 @@ public:
         return localizer_.get();
     }
 
-    /**
-     * @brief Operation with MapServer
-     */
-    template <core::Map MapT>
-    std::shared_ptr<core::MapServer<MapT>> createMapServer(
-        const std::string& algo_name, const std::string& server_name); // TODO: server_name在前
-
-    template <core::Map MapT>
-    [[nodiscard]] std::shared_ptr<core::MapServer<MapT>> getMapServer(const std::string& name);
-
-    bool removeMapServer(const std::string& name);
-
-    /**
-     * @brief Operation with ControlLayer
-     */
-    template <core::Planner PlannerT, typename PolicyT = core::EventDrivenPolicy>
-    std::shared_ptr<core::ControlLayer<PlannerT>> // TODO： 统一命名，CreateControlLayer
-    createLayer(const std::string& algo_name, const std::string& name, PolicyT policy = {});
-
-    template <core::Planner PlannerT>
-    [[nodiscard]] std::shared_ptr<core::ControlLayer<PlannerT>>
-    getControlLayer(const std::string& name);
-
-    bool removeControlLayer(const std::string& name);
-
     // ── Factory by name (runtime reflection via PlanRegistry / MapRegistry) ────
     // The algorithm .so self-registers its factory under the registration name
     // (#PARAM_NS from FINENAV_REGISTER_PLANNER / FINENAV_REGISTER_MAP) at
     // static-init (dlopen or link).  These look the factory up by name and build
     // the layer / map server inside the plugin, so the engine never needs the
     // concrete type.  Unknown names fail loudly (nullptr + ERROR) — no silent
-    // fallback.  The concrete type is recovered later with getControlLayer<T>() /
-    // getMapServer<T>() (for typed operations).
+    // fallback.
+    //
+    // There is deliberately no by-TYPE counterpart (`createLayer<T>()`,
+    // `getMapServer<T>()`).  Those were removed before 1.0: they forced the
+    // downstream user to name a planner/map type that lives inside a plugin
+    // DSO — exactly what the by-name factory exists to avoid — and they handed
+    // back handles that reached into a layer's or a map's flow.  The downstream
+    // user assembles by name and tunes parameters; the flow belongs to the
+    // algorithm developer.
 
     /// Create a ControlLayer for a planner registered under @p algo_name.
     std::shared_ptr<finenav::core::IPipelineNode> createLayerByName( // TODO: CreateControl
@@ -161,6 +143,11 @@ private:
     /// map type reuse one server.
     std::shared_ptr<finenav::core::IMapResource> ensureMapServer(const std::string& algo_name); // TODO: 这是干嘛的
 
+    /// Drop a half-built layer from the engine's bookkeeping.  Private: the
+    /// downstream user does not get to dismantle pipeline stages — which layer
+    /// exists is the algorithm developer's decision, made at assembly time.
+    bool removeControlLayer(const std::string& name);
+
     using NavAction = finenav_interfaces::action::NavigateToPose;
 
     std::shared_ptr<rclcpp::Node> node_;
@@ -178,47 +165,5 @@ private:
     rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
     std::string                                                      default_bt_id_;
 };
-
-template <finenav::core::Map MapT>
-std::shared_ptr<finenav::core::MapServer<MapT>>
-FineNavEngine::createMapServer(
-    const std::string& algo_name, const std::string& server_name) {
-    auto server = std::make_shared<finenav::core::MapServer<MapT>>(
-        node_, algo_name, server_name, localizer_.get());
-    maps_[server_name] = server;
-    return server;
-}
-
-template <finenav::core::Map MapT>
-std::shared_ptr<finenav::core::MapServer<MapT>> FineNavEngine::getMapServer(const std::string& name) {
-    auto it = maps_.find(name);
-    if (it == maps_.end()) return nullptr;
-    auto casted = std::dynamic_pointer_cast<finenav::core::MapServer<MapT>>(it->second);
-    if (!casted) {
-        FINENAV_LOG_ERROR(node_->get_logger(),
-            "getMapServer('{}'): type mismatch.", name);
-        return nullptr;
-    }
-    return casted;
-}
-
-template <finenav::core::Planner PlannerT, typename PolicyT>
-std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
-FineNavEngine::createLayer(
-    const std::string& algo_name, const std::string& name, PolicyT policy) {
-    navigator_->master().manageLayer(name);
-    auto layer = std::make_shared<finenav::core::ControlLayer<PlannerT>>(
-        node_, algo_name, name, std::move(policy), localizer_.get());
-    layers_[name] = layer;
-    return layer;
-}
-
-template <finenav::core::Planner PlannerT>
-std::shared_ptr<finenav::core::ControlLayer<PlannerT>>
-FineNavEngine::getControlLayer(const std::string& name) {
-    auto it = layers_.find(name);
-    if (it == layers_.end()) return nullptr;
-    return std::dynamic_pointer_cast<finenav::core::ControlLayer<PlannerT>>(it->second);
-}
 
 }  // namespace finenav

@@ -32,9 +32,18 @@ namespace finenav::core {
  * map.selfManage(runtime_), passing a MapRuntime& so the map can wire its
  * own data sources and hooks without ever knowing about MapServer.
  *
- * User-facing hooks (registerPreUpdateHook / registerPostUpdateHook) carry
- * MapT& for external consumers (e.g. visualization).  Map-developer hooks
- * registered through MapRuntime use [this] capture instead.
+ * Both update-cycle hooks AND observation sources are declared through
+ * MapRuntime only, from inside the map's own `selfManage()`.  This class used
+ * to mirror both as "user-facing" overloads carrying `MapT&` for external
+ * consumers; they were removed before 1.0.  The hooks were a same-shaped
+ * duplicate whose single-slot storage silently dropped an earlier
+ * registration, and their stated purpose (external visualisation) is now
+ * served by `finenav::viz::FineNavVisualizer`.  The observation-source
+ * overloads were pure forwarding wrappers around the MapRuntime ones.
+ *
+ * The rule this encodes: only the map's author decides what the map is fed and
+ * when it derives.  A downstream application tunes parameters; it does not
+ * reach into a map's update cycle.
  *
  * Sensor data is NOT fused synchronously on arrival.  It is moved into a
  * per-source buffer and deferred until the next update cycle.  The update
@@ -47,18 +56,6 @@ namespace finenav::core {
 template <Map MapT>
 class MapServer : public IMapResource {
 public:
-
-    /// User-facing Fuser: includes MapT& for external consumers.
-    /// Map developers should use MapRuntime::Fuser instead (no MapT&).
-    template <typename MsgT>
-    using Fuser = std::function<void(
-        const MsgT& msg, const rclcpp::Time& stamp,
-        const RobotState& state, MapT& map)>;
-
-    /// User-facing hooks: include MapT& for external consumers.
-    /// Map developers should use MapRuntime::Hook instead (no MapT&).
-    using PreUpdateHook  = std::function<void(const RobotState& robot_state, MapT& map)>;
-    using PostUpdateHook = std::function<void(const RobotState& robot_state, MapT& map)>;
 
     /**
      * @brief MapServer Constructor.
@@ -84,12 +81,6 @@ public:
     const void*       mapData() const override;
     std::shared_ptr<void> lockRead() override;
 
-    /** @brief Register a user-facing hook called BEFORE sensor fusion, with write lock held. */
-    void registerPreUpdateHook(PreUpdateHook hook);
-
-    /** @brief Register a user-facing hook called AFTER sensor fusion, with write lock held. */
-    void registerPostUpdateHook(PostUpdateHook hook);
-
     /**
      * @brief Acquire a RAII read-only view of the map.
      * @return LockedMapRO<MapT> providing const access via operator-> and get()
@@ -101,44 +92,6 @@ public:
      * @return LockedMapRW<MapT> providing mutable access via operator-> and get()
      */
     LockedMapRW<MapT> getLockedWriteView();
-
-    /**
-     * @brief Register a user-facing sensor data source and return a push handle.
-     *
-     * The returned callable can be invoked from any thread. Messages are
-     * buffered internally and fused into the map by the update timer.
-     *
-     * @tparam MsgT   Message type
-     * @param source_name Human-readable source identifier
-     * @param policy  Buffer size and timeout configuration
-     * @param fuser   Fusion callback: (const MsgT&, const rclcpp::Time&,
-     *                                   const RobotState&, MapT&)
-     * @return Thread-safe push handle: void(MsgT&&, const rclcpp::Time&)
-     */
-    template <typename MsgT>
-    std::function<void(MsgT&&, const rclcpp::Time&)> addObservationSource(
-        const std::string& source_name, ObservationBufferPolicy policy, Fuser<MsgT> fuser);
-
-    /**
-     * @brief Register a user-facing sensor data source backed by a ROS topic.
-     *
-     * Messages are buffered internally and fused into the map by the update timer.
-     *
-     * @tparam MsgT   ROS message type
-     * @param source_name Human-readable source identifier
-     * @param topic_name  ROS topic to subscribe to
-     * @param qos         Subscription QoS
-     * @param policy      Buffer size and timeout configuration
-     * @param fuser       Fusion callback: (const MsgT&, const rclcpp::Time&,
-     *                                      const RobotState&, MapT&)
-     */
-    template <typename MsgT>
-    void addObservationSource(
-        const std::string& source_name,
-        const std::string& topic_name,
-        const rclcpp::QoS& qos,
-        ObservationBufferPolicy policy,
-        Fuser<MsgT> fuser);
 
 private:
     void runUpdateCycle(const rclcpp::Time& now);
@@ -165,10 +118,6 @@ private:
     // ---- Optional robot state provider for map shifting ----
     RobotStateProvider*         state_provider_{nullptr};
     rclcpp::TimerBase::SharedPtr shift_timer_;
-
-    // ---- User-facing hooks (with MapT&) for external consumers ----
-    PreUpdateHook                                    pre_update_hook_;
-    PostUpdateHook                                   post_update_hook_;
 
     double                                           update_rate_hz_{10.0};
     double                                           shift_rate_hz_{50.0};

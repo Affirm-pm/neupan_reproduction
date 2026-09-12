@@ -89,10 +89,6 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
 }
 
 
-bool FineNavEngine::removeMapServer(const std::string& name) {
-    return maps_.erase(name) > 0;
-}
-
 bool FineNavEngine::removeControlLayer(const std::string& name) {
     return layers_.erase(name) > 0;
 }
