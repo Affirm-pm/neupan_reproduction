@@ -2,7 +2,7 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_engine/finenav_engine.hpp"
+#include "finenav_engine_cpp/finenav_engine.hpp"
 
 #include <chrono>
 #include <filesystem>

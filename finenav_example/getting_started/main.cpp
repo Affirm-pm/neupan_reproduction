@@ -8,7 +8,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_engine/finenav_engine.hpp"
+#include "finenav_engine_cpp/finenav_engine.hpp"
 
 using namespace finenav;
 

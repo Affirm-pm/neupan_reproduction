@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(ament_cmake_auto REQUIRED)
-find_package(finenav_engine REQUIRED)
+find_package(finenav_engine_cpp REQUIRED)
 
 ament_auto_find_build_dependencies()
 
