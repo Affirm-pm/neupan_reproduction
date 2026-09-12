@@ -9,7 +9,7 @@
 #include <shared_mutex>
 #include <string>
 
-#include "../common/param_pollable_keeper.hpp"
+#include "finenav_core/common/param_pollable_keeper.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/map/locked_map_view.hpp"
 #include "finenav_core/map/map_concept.hpp"
@@ -127,4 +127,4 @@ private:
 
 }  // namespace finenav::core
 
-#include "finenav_core/map/map_server_impl.hpp"
+#include "finenav_core/map/detail/map_server_impl.hpp"

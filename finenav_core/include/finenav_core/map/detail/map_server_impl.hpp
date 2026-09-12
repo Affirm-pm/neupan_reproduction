@@ -9,7 +9,7 @@
 #include <string>
 #include <typeinfo>
 
-#include "finenav_core/map/map_registry.hpp"
+#include "finenav_core/map/detail/map_registry.hpp"
 #include "finenav_util/common/log_macros.hpp"
 #include "finenav_util/common/stopwatch.hpp"
 #include "finenav_util/ros/node_thread.hpp"
@@ -115,7 +115,7 @@ MapServer<MapT>::MapServer(
         });
 
     map_instance_ = std::make_unique<MapT>();
-    auto pollable = MapRegistry::instance().loadMapParams(
+    auto pollable = detail::MapRegistry::instance().loadMapParams(
         algo_name, pnode_, map_instance_.get());
     if (!pollable) {
         // No FINENAV_REGISTER_MAP entry reached the registry for this name.

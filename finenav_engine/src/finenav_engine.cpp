@@ -12,9 +12,9 @@
 #include <behaviortree_cpp/utils/shared_library.h>
 #include <nlohmann/json.hpp>
 
-#include "finenav_core/plan/plan_registry.hpp"
-#include "finenav_core/map/map_registry.hpp"
-#include "finenav_core/worldview/world_view_registry.hpp"
+#include "finenav_core/plan/detail/plan_registry.hpp"
+#include "finenav_core/map/detail/map_registry.hpp"
+#include "finenav_core/worldview/detail/world_view_registry.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav {
@@ -103,7 +103,7 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByName(
     const std::string& algo_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
-    auto layer = finenav::core::PlanRegistry::instance().createLayer(
+    auto layer = finenav::core::detail::PlanRegistry::instance().createLayer(
         node_, algo_name, layer_name, std::move(policy), localizer_.get());
     if (!layer) {
         FINENAV_LOG_ERROR(node_->get_logger(),
@@ -122,7 +122,7 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByName(
 std::shared_ptr<finenav::core::IMapResource> FineNavEngine::createMapServerByName(
     const std::string& algo_name, const std::string& server_name)
 {
-    auto server = finenav::core::MapRegistry::instance().createMap(
+    auto server = finenav::core::detail::MapRegistry::instance().createMap(
         node_, algo_name, server_name, localizer_.get());
     if (!server) {
         FINENAV_LOG_ERROR(node_->get_logger(),
@@ -149,7 +149,7 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldV
     const std::string& world_view_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
-    auto entry = finenav::core::WorldViewRegistry::instance().lookup(world_view_name);
+    auto entry = finenav::core::detail::WorldViewRegistry::instance().lookup(world_view_name);
     if (!entry) {
         FINENAV_LOG_ERROR(node_->get_logger(),
             "createLayerByWorldView: WorldView '{}' is not registered. "
@@ -158,8 +158,8 @@ std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::createLayerByWorldV
         return nullptr;
     }
 
-    auto& plans = finenav::core::PlanRegistry::instance();
-    auto& maps  = finenav::core::MapRegistry::instance();
+    auto& plans = finenav::core::detail::PlanRegistry::instance();
+    auto& maps  = finenav::core::detail::MapRegistry::instance();
 
     // Resolve the planner type the view bridges → its registered algo name.
     auto planner_name = plans.findPlannerNameByType(entry->planner_type);

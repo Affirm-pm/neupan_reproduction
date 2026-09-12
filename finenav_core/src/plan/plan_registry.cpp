@@ -2,11 +2,11 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_core/plan/plan_registry.hpp"
+#include "finenav_core/plan/detail/plan_registry.hpp"
 
 #include "finenav_util/common/log_macros.hpp"
 
-namespace finenav::core {
+namespace finenav::core::detail {
 
 // Lazy function-local static defined in finenav_core.so — the single shared
 // planner table across every plugin DSO (see FINENAV_DEFINE_REGISTRY_SINGLETON).
@@ -65,4 +65,4 @@ std::optional<std::string> PlanRegistry::findPlannerNameByType(
     return std::nullopt;
 }
 
-}  // namespace finenav::core
+}  // namespace finenav::core::detail

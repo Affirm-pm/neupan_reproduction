@@ -133,4 +133,4 @@ protected:
 
 } // namespace finenav::core
 
-#include "finenav_core/plan/pipeline_node_impl.hpp"
+#include "finenav_core/plan/detail/pipeline_node_impl.hpp"

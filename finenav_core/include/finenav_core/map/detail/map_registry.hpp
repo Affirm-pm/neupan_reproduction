@@ -2,6 +2,10 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
+// Framework-internal MAP reflection table.  Not part of the public API —
+// plugin authors register a map with FINENAV_REGISTER_MAP; the engine creates
+// one by name through FineNavEngine::createMapServerByName().
+
 #pragma once
 
 #include <memory>
@@ -12,7 +16,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/named_registry.hpp"
+#include "finenav_core/common/detail/named_registry.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
@@ -20,6 +24,8 @@
 namespace finenav::core {
 
 template <Map MapT> class MapServer;  // full definition in map_server.hpp
+
+namespace detail {
 
 /// One map's registry row: name → { factory, config loader, type }.
 struct MapEntry {
@@ -81,8 +87,6 @@ void MapRegistry::registerMap(std::string name, ConfigLoader loader) {
         std::move(loader),
         typeid(MapT).name());
 }
-
-namespace detail {
 
 /// Self-registrar for a map; instantiated as `inline static` in the macro.
 template <typename T>

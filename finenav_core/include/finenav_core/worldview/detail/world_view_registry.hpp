@@ -2,6 +2,11 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
+// Framework-internal WorldView discovery table.  Not part of the public API —
+// plugin authors register a WorldView with FINENAV_REGISTER_WORLDVIEW; the
+// engine assembles a layer by name through
+// FineNavEngine::createLayerByWorldView().
+
 #pragma once
 
 #include <functional>
@@ -13,13 +18,13 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/algo_register_details.hpp"
-#include "finenav_core/common/named_registry.hpp"
+#include "finenav_core/common/detail/algo_register_details.hpp"
+#include "finenav_core/common/detail/named_registry.hpp"
 #include "finenav_core/map/map_access.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"  // PlanningContext<PlannerT>
 
-namespace finenav::core {
+namespace finenav::core::detail {
 
 /// One WorldView's registry row: name → { planner type, map types, build }.
 struct WorldViewEntry {
@@ -57,8 +62,6 @@ public:
     /// Duplicate names keep the FIRST registrant (with a WARN).
     void registerEntry(std::string name, Entry entry);
 };
-
-namespace detail {
 
 /// Mangled type name.  Unlike type_info addresses (which may differ per DSO
 /// under -fvisibility=hidden), the mangled NAME is a compile-time constant that
@@ -127,5 +130,4 @@ struct WorldViewSelfRegistrar {
     }
 };
 
-}  // namespace detail
-}  // namespace finenav::core
+}  // namespace finenav::core::detail

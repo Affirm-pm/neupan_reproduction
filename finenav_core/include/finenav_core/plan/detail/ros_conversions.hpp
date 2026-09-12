@@ -2,6 +2,10 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
+// Framework-internal Trajectory ↔ ROS message conversion.  Not part of the
+// public API — it is used by PipelineNode's plan pipeline to marshal the
+// planner result across the TaskChannel.
+
 #pragma once
 
 #include <cstdint>
@@ -9,7 +13,7 @@
 #include "finenav_core/plan/trajectory.hpp"
 #include "finenav_interfaces/msg/trajectory.hpp"
 
-namespace finenav::core {
+namespace finenav::core::detail {
 
 consteval uint32_t ProfileToMsgMask(const IOProfile& p) {
     uint32_t mask = 0;
@@ -72,4 +76,4 @@ void fromROSMsg(finenav_interfaces::msg::Trajectory&& src,
     if constexpr (Config.time)  dst.times = std::move(src.time_from_start);
 }
 
-} // namespace finenav::core
+} // namespace finenav::core::detail

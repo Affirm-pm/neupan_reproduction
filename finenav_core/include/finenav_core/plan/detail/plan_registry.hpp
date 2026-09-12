@@ -2,6 +2,10 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
+// Framework-internal PLANNER reflection table.  Not part of the public API —
+// plugin authors register a planner with FINENAV_REGISTER_PLANNER; the engine
+// creates a layer by name through FineNavEngine::createLayerByName().
+
 #pragma once
 
 #include <memory>
@@ -12,7 +16,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/named_registry.hpp"
+#include "finenav_core/common/detail/named_registry.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
@@ -21,6 +25,8 @@
 namespace finenav::core {
 
 template <Planner PlannerT> class ControlLayer;  // full definition in control_layer.hpp
+
+namespace detail {
 
 /// One planner's registry row: name → { factory, config loader, type }.
 struct PlanEntry {
@@ -85,8 +91,6 @@ void PlanRegistry::registerPlanner(std::string name, ConfigLoader loader) {
         std::move(loader),
         typeid(PlannerT).name());
 }
-
-namespace detail {
 
 /// Self-registrar for a planner; instantiated as `inline static` in the macro.
 template <typename T>

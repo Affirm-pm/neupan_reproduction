@@ -68,4 +68,4 @@ private:
 
 } // namespace finenav::core
 
-#include "finenav_core/plan/control_layer_impl.hpp"
+#include "finenav_core/plan/detail/control_layer_impl.hpp"

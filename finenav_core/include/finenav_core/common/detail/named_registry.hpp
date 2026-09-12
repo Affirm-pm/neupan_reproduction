@@ -2,6 +2,10 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
+// Framework-internal machinery shared by the name-keyed algorithm registries.
+// Not part of the public API — plugin authors reach the registries only through
+// FINENAV_REGISTER_* (finenav_core/algo_register_macros.hpp).
+
 #pragma once
 
 #include <algorithm>
@@ -19,7 +23,7 @@
 
 #include "finenav_core/common/param_pollable_keeper.hpp"
 
-namespace finenav::core {
+namespace finenav::core::detail {
 
 /// Type-erased parameter loader shared by planner / map / world_view registries.
 /// (node, void* instance) → IParamPollable; `instance` is cast back to the
@@ -98,4 +102,4 @@ inline std::string joinNames(const std::vector<std::string>& names) {
     return joined;
 }
 
-}  // namespace finenav::core
+}  // namespace finenav::core::detail

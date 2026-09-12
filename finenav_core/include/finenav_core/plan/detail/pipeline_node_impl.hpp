@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include "finenav_core/plan/plan_registry.hpp"
-#include "finenav_core/plan/ros_conversions.hpp"
+#include "finenav_core/plan/detail/plan_registry.hpp"
+#include "finenav_core/plan/detail/ros_conversions.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::core {
@@ -44,7 +44,7 @@ PipelineNode<PlannerT>::PipelineNode(
 
     // ── Planner instance + parameter wiring ───────────────────────────────
     planner_name_ = algo_name;
-    auto pollable = PlanRegistry::instance().loadPlannerParams(
+    auto pollable = detail::PlanRegistry::instance().loadPlannerParams(
         algo_name, pnode_, &planner_instance_);
     if (!pollable) {
         // No FINENAV_REGISTER_PLANNER entry reached the registry for this name.
@@ -174,7 +174,7 @@ PipelineNode<PlannerT>::planOnce() {
     }
     const bool has_ref = static_cast<bool>(ref_holder);
     if (has_ref && ref_holder.get() != cached_ref_src_) {
-        fromROSMsg(ref_holder->trajectory, cached_ref_);
+        detail::fromROSMsg(ref_holder->trajectory, cached_ref_);
         cached_ref_src_ = ref_holder.get();
     }
 
@@ -222,7 +222,7 @@ PipelineNode<PlannerT>::planOnce() {
     }
 
     finenav_interfaces::msg::Trajectory output_traj_msg;
-    toROSMsg(std::move(result.value()), output_traj_msg);
+    detail::toROSMsg(std::move(result.value()), output_traj_msg);
     return output_traj_msg;
 }
 

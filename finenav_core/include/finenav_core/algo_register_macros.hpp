@@ -12,11 +12,11 @@
 // must know every kind the framework can host.  common/ stays pure bottom:
 // nothing there reaches up into plan/ map/ or worldview/.  The generic
 // machinery these macros expand into (RegistrationSlot / WorldViewRegistrationSlot
-// / makeConfigLoader / makeParamPollable) lives in common/algo_register_details.hpp.
-#include "finenav_core/common/algo_register_details.hpp"
-#include "finenav_core/plan/plan_registry.hpp"
-#include "finenav_core/map/map_registry.hpp"
-#include "finenav_core/worldview/world_view_registry.hpp"
+// / makeConfigLoader / makeParamPollable) lives in common/detail/algo_register_details.hpp.
+#include "finenav_core/common/detail/algo_register_details.hpp"
+#include "finenav_core/plan/detail/plan_registry.hpp"
+#include "finenav_core/map/detail/map_registry.hpp"
+#include "finenav_core/worldview/detail/world_view_registry.hpp"
 
 // Guarantees complete definitions are visible at expansion time
 #include "finenav_core/plan/control_layer.hpp"
@@ -95,7 +95,7 @@ struct detail::RegistrationSlot<ALGO_TYPE> { \
             "prepare(const PlanningContext<PlannerT>&)."); \
         inline static detail::WorldViewSelfRegistrar _world_view_registrar{ \
             #PARAM_NS, \
-            WorldViewRegistry::Entry{ \
+            detail::WorldViewRegistry::Entry{ \
                 detail::typeName<PLANNER_TYPE>(), \
                 detail::typeNames<__VA_ARGS__>(), \
                 [](MapAccess& maps, rclcpp::Node::SharedPtr node) -> BuiltWorldView { \

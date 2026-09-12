@@ -2,12 +2,12 @@
 // IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
 // All rights reserved.
 
-#include "finenav_core/worldview/world_view_registry.hpp"
+#include "finenav_core/worldview/detail/world_view_registry.hpp"
 
 #include "finenav_util/common/log_macros.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-namespace finenav::core {
+namespace finenav::core::detail {
 
 // Lazy function-local static defined in finenav_core.so — the single shared
 // WorldView table across every plugin DSO (see FINENAV_DEFINE_REGISTRY_SINGLETON).
@@ -24,4 +24,4 @@ void WorldViewRegistry::registerEntry(std::string name, Entry entry) {
     }
 }
 
-}  // namespace finenav::core
+}  // namespace finenav::core::detail

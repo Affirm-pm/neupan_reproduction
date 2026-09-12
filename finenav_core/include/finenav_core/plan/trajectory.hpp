@@ -20,6 +20,11 @@ struct IOProfile {
     bool time = false;
 };
 
+namespace detail {
+
+// Per-field storage blocks.  Each is empty when its field is disabled, so a
+// Trajectory only pays for the fields its IOProfile turns on.
+
 template <bool Enable> struct PoseMixin;
 template <> struct PoseMixin<true> { std::vector<geometry_msgs::msg::Pose> poses; };
 template <> struct PoseMixin<false> {};
@@ -36,18 +41,17 @@ template <bool Enable> struct TimeMixin;
 template <> struct TimeMixin<true> { std::vector<builtin_interfaces::msg::Duration> times; };
 template <> struct TimeMixin<false> {};
 
-
-struct EmptyBlock {};
+}  // namespace detail
 
 /// A planner's trajectory: a sequence of waypoints with compile-time field
 /// selection.  Only the fields enabled in the `Profile` exist at runtime —
 /// a planner that does not need velocity/acceleration pays no memory cost.
 template <IOProfile Profile>
 struct Trajectory :
-    public PoseMixin<Profile.pose>,
-    public VelMixin<Profile.vel>,
-    public AccelMixin<Profile.accel>,
-    public TimeMixin<Profile.time>
+    public detail::PoseMixin<Profile.pose>,
+    public detail::VelMixin<Profile.vel>,
+    public detail::AccelMixin<Profile.accel>,
+    public detail::TimeMixin<Profile.time>
 {};
 
 /// Alias for a planner's output trajectory type.

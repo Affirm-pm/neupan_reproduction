@@ -10,12 +10,11 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/named_registry.hpp"
+#include "finenav_core/common/detail/named_registry.hpp"
 #include "finenav_core/common/param_pollable_keeper.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
 
-namespace finenav::core {
-namespace detail {
+namespace finenav::core::detail {
 
 /**
  * @brief Compile-time registration slot for a MAP or a PLANNER.
@@ -125,5 +124,4 @@ ConfigLoader makeConfigLoader(std::string_view algo_name) {
     };
 }
 
-}  // namespace detail
-}  // namespace finenav::core
+}  // namespace finenav::core::detail
