@@ -39,6 +39,9 @@
 //
 // Everything below is re-exported for the map role:
 //
+//   common/frames.hpp           FrameNames / frames() — the world-fixed and
+//                               robot frame ids for message headers
+//                               (default "map" / "base_link")
 //   common/geometry_types.hpp   Position3D / Region3D — the geometry vocabulary
 //   map/map_concept.hpp         the Map / ShiftableMap concepts
 //   map/map_runtime.hpp         MapRuntime — the ONLY framework type a Map
@@ -52,6 +55,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include "finenav_core/common/frames.hpp"
 #include "finenav_core/common/geometry_types.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/map/map_runtime.hpp"

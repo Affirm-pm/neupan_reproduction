@@ -16,6 +16,7 @@
 #include <behaviortree_cpp/utils/shared_library.h>
 
 #include "finenav_interfaces/action/navigate_to_pose.hpp"
+#include "finenav_core/common/frames.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
@@ -46,6 +47,30 @@ public:
      */
     void setDefaultBehaviorTree(const std::string& bt_id) { default_bt_id_ = bt_id; }
     [[nodiscard]] const std::string& getDefaultBehaviorTree() const { return default_bt_id_; }
+
+    // ── Frame names ───────────────────────────────────────────────────────────
+
+    /**
+     * @brief Override the frame names the framework writes into the message
+     *        headers it produces (TF, odometry, cmd_vel, visualization).
+     *
+     * The framework goes straight from the world-fixed frame to the robot body
+     * frame and has no odom frame — by design, permanently.  So there are exactly
+     * two names to set, and they must agree everywhere: a TF broadcast, an
+     * Odometry, a cmd_vel and a marker that disagree produce a disconnected TF
+     * tree, which reads as a localization bug.  Defaults are "map" / "base_link";
+     * call this when the surrounding system names them differently.
+     *
+     * Call it during setup, BEFORE createLayerByName() / createLayerByWorldView()
+     * / createMapServerByName() / loadAlgoPlugins().  A plugin's visualizer takes
+     * the frame at construction, and a frame id changed afterwards would
+     * invalidate every message already published under the old name.
+     *
+     * @param names  World-fixed and robot frame names.
+     * @return false if any layer or map already exists, or if the names had
+     *         already been set — in both cases nothing changed (ERROR logged).
+     */
+    bool setFrameNames(core::FrameNames names);
 
     /**
      * @brief Read-only access to the current robot state.

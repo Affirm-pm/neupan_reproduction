@@ -25,6 +25,7 @@ set(ros_dependencies
 )
 
 add_library(${PROJECT_NAME} SHARED
+        src/common/frame_names.cpp
         src/plan/plan_registry.cpp
         src/map/map_registry.cpp
         src/worldview/world_view_registry.cpp

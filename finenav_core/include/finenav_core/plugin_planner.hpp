@@ -40,6 +40,9 @@
 //
 // Everything below is re-exported for the planner role:
 //
+//   common/frames.hpp           FrameNames / frames() — the world-fixed and
+//                               robot frame ids for message headers
+//                               (default "map" / "base_link")
 //   common/geometry_types.hpp   Position3D / Region3D — the geometry vocabulary
 //   plan/planner_concept.hpp    the Planner concept, PlanningContext, and (via
 //                               plan/trajectory.hpp) Trajectory / IOProfile /
@@ -50,5 +53,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include "finenav_core/common/frames.hpp"
 #include "finenav_core/common/geometry_types.hpp"
 #include "finenav_core/plan/planner_concept.hpp"

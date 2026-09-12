@@ -42,6 +42,9 @@
 //
 // Everything below is re-exported for the WorldView role:
 //
+//   common/frames.hpp              FrameNames / frames() — the world-fixed and
+//                                  robot frame ids for message headers
+//                                  (default "map" / "base_link")
 //   common/geometry_types.hpp      Position3D / Region3D
 //   worldview/world_view_concept.hpp  the WorldView concept
 //
@@ -59,5 +62,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 
+#include "finenav_core/common/frames.hpp"
 #include "finenav_core/common/geometry_types.hpp"
 #include "finenav_core/worldview/world_view_concept.hpp"

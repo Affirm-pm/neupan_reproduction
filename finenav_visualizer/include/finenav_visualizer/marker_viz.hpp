@@ -98,7 +98,9 @@ private:
 
     rclcpp::Node::SharedPtr node_;
     visualization_msgs::msg::MarkerArray markers_;
-    std::string base_frame_ = "map";
+    // No default frame: the framework does not choose one for the visualizer,
+    // the caller supplies it via setBaseFrame().
+    std::string base_frame_;
     float alpha_ = 1.0f;
     std::int32_t next_marker_id_{0};
 

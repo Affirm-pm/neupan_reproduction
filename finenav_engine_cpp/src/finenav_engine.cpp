@@ -88,6 +88,20 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
         [this](const geometry_msgs::msg::PoseStamped& msg) { navigateTo({msg.pose}); });
 }
 
+bool FineNavEngine::setFrameNames(core::FrameNames names) {
+    // Ordering guard.  The localizer and navigator built in the constructor read
+    // frames() lazily as they publish, so they are unaffected; but a plugin's
+    // visualizer takes the frame when the layer is built, so once anything is
+    // assembled the value can no longer be honoured everywhere.
+    if (!layers_.empty() || !maps_.empty()) {
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "setFrameNames() ignored — {} layer(s) and {} map(s) already exist. "
+            "Frame names must be set before anything is assembled.",
+            layers_.size(), maps_.size());
+        return false;
+    }
+    return core::detail::setFrameNames(std::move(names));
+}
 
 bool FineNavEngine::removeControlLayer(const std::string& name) {
     const bool was_registered = layers_.erase(name) > 0;

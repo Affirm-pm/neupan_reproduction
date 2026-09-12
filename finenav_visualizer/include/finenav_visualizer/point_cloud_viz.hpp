@@ -58,7 +58,9 @@ public:
 private:
     rclcpp::Node::SharedPtr node_;
     pcl::PointCloud<pcl::PointXYZRGB> cloud_;
-    std::string base_frame_ = "map";
+    // No default frame: the framework does not choose one for the visualizer,
+    // the caller supplies it via setBaseFrame().
+    std::string base_frame_;
 
     std::unordered_map<std::string,
         rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr> pubs_;
