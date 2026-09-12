@@ -5,33 +5,44 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
-#include <shared_mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/time.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
 
+#include "finenav_visualizer/viz_channel.hpp"
+
 namespace finenav::viz {
 
-class MarkerViz {
+/// Staging buffer for rigid-body markers — somewhere to accumulate shapes, not
+/// a way to publish them.  Its public surface stages and clears; the publisher
+/// it caches comes from TypedChannel, and the only thing that reaches it is
+/// FineNavVisualizer::publish().  So reading an algorithm tells you exactly
+/// which topic its data reaches, and a buffer that is never published costs
+/// nothing but memory.
+///
+/// The frame is per buffer and the caller sets it (see VizChannel): a frame
+/// belongs to the DATA, and only the algorithm knows whether what it staged is
+/// world-referenced (a global path, a costmap, a goal) or body-referenced
+/// (a footprint, a velocity arrow).  Mixing the two in one buffer is not
+/// expressible, by construction — one buffer is one message, and a message has
+/// one frame.
+///
+/// Publishes to `<topic_name>/markers` as visualization_msgs/MarkerArray.
+class MarkerViz : public TypedChannel<visualization_msgs::msg::MarkerArray> {
 public:
-    explicit MarkerViz(rclcpp::Node::SharedPtr node);
-
-    void setBaseFrame(const std::string& frame) { base_frame_ = frame; }
-    const std::string& baseFrame() const { return base_frame_; }
+    MarkerViz() = default;
 
     void setLifetime(double sec);
     void setAlpha(float a) { alpha_ = a; }
 
-    // ── Shapes (accumulate, no publish until publish()) ───────────────
+    // ── Shapes (accumulate; nothing leaves until publish()) ───────────
 
     void addSphere(const Eigen::Vector3d& center, double radius,
                    const std_msgs::msg::ColorRGBA& color);
@@ -76,37 +87,28 @@ public:
     void addText(const Eigen::Vector3d& pos, const std::string& text,
                  const std_msgs::msg::ColorRGBA& color, double height = 0.1);
 
-    // ── Batch control ──────────────────────────────────────────────
+    // ── Staging buffer ─────────────────────────────────────────────
 
-    /// Publish and clear accumulated markers.
-    void publish(const std::string& topic = "finenav_visualization");
+    bool empty() const override { return markers_.markers.empty(); }
 
-    /// Discard accumulated markers without publishing.
-    void clear() {
+    /// Discard accumulated markers without publishing.  Ids restart at 0, so
+    /// the next cycle overwrites this cycle's shapes in the viewer instead of
+    /// accumulating beside them.
+    void clear() override {
         markers_.markers.clear();
         next_marker_id_ = 0;
     }
 
-    /// Delete all current markers from RViz.
-    void deleteAllMarkers(const std::string& topic = "finenav_visualization");
-
-    /// Check for subscribers (avoid needless computation).
-    bool hasSubscribers(const std::string& topic) const;
-
 private:
+    std::string subtopic() const override { return "/markers"; }
+
+    visualization_msgs::msg::MarkerArray buildMessage(const rclcpp::Time& stamp) const override;
+
     std::int32_t allocateId();
 
-    rclcpp::Node::SharedPtr node_;
     visualization_msgs::msg::MarkerArray markers_;
-    // No default frame: the framework does not choose one for the visualizer,
-    // the caller supplies it via setBaseFrame().
-    std::string base_frame_;
     float alpha_ = 1.0f;
     std::int32_t next_marker_id_{0};
-
-    std::unordered_map<std::string,
-        rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr> pubs_;
-    mutable std::shared_mutex pubs_mutex_;
 };
 
 }  // namespace finenav::viz

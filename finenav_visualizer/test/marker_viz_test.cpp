@@ -29,7 +29,7 @@ std::vector<Eigen::Vector3d> points(double offset)
 
 TEST(MarkerVizTest, AddsLineStripsWithUniqueIds)
 {
-  finenav::viz::MarkerViz markers(nullptr);
+  finenav::viz::MarkerViz markers;
 
   markers.addLineStrip(points(0.0), color(), 0.02, "trajectories");
   markers.addLineStrip(points(10.0), color(), 0.04, "trajectories");
@@ -49,7 +49,7 @@ TEST(MarkerVizTest, AddsLineStripsWithUniqueIds)
 
 TEST(MarkerVizTest, ClearResetsMarkerIds)
 {
-  finenav::viz::MarkerViz markers(nullptr);
+  finenav::viz::MarkerViz markers;
 
   markers.addLineStrip(points(0.0), color());
   markers.clear();
@@ -61,7 +61,7 @@ TEST(MarkerVizTest, ClearResetsMarkerIds)
 
 TEST(MarkerVizTest, SharesIdSequenceAcrossShapeApis)
 {
-  finenav::viz::MarkerViz markers(nullptr);
+  finenav::viz::MarkerViz markers;
 
   markers.addLineStrip(points(0.0), color());
   markers.addSphere(Eigen::Vector3d{0.0, 0.0, 0.0}, 0.01, color());

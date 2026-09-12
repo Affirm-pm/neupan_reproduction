@@ -4,12 +4,10 @@
 
 #pragma once
 
-#include <memory>
-#include <shared_mutex>
+#include <cstdint>
 #include <string>
-#include <unordered_map>
 
-#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/time.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <std_msgs/msg/color_rgba.hpp>
 
@@ -17,19 +15,28 @@
 #include <pcl/point_types.h>
 
 #include "finenav_visualizer/color.hpp"
+#include "finenav_visualizer/viz_channel.hpp"
 
 namespace finenav::viz {
 
-class PointCloudViz {
+/// Staging buffer for a coloured point cloud — somewhere to accumulate points,
+/// not a way to publish them.  Same contract as MarkerViz: staging and clearing
+/// are public, publishing is not, and the only thing that reaches the cached
+/// publisher is FineNavVisualizer::publish().
+///
+/// The frame is per buffer and the caller sets it (see VizChannel) — and here
+/// it is not merely a convention: a PointCloud2 carries exactly one
+/// header.frame_id, so all the points staged in one buffer must genuinely live
+/// in the same frame.
+///
+/// Publishes to `<topic_name>/cloud` as sensor_msgs/PointCloud2.
+class PointCloudViz : public TypedChannel<sensor_msgs::msg::PointCloud2> {
 public:
-    explicit PointCloudViz(rclcpp::Node::SharedPtr node);
+    PointCloudViz() = default;
 
-    void setBaseFrame(const std::string& frame) { base_frame_ = frame; }
-    const std::string& baseFrame() const { return base_frame_; }
+    void reserve(size_t n) { cloud_.reserve(n); }
 
-    void reserve(size_t n);
-
-    // ── Add points (accumulate, no publish until publish()) ──────────
+    // ── Points (accumulate; nothing leaves until publish()) ──────────
 
     /// Add a point with a preset color name.
     void addPoint(float x, float y, float z, ColorName c);
@@ -44,27 +51,19 @@ public:
                          ColorName low = ColorName::BLUE,
                          ColorName high = ColorName::RED);
 
-    // ── Batch control ──────────────────────────────────────────────
+    // ── Staging buffer ─────────────────────────────────────────────
 
-    /// Publish and clear accumulated points.
-    void publish(const std::string& topic = "finenav_cloud");
+    bool empty() const override { return cloud_.empty(); }
 
     /// Discard accumulated points without publishing.
-    void clear();
-
-    /// Check for subscribers (avoid needless computation).
-    bool hasSubscribers(const std::string& topic) const;
+    void clear() override { cloud_.clear(); }
 
 private:
-    rclcpp::Node::SharedPtr node_;
-    pcl::PointCloud<pcl::PointXYZRGB> cloud_;
-    // No default frame: the framework does not choose one for the visualizer,
-    // the caller supplies it via setBaseFrame().
-    std::string base_frame_;
+    std::string subtopic() const override { return "/cloud"; }
 
-    std::unordered_map<std::string,
-        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr> pubs_;
-    mutable std::shared_mutex pubs_mutex_;
+    sensor_msgs::msg::PointCloud2 buildMessage(const rclcpp::Time& stamp) const override;
+
+    pcl::PointCloud<pcl::PointXYZRGB> cloud_;
 };
 
 }  // namespace finenav::viz

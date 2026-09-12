@@ -5,6 +5,7 @@
 #include "finenav_visualizer/marker_viz.hpp"
 
 #include <cmath>
+#include <utility>
 
 #include <geometry_msgs/msg/point.hpp>
 #include <geometry_msgs/msg/pose.hpp>
@@ -47,8 +48,6 @@ std_msgs::msg::ColorRGBA makeColor(float r, float g, float b, float a) {
 
 }  // namespace
 
-MarkerViz::MarkerViz(rclcpp::Node::SharedPtr node) : node_(std::move(node)) {}
-
 std::int32_t MarkerViz::allocateId()
 {
     return next_marker_id_++;
@@ -64,7 +63,6 @@ void MarkerViz::setLifetime(double sec) {
 void MarkerViz::addSphere(const Eigen::Vector3d& center, double radius,
                                const std_msgs::msg::ColorRGBA& color) {
     visualization_msgs::msg::Marker m;
-    m.header.frame_id = base_frame_;
     m.ns = "Sphere";
     m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::SPHERE;
@@ -81,7 +79,6 @@ void MarkerViz::addSpheres(const std::vector<Eigen::Vector3d>& centers,
                                 const std::vector<std_msgs::msg::ColorRGBA>& colors) {
     for (size_t i = 0; i < centers.size(); ++i) {
         visualization_msgs::msg::Marker m;
-        m.header.frame_id = base_frame_;
         m.ns = "Spheres";
         m.id = allocateId();
         m.type = visualization_msgs::msg::Marker::SPHERE;
@@ -98,7 +95,6 @@ void MarkerViz::addArrow(const Eigen::Vector3d& start, const Eigen::Vector3d& en
                               const std_msgs::msg::ColorRGBA& color,
                               double shaft_d, double head_d, double head_len) {
     visualization_msgs::msg::Marker m;
-    m.header.frame_id = base_frame_;
     m.ns = "Arrow";
     m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::ARROW;
@@ -114,7 +110,6 @@ void MarkerViz::addArrow(const Eigen::Vector3d& start, const Eigen::Vector3d& en
 void MarkerViz::addCuboid(const Eigen::Isometry3d& pose, double depth, double width, double height,
                                const std_msgs::msg::ColorRGBA& color) {
     visualization_msgs::msg::Marker m;
-    m.header.frame_id = base_frame_;
     m.ns = "Cuboid";
     m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::CUBE;
@@ -141,7 +136,6 @@ void MarkerViz::addWireframeCuboid(const Eigen::Isometry3d& pose,
     };
     for (auto& e : edges) {
         visualization_msgs::msg::Marker m;
-        m.header.frame_id = base_frame_;
         m.ns = "Wireframe";
         m.id = allocateId();
         m.type = visualization_msgs::msg::Marker::LINE_LIST;
@@ -167,7 +161,6 @@ void MarkerViz::addCone(const Eigen::Isometry3d& pose, double angle, double max_
         const Eigen::Vector3d p1  = pose * Eigen::Vector3d(r * std::cos(a1), r * std::sin(a1), max_range);
 
         visualization_msgs::msg::Marker m;
-        m.header.frame_id = base_frame_;
         m.ns = "FOV";
         m.id = allocateId();
         m.type = visualization_msgs::msg::Marker::TRIANGLE_LIST;
@@ -185,7 +178,6 @@ void MarkerViz::addCone(const Eigen::Isometry3d& pose, double angle, double max_
 void MarkerViz::addCylinder(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
                                  double radius, const std_msgs::msg::ColorRGBA& color) {
     visualization_msgs::msg::Marker m;
-    m.header.frame_id = base_frame_;
     m.ns = "Cylinder";
     m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::CYLINDER;
@@ -208,7 +200,6 @@ void MarkerViz::addCylinder(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2
 void MarkerViz::addLine(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
                              const std_msgs::msg::ColorRGBA& color, double width) {
     visualization_msgs::msg::Marker m;
-    m.header.frame_id = base_frame_;
     m.ns = "Line";
     m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::LINE_LIST;
@@ -228,7 +219,6 @@ void MarkerViz::addLineStrip(const std::vector<Eigen::Vector3d>& points,
     if (points.empty()) return;
 
     visualization_msgs::msg::Marker m;
-    m.header.frame_id = base_frame_;
     m.ns = ns;
     m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::LINE_STRIP;
@@ -265,7 +255,6 @@ void MarkerViz::addAxis(const Eigen::Isometry3d& pose, double length, double rad
 void MarkerViz::addText(const Eigen::Vector3d& pos, const std::string& text,
                              const std_msgs::msg::ColorRGBA& color, double height) {
     visualization_msgs::msg::Marker m;
-    m.header.frame_id = base_frame_;
     m.ns = "Text";
     m.id = allocateId();
     m.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
@@ -278,57 +267,13 @@ void MarkerViz::addText(const Eigen::Vector3d& pos, const std::string& text,
     markers_.markers.push_back(std::move(m));
 }
 
-void MarkerViz::publish(const std::string& topic) {
-    if (markers_.markers.empty()) return;
-
-    const auto now = node_->get_clock()->now();
-    for (auto& m : markers_.markers) {
-        m.header.stamp = now;
+visualization_msgs::msg::MarkerArray MarkerViz::buildMessage(const rclcpp::Time& stamp) const {
+    visualization_msgs::msg::MarkerArray out = markers_;
+    for (auto& m : out.markers) {
+        m.header.frame_id = frame_;
+        m.header.stamp = stamp;
     }
-
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub;
-    {
-        std::shared_lock lock(pubs_mutex_);
-        auto it = pubs_.find(topic);
-        if (it != pubs_.end()) pub = it->second;
-    }
-    if (!pub) {
-        std::unique_lock lock(pubs_mutex_);
-        auto& p = pubs_[topic];
-        if (!p) p = node_->create_publisher<visualization_msgs::msg::MarkerArray>(topic, 10);
-        pub = p;
-    }
-    pub->publish(markers_);
-    clear();
-}
-
-void MarkerViz::deleteAllMarkers(const std::string& topic) {
-    visualization_msgs::msg::MarkerArray arr;
-    visualization_msgs::msg::Marker del;
-    del.action = visualization_msgs::msg::Marker::DELETEALL;
-    arr.markers.push_back(del);
-
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr pub;
-    {
-        std::shared_lock lock(pubs_mutex_);
-        auto it = pubs_.find(topic);
-        if (it != pubs_.end()) pub = it->second;
-    }
-    if (!pub) {
-        std::unique_lock lock(pubs_mutex_);
-        auto& p = pubs_[topic];
-        if (!p) p = node_->create_publisher<visualization_msgs::msg::MarkerArray>(topic, 10);
-        pub = p;
-    }
-    pub->publish(arr);
-    clear();
-}
-
-bool MarkerViz::hasSubscribers(const std::string& topic) const {
-    std::shared_lock lock(pubs_mutex_);
-    auto it = pubs_.find(topic);
-    if (it == pubs_.end()) return false;
-    return it->second->get_subscription_count() > 0;
+    return out;
 }
 
 }  // namespace finenav::viz
