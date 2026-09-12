@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include "finenav_core/map/map_concept.hpp"
-#include "finenav_core/common/geometry_types.hpp"
+// The map role's entry point.  Note what is NOT here: no path into a
+// finenav_core subdirectory.  A plugin includes only finenav_core/*.hpp.
+#include "finenav_core/plugin_map.hpp"
 
 #include "finenav_example/dummy_map_params.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"

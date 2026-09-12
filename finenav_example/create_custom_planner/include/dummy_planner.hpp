@@ -8,9 +8,10 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 
-#include "finenav_core/common/geometry_types.hpp"
-#include "finenav_core/plan/planner_concept.hpp"
-#include "finenav_core/plan/trajectory.hpp" // TODO： 应该合并
+// The planner role's entry point — it re-exports the concept, the geometry
+// vocabulary and (via planner_concept.hpp) Trajectory / IOProfile, so the
+// three separate includes this file used to carry are now one.
+#include "finenav_core/plugin_planner.hpp"
 
 #include "finenav_example/dummy_planner_params.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
