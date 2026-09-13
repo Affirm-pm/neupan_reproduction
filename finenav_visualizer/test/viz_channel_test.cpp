@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
@@ -30,6 +31,9 @@ namespace
 /// invisible here, which is the point — this counts the expensive step.
 class ProbeChannel : public finenav::viz::TypedChannel<std_msgs::msg::String> {
 public:
+  ProbeChannel(std::string topic)
+      : finenav::viz::TypedChannel<std_msgs::msg::String>(std::move(topic)) {}
+
   // The two state queries stay public HERE, though the base keeps them
   // protected: a test has to drive them, and access is read off the static
   // type, so widening the override costs the real interface nothing.
@@ -40,9 +44,7 @@ public:
   int takes{0};
 
 private:
-  std::string subtopic() const override { return "/probe"; }
-
-  std_msgs::msg::String takeMessage(const rclcpp::Time&) override {
+  std_msgs::msg::String takeMessage(finenav::common::Frame, const rclcpp::Time&) override {
     ++takes;
     return std_msgs::msg::String{};
   }
@@ -59,13 +61,13 @@ private:
 TEST(VizChannelTest, TakesNothingWhenNobodyIsSubscribed)
 {
   auto node = std::make_shared<rclcpp::Node>("viz_channel_unwatched");
-  ProbeChannel channel;
+  ProbeChannel channel("finenav_probe_unwatched");
 
   channel.stage();
-  channel.publishStaged(*node, "finenav_probe_unwatched", node->get_clock()->now());
+  channel.publishStaged(*node, finenav::common::Frame::World, node->get_clock()->now());
 
   EXPECT_EQ(channel.takes, 0);
-  EXPECT_EQ(channel.pubs_.count("finenav_probe_unwatched/probe"), 1U);
+  EXPECT_EQ(channel.pubs_.count("finenav_probe_unwatched"), 1U);
 }
 
 // The gate delays the publish, it does not move the boundary: the visualizer
@@ -74,10 +76,10 @@ TEST(VizChannelTest, TakesNothingWhenNobodyIsSubscribed)
 TEST(VizChannelTest, GatedPublishStillLeavesTheChannelClearable)
 {
   auto node = std::make_shared<rclcpp::Node>("viz_channel_unwatched_clear");
-  ProbeChannel channel;
+  ProbeChannel channel("finenav_probe_unwatched");
 
   channel.stage();
-  channel.publishStaged(*node, "finenav_probe_unwatched", node->get_clock()->now());
+  channel.publishStaged(*node, finenav::common::Frame::World, node->get_clock()->now());
   channel.clear();
 
   EXPECT_TRUE(channel.empty());
@@ -90,9 +92,9 @@ TEST(VizChannelTest, GatedPublishStillLeavesTheChannelClearable)
 TEST(VizChannelTest, EmptyChannelCreatesNoPublisher)
 {
   auto node = std::make_shared<rclcpp::Node>("viz_channel_empty");
-  ProbeChannel channel;
+  ProbeChannel channel("finenav_probe_empty");
 
-  channel.publishStaged(*node, "finenav_probe_empty", node->get_clock()->now());
+  channel.publishStaged(*node, finenav::common::Frame::World, node->get_clock()->now());
 
   EXPECT_TRUE(channel.pubs_.empty());
   EXPECT_EQ(channel.takes, 0);

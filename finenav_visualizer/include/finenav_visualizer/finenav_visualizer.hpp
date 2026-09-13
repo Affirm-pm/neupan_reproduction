@@ -7,6 +7,8 @@
 #include <memory>
 #include <string>
 
+#include "finenav_common/frames.hpp"
+
 namespace rclcpp {
 class Node;
 }  // namespace rclcpp
@@ -16,18 +18,29 @@ namespace finenav::viz {
 class MarkerViz;
 class PointCloudViz;
 
-/// Value-semantic handle to the framework's visualization backend.
+/// Value-semantic handle to the framework's visualization backend, and a
+/// FACTORY of channels.
 ///
-/// It separates the two things that used to be tangled:
+/// It separates the three things that used to be tangled:
 ///
-///   * the CHANNELS — markers() and pointCloud() — are pure staging buffers,
-///     each a VizChannel.  You add shapes to them and set the frame those
-///     shapes live in; nothing is published and nothing leaves the process.  A
-///     channel has no publish of its own on purpose: reading an algorithm then
-///     tells you where its data goes — nowhere, until publish() is called.
-///   * publish() is the single exit, and it names the topic.  It walks the
-///     channels and, for each, sends what is staged and then clears it — staged
-///     data does not cross a publish boundary.
+///   * a CHANNEL is pure staging buffer — somewhere to accumulate shapes, not a
+///     way to publish them.  You ask for one with markers() or pointCloud(),
+///     naming the topic it publishes on; you then add shapes to it, and nothing
+///     is published and nothing leaves the process.  A channel has no publish of
+///     its own on purpose: reading an algorithm then tells you where its data
+///     goes — nowhere, until one of the publish() overloads is called.
+///   * the TOPIC is the channel's identity, and it is the exact ROS topic: one
+///     channel is one topic, nothing is appended to the name you give.  Asking
+///     for the same topic twice returns the SAME channel — the same buffers and
+///     the same publisher.  A topic is therefore fixed to one message type
+///     (markers() and pointCloud() are separate maps); the FRAME is not fixed,
+///     because a frame belongs to the data rather than to the buffer — the same
+///     channel can carry a world-referenced path one cycle and a body-referenced
+///     footprint the next.
+///   * publish() is the single exit, and it takes the CHANNEL and the FRAME.
+///     It sends what that one channel has staged, stamped with that frame, and
+///     then clears it — staged data does not cross a publish boundary.  clear()
+///     is the other half of the boundary: it discards without sending.
 ///
 /// The backend sits behind a pimpl, and here that is load-bearing rather than
 /// stylistic: setVisualizer() takes the handle and stores it, so COPYING the
@@ -65,33 +78,50 @@ public:
     FineNavVisualizer(FineNavVisualizer&&) = default;
     FineNavVisualizer& operator=(FineNavVisualizer&&) = default;
 
-    // ── Staging channels — add shapes, set their frame ────────────────
+    // ── Channels — created by topic, never replaced ───────────────────
 
-    /// Rigid-body markers → @c topic_name @c + @c "/markers".
-    /// Set the frame of what you stage with markers().setFrame(...) — a Frame
-    /// tag (finenav_common/frames.hpp), resolved at publish time.
-    MarkerViz&     markers();
-
-    /// Coloured point cloud → @c topic_name @c + @c "/cloud".
-    PointCloudViz& pointCloud();
-
-    // ── Publish — the only exit ───────────────────────────────────────
-
-    /// Send everything staged on every channel, then clear every channel.
+    /// The marker channel on @p topic — rigid-body markers, published as
+    /// visualization_msgs/MarkerArray.
     ///
-    /// Each channel appends its own sub-topic, because they carry different
-    /// message types and may carry different frames:
-    ///     markers()    → @p topic_name + "/markers"   (visualization_msgs/MarkerArray)
-    ///     pointCloud() → @p topic_name + "/cloud"     (sensor_msgs/PointCloud2)
+    /// @p topic is the channel's identity AND the exact ROS topic it lands on:
+    /// nothing is appended.  The same topic always returns the same channel, so
+    /// a caller may hold the reference; it stays valid for the life of the
+    /// backend.
+    MarkerViz& markers(const std::string& topic);
+
+    /// The point-cloud channel on @p topic — a coloured cloud, published as
+    /// sensor_msgs/PointCloud2.  Same contract as markers().
+    PointCloudViz& pointCloud(const std::string& topic);
+
+    // ── Publish / clear — the only exits, one channel at a time ───────
+
+    /// Send what @p channel has staged, stamped with @p frame, then clear it.
+    ///
+    /// The frame is a publish-time argument because it belongs to the DATA, and
+    /// only the algorithm knows whether what it just staged is world-referenced
+    /// (a global path, a costmap, a goal) or body-referenced (a footprint, a
+    /// velocity arrow).  It is a Frame tag (finenav_common/frames.hpp), resolved
+    /// to a name on the way out — so a system that renamed the frames at startup
+    /// gets its own names, and no spelling of a frame id exists to get wrong.
+    /// A channel that carries world-referenced data almost always can leave the
+    /// default alone; robot-frame data passes Frame::Robot.
+    ///
     /// A channel with nothing staged is skipped — no message, and no publisher
-    /// is created for it.  Every channel is cleared either way, so after this
-    /// call nothing is staged anywhere.
+    /// is created for it — but it is cleared either way, so after this call
+    /// nothing is staged there.  Publishing is the boundary: what was staged
+    /// does not survive it, so a cycle that forgets to re-stage shows up as
+    /// nothing rather than as last cycle's leftovers.
     ///
     /// On a handle with no backend (see the default constructor) the send is
     /// skipped for the same reason it is for an empty channel — there is
     /// nowhere to send to — but the clear still happens, so staging is consumed
     /// in every state.
-    void publish(const std::string& topic_name);
+    void publish(MarkerViz& channel, common::Frame frame = common::Frame::World);
+    void publish(PointCloudViz& channel, common::Frame frame = common::Frame::World);
+
+    /// Discard what @p channel has staged, publishing nothing.
+    void clear(MarkerViz& channel);
+    void clear(PointCloudViz& channel);
 
 private:
     struct Impl;

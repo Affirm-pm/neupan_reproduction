@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Eigen/Core>
@@ -27,12 +28,12 @@ namespace finenav::viz {
 /// which topic its data reaches, and a buffer that is never published costs
 /// nothing but memory.
 ///
-/// The frame is per buffer and the caller sets it (see VizChannel): a frame
-/// belongs to the DATA, and only the algorithm knows whether what it staged is
-/// world-referenced (a global path, a costmap, a goal) or body-referenced
-/// (a footprint, a velocity arrow).  Mixing the two in one buffer is not
-/// expressible, by construction — one buffer is one message, and a message has
-/// one frame.
+/// The frame is chosen when the buffer is published, not when it is created: a
+/// frame belongs to the DATA, and only the algorithm knows whether what it
+/// staged is world-referenced (a global path, a costmap, a goal) or
+/// body-referenced (a footprint, a velocity arrow) — so it is said at the
+/// publish, where the data is being handed over.  One buffer is still one
+/// message, and a message has one frame.
 ///
 /// Every shape takes its colour as Color, alpha included — a marker's
 /// transparency is a property of the colour it is drawn in, so there is no
@@ -44,10 +45,11 @@ namespace finenav::viz {
 /// with a DELETEALL and the viewer is reset before the shapes arrive.  Nothing
 /// here decides when a shape goes away; the next call to publish() does.
 ///
-/// Publishes to `<topic_name>/markers` as visualization_msgs/MarkerArray.
+/// Publishes to the topic it was created with, as visualization_msgs/MarkerArray.
 class MarkerViz : public TypedChannel<visualization_msgs::msg::MarkerArray> {
 public:
-    MarkerViz() = default;
+    explicit MarkerViz(std::string topic)
+        : TypedChannel<visualization_msgs::msg::MarkerArray>(std::move(topic)) {}
 
     // ── Shapes (accumulate; nothing leaves until publish()) ───────────
     //
@@ -105,14 +107,13 @@ public:
 private:
     // ── Staging buffer — machinery, reached only through VizChannel ──
 
-    std::string subtopic() const override { return "/markers"; }
-
     /// The staged markers as a message, stamped — and handed over: the array
     /// and every point vector in it move into the message, so a publish copies
     /// nothing.  Ids restart at 0 behind it, so the same shapes staged twice
     /// produce the same message twice; the viewer is cleaned up by the DELETEALL
     /// that leads the message, not by the numbering.
-    visualization_msgs::msg::MarkerArray takeMessage(const rclcpp::Time& stamp) override;
+    visualization_msgs::msg::MarkerArray takeMessage(common::Frame frame,
+                                                     const rclcpp::Time& stamp) override;
 
     bool empty() const override { return markers_.markers.empty(); }
 

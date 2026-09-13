@@ -58,10 +58,11 @@ void PointCloudViz::addColoredPoint(float x, float y, float z, double value,
 
 // ── Batch control ──────────────────────────────────────────────────
 
-sensor_msgs::msg::PointCloud2 PointCloudViz::takeMessage(const rclcpp::Time& stamp) {
+sensor_msgs::msg::PointCloud2 PointCloudViz::takeMessage(common::Frame frame,
+                                                         const rclcpp::Time& stamp) {
     sensor_msgs::msg::PointCloud2 msg;
     pcl::toROSMsg(cloud_, msg);
-    msg.header.frame_id = frameId();
+    msg.header.frame_id = common::frameName(frame);
     msg.header.stamp = stamp;
 
     // Handed over: the message owns its own copy of the points, so the staging

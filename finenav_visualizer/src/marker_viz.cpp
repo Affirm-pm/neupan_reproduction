@@ -242,7 +242,8 @@ void MarkerViz::addText(const Eigen::Vector3d& pos, const std::string& text,
     markers_.markers.push_back(std::move(m));
 }
 
-visualization_msgs::msg::MarkerArray MarkerViz::takeMessage(const rclcpp::Time& stamp) {
+visualization_msgs::msg::MarkerArray MarkerViz::takeMessage(common::Frame frame,
+                                                            const rclcpp::Time& stamp) {
     // A message is the whole picture, never a patch on the last one: a shape
     // the algorithm stopped staging has to vanish, and only this can make it.
     //
@@ -258,8 +259,12 @@ visualization_msgs::msg::MarkerArray MarkerViz::takeMessage(const rclcpp::Time& 
     // Stamped in place — and that is the whole point of taking rather than
     // building: the array moves out below with its point vectors intact, so a
     // publish of N markers costs one pass over N headers, not N deep copies.
+    // The tag is turned into a name once, here: every marker in the message
+    // shares it, and resolving it per marker would read the frame names N times
+    // for one answer.
+    const std::string& frame_id = common::frameName(frame);
     for (auto& m : markers_.markers) {
-        m.header.frame_id = frameId();
+        m.header.frame_id = frame_id;
         m.header.stamp = stamp;
     }
 

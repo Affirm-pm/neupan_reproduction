@@ -5,9 +5,9 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include <rclcpp/node.hpp>
 #include <rclcpp/publisher.hpp>
@@ -21,76 +21,53 @@ namespace finenav::viz {
 class FineNavVisualizer;
 
 /// What every staging channel is, regardless of the shape of the data it
-/// stages: which frame that data belongs to, whether anything is staged, how to
-/// discard it, and how to send it.  One loop in FineNavVisualizer::publish()
+/// stages: the topic it lands on, whether anything is staged, how to discard it,
+/// and how to send it.  FineNavVisualizer drives exactly two calls on a channel:
 ///
-///     for (VizChannel* channel : channels()) {
-///         channel->publishStaged(node, topic_name, now);
-///         channel->clear();
-///     }
+///     channel->publishStaged(node, frame, now);
+///     channel->clear();
 ///
-/// covers every channel there will ever be.
+/// and those two cover every channel there will ever be.
 ///
-/// Only setFrame() is public, and deliberately so: everything else on this
-/// interface is machinery the visualizer drives.  A caller who could ask
-/// whether a channel is empty, or reset one, would be writing against the
-/// publish boundary rather than through it — and the boundary is what the
+/// Identity is fixed at construction and never moves: a channel IS its topic, so
+/// there is nothing left on this interface for a caller to set.  A caller who
+/// could ask whether a channel is empty, or reset one, would be writing against
+/// the publish boundary rather than through it — and the boundary is what the
 /// whole design is for.  Widening any of it later is source-compatible; that is
 /// why it starts closed.
 ///
-/// Publishing is protected and the visualizer is a friend, so a channel still
-/// has no publish() a caller could reach: reading an algorithm tells you where
-/// its data goes — nowhere, until FineNavVisualizer::publish() is called.
+/// The FRAME is the one thing a publish brings with it, because it belongs to
+/// the data rather than to the buffer the data was collected in: the same
+/// channel can carry a world-referenced path one cycle and a body-referenced
+/// footprint the next, and the caller says which as it publishes.
+///
+/// Publishing is protected and the visualizer is a friend, so a channel has no
+/// publish() a caller could reach: reading an algorithm tells you where its data
+/// goes — nowhere, until FineNavVisualizer::publish(channel, frame) is called.
 class VizChannel {
 public:
     virtual ~VizChannel() = default;
 
-    /// Frame the staged data will be stamped with.
-    ///
-    /// A tag, not a name: `setFrame("map")` and `setFrame("odom")` would both
-    /// compile, and a typo would draw into a frame the framework never publishes
-    /// — which then reads as a localization bug.  common::Frame cannot be
-    /// misspelled, and its NAME is resolved from frames() at publish time, so a
-    /// system that renamed the frames at startup gets the new names.  (A plugin
-    /// names this type finenav::common::Frame — the one spelling, because a
-    /// frame tag is a framework convention rather than a finenav_core type, and
-    /// this header sits below finenav_core and could not name a core type
-    /// anyway.)
-    ///
-    /// There is no default: the framework does not choose a frame for the
-    /// algorithm, because a frame belongs to the DATA — a global path is
-    /// world-referenced, a footprint is body-referenced — and only the algorithm
-    /// knows which it just staged.  A channel nobody gave a frame publishes an
-    /// empty frame_id, which a viewer reads as its fixed frame.
-    void setFrame(common::Frame frame) { frame_ = frame; }
-
 protected:
-    VizChannel() = default;
+    /// A channel is its topic (see topic_), and nothing else.
+    explicit VizChannel(std::string topic) : topic_(std::move(topic)) {}
 
     /// True when nothing is staged — the state publish() leaves the channel in.
     virtual bool empty() const = 0;
 
     /// Discard everything staged, publishing nothing.  FineNavVisualizer calls
-    /// this on every channel after each publish, so staged data never crosses a
+    /// this on the channel after each publish, so staged data never crosses a
     /// publish boundary.
     virtual void clear() = 0;
 
-    /// Send what is staged, if anything, to @p topic_name + subtopic().  Called
-    /// only by FineNavVisualizer::publish().
-    virtual void publishStaged(rclcpp::Node& node, const std::string& topic_name,
+    /// Send what is staged, if anything, on topic_, stamped with @p frame.
+    /// Called only by FineNavVisualizer::publish(channel, frame).
+    virtual void publishStaged(rclcpp::Node& node, common::Frame frame,
                                const rclcpp::Time& stamp) = 0;
 
-    /// The name to stamp with — resolved HERE, on the way out, not in
-    /// setFrame(): the frame names are the surrounding system's choice and can
-    /// be renamed up to the moment anything is assembled, so a tag is only
-    /// turned into a name when a message is actually being made.  Empty when
-    /// nobody set a frame.
-    const std::string& frameId() const {
-        static const std::string none;
-        return frame_ ? common::frameName(*frame_) : none;
-    }
-
-    std::optional<common::Frame> frame_;
+    /// The exact ROS topic this channel publishes on — its identity, and the key
+    /// FineNavVisualizer keeps it under.  Nothing is ever appended to it.
+    std::string topic_;
 
 private:
     friend class FineNavVisualizer;
@@ -101,7 +78,7 @@ private:
 /// visualizer nor a concrete channel repeats them.
 ///
 /// A concrete channel is then only what is genuinely its own — the message it
-/// shapes and the sub-topic it lands on.
+/// shapes; the topic it lands on is the one it was created with.
 ///
 /// A send also depends on someone listening: with no subscriber, the message is
 /// built, serialised and then dropped by the middleware, so it is never built.
@@ -112,10 +89,9 @@ private:
 template <typename MsgT>
 class TypedChannel : public VizChannel {
 protected:
-    /// Sub-topic appended to the name given to FineNavVisualizer::publish().
-    virtual std::string subtopic() const = 0;
+    explicit TypedChannel(std::string topic) : VizChannel(std::move(topic)) {}
 
-    /// The staged data AS a message, stamped with frame_ and @p stamp — and
+    /// The staged data AS a message, stamped with @p frame and @p stamp — and
     /// handed over, not copied: what was staged now belongs to the message, and
     /// the buffer is left empty behind it.  Handing it over is why a publish
     /// costs no more than the conversion the message type itself needs; the
@@ -123,15 +99,15 @@ protected:
     /// that published, and the whole of it on one that did not.
     ///
     /// Called only on a cycle that has someone to receive it.
-    virtual MsgT takeMessage(const rclcpp::Time& stamp) = 0;
+    virtual MsgT takeMessage(common::Frame frame, const rclcpp::Time& stamp) = 0;
 
 private:
-    void publishStaged(rclcpp::Node& node, const std::string& topic_name,
+    void publishStaged(rclcpp::Node& node, common::Frame frame,
                        const rclcpp::Time& stamp) final {
         if (empty()) {
             return;  // nothing staged: no message, and no publisher created
         }
-        const std::string topic = topic_name + subtopic();
+        const std::string& topic = topic_;
         auto& pub = pubs_[topic];
         if (!pub) {
             pub = node.create_publisher<MsgT>(topic, 10);
@@ -158,7 +134,7 @@ private:
             return;
         }
 
-        pub->publish(takeMessage(stamp));
+        pub->publish(takeMessage(frame, stamp));
     }
 
     std::unordered_map<std::string, std::shared_ptr<rclcpp::Publisher<MsgT>>> pubs_;

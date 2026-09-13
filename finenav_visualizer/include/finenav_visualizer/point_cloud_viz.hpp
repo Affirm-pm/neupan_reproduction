@@ -5,6 +5,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 #include <rclcpp/time.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
@@ -22,15 +23,17 @@ namespace finenav::viz {
 /// stages, and nothing else; publishing is reached only through
 /// FineNavVisualizer::publish().
 ///
-/// The frame is per buffer and the caller sets it (see VizChannel) — and here
-/// it is not merely a convention: a PointCloud2 carries exactly one
-/// header.frame_id, so all the points staged in one buffer must genuinely live
-/// in the same frame.
+/// The frame is chosen when the buffer is published, not when it is created
+/// (see VizChannel) — and here it is not merely a convention: a PointCloud2
+/// carries exactly one header.frame_id, so all the points staged in one buffer
+/// must genuinely live in the same frame, and the publish is where that is
+/// asserted.
 ///
-/// Publishes to `<topic_name>/cloud` as sensor_msgs/PointCloud2.
+/// Publishes to the topic it was created with, as sensor_msgs/PointCloud2.
 class PointCloudViz : public TypedChannel<sensor_msgs::msg::PointCloud2> {
 public:
-    PointCloudViz() = default;
+    explicit PointCloudViz(std::string topic)
+        : TypedChannel<sensor_msgs::msg::PointCloud2>(std::move(topic)) {}
 
     /// Promise room for @p n points.  Purely an optimisation and never
     /// required — a buffer grows on its own — so it is here for the one caller
@@ -54,15 +57,14 @@ public:
                          const Color& high = ColorName::RED);
 
 private:
-    std::string subtopic() const override { return "/cloud"; }
-
     /// The staged points AS a message, stamped — and handed over.  The points
     /// genuinely cannot move into the wire form (PCL's own conversion rewrites
     /// them, field by field, into PointCloud2's layout), so this is the one
     /// conversion that must copy.  What it does not do is make that copy twice:
     /// the source is emptied here, in the same step, so the buffer behind it
     /// keeps only its capacity for the next cycle.
-    sensor_msgs::msg::PointCloud2 takeMessage(const rclcpp::Time& stamp) override;
+    sensor_msgs::msg::PointCloud2 takeMessage(common::Frame frame,
+                                              const rclcpp::Time& stamp) override;
 
     bool empty() const override { return cloud_.empty(); }
 

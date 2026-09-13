@@ -80,6 +80,12 @@ if (BUILD_TESTING)
 
     target_link_libraries(viz_channel_test ${PROJECT_NAME})
     ament_target_dependencies(viz_channel_test rclcpp std_msgs)
+
+    ament_add_gtest(finenav_visualizer_test
+        test/finenav_visualizer_test.cpp
+    )
+
+    target_link_libraries(finenav_visualizer_test ${PROJECT_NAME})
 endif()
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
