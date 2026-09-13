@@ -7,7 +7,9 @@ add_executable(hello_finenav main.cpp)
 # user needs NO algorithm headers at all — everything is resolved by NAME.
 target_link_libraries(hello_finenav
     Eigen3::Eigen)
-ament_target_dependencies(hello_finenav rclcpp finenav_core finenav_util finenav_engine_cpp geometry_msgs)
+# Only the façade is named: finenav_core / finenav_util / finenav_common and the
+# rest arrive transitively through finenav_engine_cpp's ament_export_dependencies.
+ament_target_dependencies(hello_finenav rclcpp finenav_engine_cpp geometry_msgs)
 install(TARGETS hello_finenav DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY behavior_trees DESTINATION share/${PROJECT_NAME}/getting_started)
 install(DIRECTORY params DESTINATION share/${PROJECT_NAME}/getting_started)

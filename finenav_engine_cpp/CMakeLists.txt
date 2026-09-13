@@ -10,6 +10,7 @@ find_package(behaviortree_cpp REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 set(finenav_dependencies
+        finenav_common
         finenav_core
         finenav_localizer
         finenav_navigator

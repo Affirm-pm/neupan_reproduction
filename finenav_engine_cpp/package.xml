@@ -9,6 +9,7 @@
 
     <buildtool_depend>ament_cmake</buildtool_depend>
 
+    <depend>finenav_common</depend>
     <depend>finenav_core</depend>
     <depend>finenav_localizer</depend>
     <depend>finenav_navigator</depend>
