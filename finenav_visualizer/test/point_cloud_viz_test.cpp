@@ -76,6 +76,15 @@ TEST(PointCloudVizTest, AddScalarPointUsesTheScale) {
     EXPECT_EQ(cloud.cloud_.points[0].b, byte(1.0f));
 }
 
+TEST(PointCloudVizTest, ReserveGrowsCapacityWithoutStagingPoints) {
+    PointCloudViz cloud("t");
+
+    cloud.reserve(100);
+
+    EXPECT_TRUE(cloud.cloud_.empty());
+    EXPECT_GE(cloud.cloud_.points.capacity(), 100U);
+}
+
 TEST(PointCloudVizTest, ClearEmptiesTheBuffer) {
     PointCloudViz cloud("finenav_test_cloud_clear");
 

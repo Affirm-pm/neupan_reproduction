@@ -40,6 +40,11 @@ void PointCloudViz::addPointUnlocked(float x, float y, float z, const Color& col
     cloud_.push_back(pt);
 }
 
+void PointCloudViz::reserve(size_t n) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    cloud_.reserve(n);
+}
+
 // ── Value-colored point ─────────────────────────────────────────────
 
 void PointCloudViz::addScalarPoint(float x, float y, float z, double value,

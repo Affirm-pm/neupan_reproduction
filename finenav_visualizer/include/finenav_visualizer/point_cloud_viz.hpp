@@ -41,8 +41,10 @@ public:
 
     /// Promise room for @p n points.  Purely an optimisation and never
     /// required — a buffer grows on its own — so it is here for the one caller
-    /// that already knows the count, and nothing else depends on it.
-    void reserve(size_t n) { cloud_.reserve(n); }
+    /// that already knows the count, and nothing else depends on it.  Takes the
+    /// channel's mutex like every other public entry, so a reserve cannot race a
+    /// concurrent addPoint into the same buffer.
+    void reserve(size_t n);
 
     // ── Points (accumulate; nothing leaves until publish()) ──────────
 
