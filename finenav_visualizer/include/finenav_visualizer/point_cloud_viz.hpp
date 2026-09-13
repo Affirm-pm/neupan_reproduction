@@ -23,7 +23,7 @@ namespace finenav::viz {
 /// stages, and nothing else; publishing is reached only through
 /// FineNavVisualizer::publish().
 ///
-/// Each point takes the channel's mutex, and addColoredPoint takes it once for
+/// Each point takes the channel's mutex, and addScalarPoint takes it once for
 /// the whole of what it does — the mix and the stage — so a caller's call is
 /// atomic against another thread staging into the same cloud.
 ///
@@ -50,15 +50,12 @@ public:
     /// Alpha is not carried into the cloud: a PointCloud2 holds RGB, so a
     /// translucent Color is drawn opaque here.  Use a marker when the alpha
     /// matters.
-    void addPoint(float x, float y, float z, const Color& color);
+    void addPoint(float x, float y, float z, const Color& color = ColorName::DEFAULT);
 
-    /// Add a point colored by a scalar value (e.g. height, cost).
-    /// @param vmin, vmax — value range for the gradient.
-    /// @param low, high — the color at each end of the range.
-    void addColoredPoint(float x, float y, float z, double value,
-                         double vmin, double vmax,
-                         const Color& low = ColorName::BLUE,
-                         const Color& high = ColorName::RED);
+    /// Add a point colored by a scalar value (height, cost, …) through a
+    /// ColorScale.  The scale — range plus colour band — is a property of the
+    /// dataset, so it is built once and reused; each point names only its value.
+    void addScalarPoint(float x, float y, float z, double value, const ColorScale& scale);
 
 private:
     /// The staged points AS a message, stamped — and handed over.  The points
@@ -76,7 +73,7 @@ private:
 
     void clearUnlocked() override { cloud_.clear(); }
 
-    /// addPoint()'s body, without the lock: addColoredPoint() mixes a colour and
+    /// addPoint()'s body, without the lock: addScalarPoint() mixes a colour and
     /// then stages exactly one point, so the mix and the stage are one step under
     /// one lock rather than a lock each.  Called with mutex_ held.
     void addPointUnlocked(float x, float y, float z, const Color& color);

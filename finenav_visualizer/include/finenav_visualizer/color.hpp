@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <vector>
+
 namespace finenav::viz {
 
 /// The named palette.  A name is a colour *source*, not a colour: Color is what
@@ -58,6 +60,42 @@ struct Color {
     /// ordinary overload resolution and convert here, once, on the way in.
     constexpr Color(float red, float green, float blue, float alpha = 1.0f) noexcept
         : r(red), g(green), b(blue), a(alpha) {}
+};
+
+/// A named multi-stop colormap — a fixed palette a scalar field is drawn
+/// through.  TURBO is the modern replacement for the rainbow "jet" look
+/// (monotonic luminance, no false banding); VIRIDIS is the perceptually
+/// uniform default for ordered data such as height or cost.
+enum class ColorMap {
+    TURBO,
+    VIRIDIS,
+};
+
+/// A scalar-to-colour rule: the range a dataset spans, and the colour band it
+/// is drawn through.  A value object — configure it once per dataset, then hand
+/// it to every point so the range and the band are said once, not per point.
+class ColorScale {
+public:
+    /// Two-stop linear ramp: @p low at vmin, @p high at vmax.
+    ColorScale(double vmin, double vmax,
+               const Color& low = ColorName::BLUE,
+               const Color& high = ColorName::RED);
+
+    /// A named multi-stop colormap over [vmin, vmax].
+    explicit ColorScale(double vmin, double vmax, ColorMap map);
+
+    /// The colour @p value is drawn in.  The value is mapped through [vmin,
+    /// vmax] and clamped, so anything outside the range saturates at the
+    /// endpoint colour.  A degenerate range (vmin >= vmax) draws the midpoint
+    /// colour.
+    Color at(double value) const;
+
+private:
+    // Stop positions in [0, 1], ascending, one colour each; size >= 2.
+    std::vector<double> positions_;
+    std::vector<Color> colors_;
+    double vmin_;
+    double vmax_;
 };
 
 }  // namespace finenav::viz

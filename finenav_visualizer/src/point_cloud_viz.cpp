@@ -42,27 +42,13 @@ void PointCloudViz::addPointUnlocked(float x, float y, float z, const Color& col
 
 // ── Value-colored point ─────────────────────────────────────────────
 
-void PointCloudViz::addColoredPoint(float x, float y, float z, double value,
-                                     double vmin, double vmax,
-                                     const Color& low, const Color& high) {
-    // One point, one lock — taken here so the mix and the stage are one step, and
-    // the shared body is reached unlocked rather than through the public addPoint.
+void PointCloudViz::addScalarPoint(float x, float y, float z, double value,
+                                   const ColorScale& scale) {
+    // One point, one lock: the scale lookup and the stage are one step, so the
+    // point a caller sees is the one that was drawn.  The gradient math that used
+    // to live here now lives in ColorScale::at(), reached unlocked below.
     std::lock_guard<std::mutex> lock(mutex_);
-    const double range = vmax - vmin;
-    const double clamped = (range > 0.0) ? std::clamp((value - vmin) / range, 0.0, 1.0) : 0.5;
-
-    // The gradient position is a scalar input, not a colour channel, so it is
-    // the one thing here that narrows: quantize it once, then mix in float so
-    // the channels themselves convert nothing.
-    const float t = static_cast<float>(clamped);
-
-    const Color mixed{
-        low.r + (high.r - low.r) * t,
-        low.g + (high.g - low.g) * t,
-        low.b + (high.b - low.b) * t,
-    };
-
-    addPointUnlocked(x, y, z, mixed);
+    addPointUnlocked(x, y, z, scale.at(value));
 }
 
 // ── Batch control ──────────────────────────────────────────────────

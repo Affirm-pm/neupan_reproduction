@@ -86,6 +86,19 @@ if (BUILD_TESTING)
     )
 
     target_link_libraries(finenav_visualizer_test ${PROJECT_NAME})
+
+    ament_add_gtest(color_scale_test
+        test/color_scale_test.cpp
+    )
+
+    target_link_libraries(color_scale_test ${PROJECT_NAME})
+
+    ament_add_gtest(point_cloud_viz_test
+        test/point_cloud_viz_test.cpp
+    )
+
+    target_link_libraries(point_cloud_viz_test ${PROJECT_NAME})
+    ament_target_dependencies(point_cloud_viz_test rclcpp sensor_msgs)
 endif()
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
