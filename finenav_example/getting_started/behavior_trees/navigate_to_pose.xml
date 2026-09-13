@@ -8,7 +8,7 @@
   the old <ComputePlan layer=... planner_id=.../> node no longer exists.
   Goals are injected with <PublishNavigationGoal/> (reads blackboard
   "goal_poses"); main.cpp declares the branch with
-  engine->wireBranch("navigate", {"my_layer"}), and that named branch is
+  engine->registerControlBranch("navigate", {"my_layer"}), and that named branch is
   activated here with <ExecuteControlPipelineBranch branch="navigate"/>.
   -->
 <root BTCPP_format="4">

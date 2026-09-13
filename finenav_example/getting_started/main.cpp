@@ -30,15 +30,15 @@ int main(int argc, char** argv) {
     engine->loadAlgoPlugins({"finenav_example/lib"});
 
     // 2. Assemble a ControlLayer from a WorldView bridge by NAME.
-    //    createLayerByWorldView resolves the planner + map TYPES the bridge declares
-    //    back to their registered names ("dummy_planner" / "dummy_map"), reuses
-    //    (or creates) the MapServer, builds the IWorldView and attaches it.  The
-    //    end user never names a planner or a map — only the WorldView.
+    //    createControlLayerByWorldView resolves the planner + map TYPES the bridge
+    //    declares back to their registered names ("dummy_planner" / "dummy_map"),
+    //    reuses (or creates) the MapServer, builds the IWorldView and attaches it.
+    //    The end user never names a planner or a map — only the WorldView.
     //    The factory reports success rather than handing back a layer handle:
     //    the assembled stage is the algorithm developer's to drive, so the
     //    application only learns whether assembly worked.
-    if (!engine->createLayerByWorldView("dummy_world_view", "my_layer",
-                                        core::PeriodicPolicy{10.0})) {
+    if (!engine->createControlLayerByWorldView("dummy_world_view", "my_layer",
+                                               core::PeriodicPolicy{10.0})) {
         RCLCPP_ERROR(node->get_logger(),
             "Failed to assemble 'my_layer' from WorldView 'dummy_world_view'.");
         rclcpp::shutdown();
@@ -49,7 +49,11 @@ int main(int argc, char** argv) {
     //    ordered sequence of layer names; the first stage implicitly consumes
     //    _root (the navigation goal).  The branch name ("navigate") is what the
     //    behavior tree uses in <ExecuteControlPipelineBranch branch="..."/>.
-    engine->wireBranch("navigate", {"my_layer"});
+    if (!engine->registerControlBranch("navigate", {"my_layer"})) {
+        RCLCPP_ERROR(node->get_logger(), "Failed to register branch 'navigate'.");
+        rclcpp::shutdown();
+        return 1;
+    }
 
     // auto map = engine->getMapServer<example::DummyMap>>("dummy_map");
 

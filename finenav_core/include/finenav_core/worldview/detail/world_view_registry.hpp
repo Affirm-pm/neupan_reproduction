@@ -5,7 +5,7 @@
 // Framework-internal WorldView discovery table.  Not part of the public API —
 // plugin authors register a WorldView with FINENAV_REGISTER_WORLDVIEW; the
 // engine assembles a layer by name through
-// FineNavEngine::createLayerByWorldView().
+// FineNavEngine::createControlLayerByWorldView().
 
 #pragma once
 

@@ -4,7 +4,7 @@
 
 // Framework-internal PLANNER reflection table.  Not part of the public API —
 // plugin authors register a planner with FINENAV_REGISTER_PLANNER; the engine
-// creates a layer by name through FineNavEngine::createLayerByName().
+// creates a layer by name through FineNavEngine::createControlLayerByPlanner().
 
 #pragma once
 

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 
 #include <ament_index_cpp/get_package_prefix.hpp>
 #include <behaviortree_cpp/utils/shared_library.h>
@@ -27,20 +28,20 @@ namespace {
 ///   <number>                                     → PeriodicPolicy{number}
 ///   {"periodic": hz} | {"frequency_hz": hz}
 ///   {"type": "periodic"|"event_driven", "frequency_hz": hz}
-/// Missing / null / unknown → EventDrivenPolicy (general server default).
-finenav::core::ExecutionPolicyVariant parsePolicy(const nlohmann::json& policy) { // TODO: 如果parse逻辑太多，考虑单独拆一个文件
+/// Missing / null → EventDrivenPolicy (general server default).
+/// Returns std::nullopt on any unrecognized policy value.
+std::optional<finenav::core::ExecutionPolicyVariant> parsePolicy(const nlohmann::json& policy) {
     using finenav::core::PeriodicPolicy;
     using finenav::core::EventDrivenPolicy;
 
     if (policy.is_null()) return EventDrivenPolicy{};
 
-    auto policy_from_name = [](const std::string& s) -> finenav::core::ExecutionPolicyVariant {
+    if (policy.is_string()) {
+        const std::string s = policy.get<std::string>();
         if (s == "event_driven") return EventDrivenPolicy{};
         if (s == "periodic")     return PeriodicPolicy{};
-        return EventDrivenPolicy{};
-    };
-
-    if (policy.is_string()) return policy_from_name(policy.get<std::string>());
+        return std::nullopt;
+    }
 
     if (policy.is_number()) return PeriodicPolicy{policy.get<double>()};
 
@@ -59,15 +60,13 @@ finenav::core::ExecutionPolicyVariant parsePolicy(const nlohmann::json& policy) 
             const std::string t = policy["type"].get<std::string>();
             if (t == "periodic")     return PeriodicPolicy{have_hz ? hz : 10.0};
             if (t == "event_driven") return EventDrivenPolicy{};
-            // unknown type → fall through to the event-driven default below.
+            return std::nullopt;
         }
         if (have_hz) return PeriodicPolicy{hz};
-        // Object with no recognized key → event-driven default.
-        return EventDrivenPolicy{};
+        return std::nullopt;
     }
 
-    // Non-null scalars we don't understand → event-driven default.
-    return EventDrivenPolicy{}; // TODO: 不应该静默错误
+    return std::nullopt;
 }
 
 }  // namespace
@@ -76,8 +75,8 @@ finenav::core::ExecutionPolicyVariant parsePolicy(const nlohmann::json& policy) 
 //  Constructor
 // ══════════════════════════════════════════════════════════════════════════════
 
-FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
-    : node_(node) {
+FineNavEngine::FineNavEngine(std::shared_ptr<rclcpp::Node> node)
+    : node_(std::move(node)) {
 
     localizer_ = std::make_unique<finenav::localizer::FineNavLocalizer>(node_);
     navigator_ = std::make_unique<finenav::navigator::BtNavigator>(node_, localizer_.get());
@@ -105,7 +104,7 @@ bool FineNavEngine::setFrameNames(common::FrameNames names) {
 
 bool FineNavEngine::removeControlLayer(const std::string& name) {
     const bool was_registered = layers_.erase(name) > 0;
-    // createLayerByName() registered this layer's channel with the master
+    // createControlLayerByPlanner() registered this layer's channel with the master
     // (manageLayer), so dropping it from `layers_` alone would leave the master
     // holding a live publisher + subscription pair for a layer that no longer
     // exists — the orphan this call exists to prevent.
@@ -113,73 +112,73 @@ bool FineNavEngine::removeControlLayer(const std::string& name) {
     return was_registered;
 }
 
-bool FineNavEngine::createLayerByName(
-    const std::string& algo_name, const std::string& layer_name,
+bool FineNavEngine::createControlLayerByPlanner(
+    const std::string& planner_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
-    return makeLayerByName(algo_name, layer_name, std::move(policy)) != nullptr;
+    return makeControlLayerByPlanner(planner_name, layer_name, std::move(policy)) != nullptr;
 }
 
-std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::makeLayerByName(
-    const std::string& algo_name, const std::string& layer_name,
+std::shared_ptr<finenav::core::IPipelineNode> FineNavEngine::makeControlLayerByPlanner(
+    const std::string& planner_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
     auto layer = finenav::core::detail::PlanRegistry::instance().createLayer(
-        node_, algo_name, layer_name, std::move(policy), localizer_.get());
+        node_, planner_name, layer_name, std::move(policy), localizer_.get());
     if (!layer) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createLayerByName('{}', '{}'): planner not registered. "
+            "createControlLayerByPlanner('{}', '{}'): planner not registered. "
             "Call loadAlgoPlugins() first if the algorithm lives in a plugin .so.",
-            algo_name, layer_name);
+            planner_name, layer_name);
         return nullptr;
     }
     navigator_->master().manageLayer(layer_name);
     layers_[layer_name] = layer;
     FINENAV_LOG_INFO(node_->get_logger(),
-        "createLayerByName('{}', '{}'): layer created.", algo_name, layer_name);
+        "createControlLayerByPlanner('{}', '{}'): layer created.", planner_name, layer_name);
     return layer;
 }
 
-bool FineNavEngine::createMapServerByName(
-    const std::string& algo_name, const std::string& server_name)
+bool FineNavEngine::createMapServer(
+    const std::string& map_name, const std::string& server_name)
 {
-    return makeMapServerByName(algo_name, server_name) != nullptr;
+    return makeMapServer(map_name, server_name) != nullptr;
 }
 
-std::shared_ptr<finenav::core::IMapResource> FineNavEngine::makeMapServerByName(
-    const std::string& algo_name, const std::string& server_name)
+std::shared_ptr<finenav::core::IMapResource> FineNavEngine::makeMapServer(
+    const std::string& map_name, const std::string& server_name)
 {
     auto server = finenav::core::detail::MapRegistry::instance().createMap(
-        node_, algo_name, server_name, localizer_.get());
+        node_, map_name, server_name, localizer_.get());
     if (!server) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createMapServerByName('{}', '{}'): map not registered. "
+            "createMapServer('{}', '{}'): map not registered. "
             "Call loadAlgoPlugins() first if the algorithm lives in a plugin .so.",
-            algo_name, server_name);
+            map_name, server_name);
         return nullptr;
     }
     maps_[server_name] = server;
     FINENAV_LOG_INFO(node_->get_logger(),
-        "createMapServerByName('{}', '{}'): map server created.", algo_name, server_name);
+        "createMapServer('{}', '{}'): map server created.", map_name, server_name);
     return server;
 }
 
 std::shared_ptr<finenav::core::IMapResource> FineNavEngine::ensureMapServer(
-    const std::string& algo_name)
+    const std::string& map_name)
 {
-    auto it = maps_.find(algo_name);
+    auto it = maps_.find(map_name);
     if (it != maps_.end()) return it->second;
-    return makeMapServerByName(algo_name, algo_name);
+    return makeMapServer(map_name, map_name);
 }
 
-bool FineNavEngine::createLayerByWorldView(
+bool FineNavEngine::createControlLayerByWorldView(
     const std::string& world_view_name, const std::string& layer_name,
     finenav::core::ExecutionPolicyVariant policy)
 {
     auto entry = finenav::core::detail::WorldViewRegistry::instance().lookup(world_view_name);
     if (!entry) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createLayerByWorldView: WorldView '{}' is not registered. "
+            "createControlLayerByWorldView: WorldView '{}' is not registered. "
             "Call loadAlgoPlugins() first if it lives in a plugin .so.",
             world_view_name);
         return false;
@@ -192,7 +191,7 @@ bool FineNavEngine::createLayerByWorldView(
     auto planner_name = plans.findPlannerNameByType(entry->planner_type);
     if (!planner_name) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createLayerByWorldView('{}'): planner type '{}' is not registered as an algo.",
+            "createControlLayerByWorldView('{}'): planner type '{}' is not registered as an algo.",
             world_view_name, entry->planner_type);
         return false;
     }
@@ -204,7 +203,7 @@ bool FineNavEngine::createLayerByWorldView(
         auto map_name = maps.findMapNameByType(map_type);
         if (!map_name) {
             FINENAV_LOG_ERROR(node_->get_logger(),
-                "createLayerByWorldView('{}'): map type '{}' is not registered as an algo.",
+                "createControlLayerByWorldView('{}'): map type '{}' is not registered as an algo.",
                 world_view_name, map_type);
             return false;
         }
@@ -212,7 +211,7 @@ bool FineNavEngine::createLayerByWorldView(
     }
 
     // 1) create the layer FIRST — its pnode must exist before build
-    auto layer = makeLayerByName(*planner_name, layer_name, std::move(policy));
+    auto layer = makeControlLayerByPlanner(*planner_name, layer_name, std::move(policy));
     if (!layer) return false;
 
     // 2) build MapAccess carrying the resolved maps
@@ -227,17 +226,17 @@ bool FineNavEngine::createLayerByWorldView(
     auto built = entry->build(access, layer->getPrivateNode());
     if (!built.view) {
         // The layer was already registered in layers_/navigator master by
-        // makeLayerByName(); reclaim it so no orphan layer is left behind.
+        // makeControlLayerByPlanner(); reclaim it so no orphan layer is left behind.
         removeControlLayer(layer_name);
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "createLayerByWorldView('{}'): build() returned no view.", world_view_name);
+            "createControlLayerByWorldView('{}'): build() returned no view.", world_view_name);
         return false;
     }
 
     // 4) attach the view + its param pollable + its prepare() invoker
     layer->attachWorldView(std::move(built), std::move(map_resources));
     FINENAV_LOG_INFO(node_->get_logger(),
-        "createLayerByWorldView('{}', '{}'): assembled layer over planner '{}'.",
+        "createControlLayerByWorldView('{}', '{}'): assembled layer over planner '{}'.",
         world_view_name, layer_name, *planner_name);
     return true;
 }
@@ -294,20 +293,20 @@ bool FineNavEngine::loadAlgoPlugins(const std::vector<std::string>& plugins)
     return loaded_total > 0;
 }
 
-void FineNavEngine::wireBranch(const std::string& branch_name,
-                               const std::vector<std::string>& stages) {
+bool FineNavEngine::registerControlBranch(const std::string& branch_name,
+                                          const std::vector<std::string>& stages) {
     if (stages.empty()) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "wireBranch('{}'): branch carries no stages.", branch_name);
-        return;
+            "registerControlBranch('{}'): branch carries no stages.", branch_name);
+        return false;
     }
     // Every stage must already exist as a layer (created by a layer factory or
     // by loadControlPipeline()'s layer pass).
     for (const auto& s : stages) {
         if (!layers_.count(s)) {
             FINENAV_LOG_ERROR(node_->get_logger(),
-                "wireBranch('{}'): stage '{}' is not a created layer.", branch_name, s);
-            return;
+                "registerControlBranch('{}'): stage '{}' is not a created layer.", branch_name, s);
+            return false;
         }
     }
     // 首 stage 隐式消费 _root（导航目标注入）。connectFrom() 幂等 —— 同一
@@ -319,9 +318,11 @@ void FineNavEngine::wireBranch(const std::string& branch_name,
     }
     if (!navigator_->pipe().addBranch(branch_name, stages)) {
         FINENAV_LOG_ERROR(node_->get_logger(),
-            "wireBranch('{}'): addBranch rejected (duplicate branch name, empty "
+            "registerControlBranch('{}'): addBranch rejected (duplicate branch name, empty "
             "stages, duplicate stage, or '_root' inside stages).", branch_name);
+        return false;
     }
+    return true;
 }
 
 bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
@@ -364,7 +365,14 @@ bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
 
             finenav::core::ExecutionPolicyVariant policy = finenav::core::EventDrivenPolicy{};
             if (spec.is_object() && spec.contains("policy")) {
-                policy = parsePolicy(spec["policy"]);
+                auto parsed = parsePolicy(spec["policy"]);
+                if (!parsed) {
+                    FINENAV_LOG_ERROR(node_->get_logger(),
+                        "loadControlPipeline: layer '{}' has an unrecognized 'policy' value.", layer_name);
+                    ok = false;
+                    continue;
+                }
+                policy = std::move(*parsed);
             }
 
             std::string algo, world_view;
@@ -388,9 +396,9 @@ bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
 
             bool created = false;
             if (!world_view.empty()) {
-                created = createLayerByWorldView(world_view, layer_name, std::move(policy));
+                created = createControlLayerByWorldView(world_view, layer_name, std::move(policy));
             } else if (!algo.empty()) {
-                created = createLayerByName(algo, layer_name, std::move(policy));
+                created = createControlLayerByPlanner(algo, layer_name, std::move(policy));
             }
             if (!created) {
                 FINENAV_LOG_ERROR(node_->get_logger(),
@@ -437,7 +445,7 @@ bool FineNavEngine::loadControlPipeline(const std::string& config_path) {
                 }
                 continue;
             }
-            wireBranch(branch_name, stages);
+            if (!registerControlBranch(branch_name, stages)) ok = false;
         }
     } else {
         FINENAV_LOG_WARN(node_->get_logger(),

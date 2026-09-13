@@ -20,7 +20,6 @@
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
-#include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_localizer/finenav_localizer.hpp"
 #include "finenav_navigator/chassis_command/i_chassis_command.hpp"
 #include "finenav_navigator/navigator.hpp"
@@ -30,7 +29,7 @@ namespace finenav {
 class FineNavEngine {
 public:
 
-    explicit FineNavEngine(const std::shared_ptr<rclcpp::Node>& node);
+    explicit FineNavEngine(std::shared_ptr<rclcpp::Node> node);
 
     FineNavEngine(const FineNavEngine&) = delete;
     FineNavEngine& operator=(const FineNavEngine&) = delete;
@@ -61,28 +60,17 @@ public:
      * tree, which reads as a localization bug.  Defaults are "map" / "base_link";
      * call this when the surrounding system names them differently.
      *
-     * Call it during setup, BEFORE createLayerByName() / createLayerByWorldView()
-     * / createMapServerByName() / loadAlgoPlugins().  A plugin's visualizer takes
-     * the frame at construction, and a frame id changed afterwards would
-     * invalidate every message already published under the old name.
+     * Call it during setup, BEFORE createControlLayerByPlanner() /
+     * createControlLayerByWorldView() / createMapServer() / loadAlgoPlugins().
+     * A plugin's visualizer takes the frame at construction, and a frame id
+     * changed afterwards would invalidate every message already published under
+     * the old name.
      *
      * @param names  World-fixed and robot frame names.
      * @return false if any layer or map already exists, or if the names had
      *         already been set — in both cases nothing changed (ERROR logged).
      */
     bool setFrameNames(common::FrameNames names);
-
-    /**
-     * @brief Read-only access to the current robot state.
-     *
-     * Returns the narrow read-only query interface of the localizer (the
-     * RobotStateProvider base); `pushState()` is protected, so callers can only
-     * query — `getRobotState()` / `getRobotState(t)`.  The engine owns the
-     * provider, so the returned pointer is valid for the engine's lifetime.
-     */
-    [[nodiscard]] const core::RobotStateProvider* robotStateProvider() const {
-        return localizer_.get();
-    }
 
     // ── Factory by name (runtime reflection via PlanRegistry / MapRegistry) ────
     // The algorithm .so self-registers its factory under the registration name
@@ -108,21 +96,21 @@ public:
     // pointer-returning forms live in make*() below, where the ENGINE still has
     // to drive what it just built.
 
-    /// Assemble the pipeline layer for the planner registered under @p algo_name.
+    /// Assemble the pipeline layer for the planner registered under @p planner_name.
     /// @return false if no planner is registered under that name (ERROR logged).
-    [[nodiscard]] bool createLayerByName( // TODO: CreateControl
-        const std::string& algo_name, const std::string& layer_name,
-        finenav::core::ExecutionPolicyVariant policy);
+    [[nodiscard]] bool createControlLayerByPlanner(
+        const std::string& planner_name, const std::string& layer_name,
+        finenav::core::ExecutionPolicyVariant policy = finenav::core::EventDrivenPolicy{});
 
-    /// Create the map server for the map registered under @p algo_name.
+    /// Create the map server for the map registered under @p map_name.
     /// @return false if no map is registered under that name (ERROR logged).
-    [[nodiscard]] bool createMapServerByName(
-        const std::string& algo_name, const std::string& server_name);
+    [[nodiscard]] bool createMapServer(
+        const std::string& map_name, const std::string& server_name);
 
     /// Assemble a complete layer from a registered WorldView bridge by name.
     /// @return false if the WorldView, its planner or one of its maps is not
     ///         registered, or if building the view failed (ERROR logged).
-    [[nodiscard]] bool createLayerByWorldView( // TODO: 改个api名字
+    [[nodiscard]] bool createControlLayerByWorldView(
         const std::string& world_view_name,
         const std::string& layer_name,
         finenav::core::ExecutionPolicyVariant policy = finenav::core::EventDrivenPolicy{});
@@ -144,9 +132,10 @@ public:
     /// The branch is then registered under @p branch_name in the navigator's
     /// BranchTable, where the behavior tree activates it with
     /// <ExecuteControlPipelineBranch branch="@p branch_name"/>.
-    /// On failure (unknown stage, or addBranch rejecting the branch — e.g.
-    /// duplicate branch name or '_root' inside @p stages) an ERROR is logged.
-    void wireBranch(const std::string& branch_name, const std::vector<std::string>& stages); // TODO：命名问题，比如 registerControlLayer
+    /// @return false on failure (unknown stage, or addBranch rejecting the branch
+    ///         — e.g. duplicate branch name or '_root' inside @p stages); an
+    ///         ERROR is logged in that case.
+    [[nodiscard]] bool registerControlBranch(const std::string& branch_name, const std::vector<std::string>& stages);
 
     /// Load the control pipeline from a JSON config file:
     /// @code
@@ -170,6 +159,12 @@ public:
 
     // ── Navigation control ────────────────────────────────────────────────
 
+    /// Send a navigation goal to the navigator's action server.
+    ///
+    /// The goals are world-frame poses: a bare geometry_msgs::msg::Pose carries
+    /// neither a frame id nor a stamp, so there is nothing in the message that
+    /// could say otherwise — the goal is interpreted in the world-fixed frame
+    /// (see setFrameNames()).
     void navigateTo(const std::vector<geometry_msgs::msg::Pose>& goals,
                     const std::string& bt_id = "");
     void cancelNavigation();
@@ -181,17 +176,17 @@ private:
     // assembling a WorldView needs the layer's private sub-node and its
     // attachWorldView(); resolving a cached map needs its resource handle.
 
-    std::shared_ptr<finenav::core::IPipelineNode> makeLayerByName(
-        const std::string& algo_name, const std::string& layer_name,
+    std::shared_ptr<finenav::core::IPipelineNode> makeControlLayerByPlanner(
+        const std::string& planner_name, const std::string& layer_name,
         finenav::core::ExecutionPolicyVariant policy);
 
-    std::shared_ptr<finenav::core::IMapResource> makeMapServerByName(
-        const std::string& algo_name, const std::string& server_name);
+    std::shared_ptr<finenav::core::IMapResource> makeMapServer(
+        const std::string& map_name, const std::string& server_name);
 
-    /// Return the MapServer already created under @p algo_name, or create one
-    /// (server name == algo name) on first use — so multiple WorldViews sharing a
+    /// Return the MapServer already created under @p map_name, or create one
+    /// (server name == map name) on first use — so multiple WorldViews sharing a
     /// map type reuse one server.
-    std::shared_ptr<finenav::core::IMapResource> ensureMapServer(const std::string& algo_name); // TODO: 这是干嘛的
+    std::shared_ptr<finenav::core::IMapResource> ensureMapServer(const std::string& map_name); // TODO: 这是干嘛的
 
     /// Drop a half-built layer from the engine's bookkeeping.  Private: the
     /// downstream user does not get to dismantle pipeline stages — which layer

@@ -144,7 +144,7 @@ PipelineNode<PlannerT>::planOnce() {
     if constexpr (HasWorldView<PlannerT>) {
         if (!view_) {
             FINENAV_LOG_ERROR(pnode_->get_logger(),
-                "WorldView not attached — call attachWorldView() or createLayerByWorldView() first.");
+                "WorldView not attached — call attachWorldView() or createControlLayerByWorldView() first.");
             return std::nullopt;
         }
     }
