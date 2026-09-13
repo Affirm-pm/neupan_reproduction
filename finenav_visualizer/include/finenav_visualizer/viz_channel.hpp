@@ -12,6 +12,8 @@
 #include <rclcpp/publisher.hpp>
 #include <rclcpp/time.hpp>
 
+#include "finenav_util/common/log_macros.hpp"
+
 namespace finenav::viz {
 
 class FineNavVisualizer;
@@ -27,6 +29,13 @@ class FineNavVisualizer;
 ///
 /// covers every channel there will ever be.
 ///
+/// Only setFrame() is public, and deliberately so: everything else on this
+/// interface is machinery the visualizer drives.  A caller who could ask
+/// whether a channel is empty, or reset one, would be writing against the
+/// publish boundary rather than through it — and the boundary is what the
+/// whole design is for.  Widening any of it later is source-compatible; that is
+/// why it starts closed.
+///
 /// Publishing is protected and the visualizer is a friend, so a channel still
 /// has no publish() a caller could reach: reading an algorithm tells you where
 /// its data goes — nowhere, until FineNavVisualizer::publish() is called.
@@ -39,7 +48,9 @@ public:
     /// belongs to the DATA — a global path is world-referenced, a footprint is
     /// body-referenced — and only the algorithm knows which it just staged.
     void setFrame(const std::string& frame) { frame_ = frame; }
-    const std::string& frame() const { return frame_; }
+
+protected:
+    VizChannel() = default;
 
     /// True when nothing is staged — the state publish() leaves the channel in.
     virtual bool empty() const = 0;
@@ -48,9 +59,6 @@ public:
     /// this on every channel after each publish, so staged data never crosses a
     /// publish boundary.
     virtual void clear() = 0;
-
-protected:
-    VizChannel() = default;
 
     /// Send what is staged, if anything, to @p topic_name + subtopic().  Called
     /// only by FineNavVisualizer::publish().
@@ -82,10 +90,15 @@ protected:
     /// Sub-topic appended to the name given to FineNavVisualizer::publish().
     virtual std::string subtopic() const = 0;
 
-    /// A copy of what is staged, stamped with frame() and @p stamp.  Copy, not
-    /// move: clearing is the visualizer's step, after the send.  Called only on
-    /// a cycle that has someone to receive it.
-    virtual MsgT buildMessage(const rclcpp::Time& stamp) const = 0;
+    /// The staged data AS a message, stamped with frame_ and @p stamp — and
+    /// handed over, not copied: what was staged now belongs to the message, and
+    /// the buffer is left empty behind it.  Handing it over is why a publish
+    /// costs no more than the conversion the message type itself needs; the
+    /// clearing that follows from FineNavVisualizer is then a no-op on a cycle
+    /// that published, and the whole of it on one that did not.
+    ///
+    /// Called only on a cycle that has someone to receive it.
+    virtual MsgT takeMessage(const rclcpp::Time& stamp) = 0;
 
 private:
     void publishStaged(rclcpp::Node& node, const std::string& topic_name,
@@ -99,9 +112,10 @@ private:
             pub = node.create_publisher<MsgT>(topic, 10);
         }
 
-        // Nobody subscribed: stop before building.  The build is the expensive
-        // half — a full copy of the staged data, then serialisation — so a gate
-        // that only skipped the send would save almost nothing.
+        // Nobody subscribed: stop before taking the message.  The conversion is
+        // the expensive half — the staged data copied into its wire form, then
+        // serialised — so a gate that only skipped the send would save almost
+        // nothing.
         //
         // The publisher has to exist before it can be asked, which is why the
         // count is read here and not before its creation: the first cycle pays
@@ -111,10 +125,15 @@ private:
         const bool watched = pub->get_subscription_count() > 0 ||
                              pub->get_intra_process_subscription_count() > 0;
         if (!watched) {
+            // Debug, not warn: staging into a viewer nobody has open is the
+            // normal state of a robot at rest, not a fault.  Throttled and
+            // level-gated, so a cycle that publishes pays nothing for it.
+            FINENAV_LOG_DEBUG_THROTTLE(node.get_logger(), 5000,
+                                       "Nothing subscribed to '{}' — publish skipped.", topic);
             return;
         }
 
-        pub->publish(buildMessage(stamp));
+        pub->publish(takeMessage(stamp));
     }
 
     std::unordered_map<std::string, std::shared_ptr<rclcpp::Publisher<MsgT>>> pubs_;

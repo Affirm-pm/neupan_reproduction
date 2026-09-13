@@ -18,9 +18,9 @@
 namespace finenav::viz {
 
 /// Staging buffer for a coloured point cloud — somewhere to accumulate points,
-/// not a way to publish them.  Same contract as MarkerViz: staging and clearing
-/// are public, publishing is not, and the only thing that reaches the cached
-/// publisher is FineNavVisualizer::publish().
+/// not a way to publish them.  Same contract as MarkerViz: the public surface
+/// stages, and nothing else; publishing is reached only through
+/// FineNavVisualizer::publish().
 ///
 /// The frame is per buffer and the caller sets it (see VizChannel) — and here
 /// it is not merely a convention: a PointCloud2 carries exactly one
@@ -32,6 +32,9 @@ class PointCloudViz : public TypedChannel<sensor_msgs::msg::PointCloud2> {
 public:
     PointCloudViz() = default;
 
+    /// Promise room for @p n points.  Purely an optimisation and never
+    /// required — a buffer grows on its own — so it is here for the one caller
+    /// that already knows the count, and nothing else depends on it.
     void reserve(size_t n) { cloud_.reserve(n); }
 
     // ── Points (accumulate; nothing leaves until publish()) ──────────
@@ -50,17 +53,20 @@ public:
                          const Color& low = ColorName::BLUE,
                          const Color& high = ColorName::RED);
 
-    // ── Staging buffer ─────────────────────────────────────────────
-
-    bool empty() const override { return cloud_.empty(); }
-
-    /// Discard accumulated points without publishing.
-    void clear() override { cloud_.clear(); }
-
 private:
     std::string subtopic() const override { return "/cloud"; }
 
-    sensor_msgs::msg::PointCloud2 buildMessage(const rclcpp::Time& stamp) const override;
+    /// The staged points AS a message, stamped — and handed over.  The points
+    /// genuinely cannot move into the wire form (PCL's own conversion rewrites
+    /// them, field by field, into PointCloud2's layout), so this is the one
+    /// conversion that must copy.  What it does not do is make that copy twice:
+    /// the source is emptied here, in the same step, so the buffer behind it
+    /// keeps only its capacity for the next cycle.
+    sensor_msgs::msg::PointCloud2 takeMessage(const rclcpp::Time& stamp) override;
+
+    bool empty() const override { return cloud_.empty(); }
+
+    void clear() override { cloud_.clear(); }
 
     pcl::PointCloud<pcl::PointXYZRGB> cloud_;
 };

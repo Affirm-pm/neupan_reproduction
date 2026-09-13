@@ -242,9 +242,7 @@ void MarkerViz::addText(const Eigen::Vector3d& pos, const std::string& text,
     markers_.markers.push_back(std::move(m));
 }
 
-visualization_msgs::msg::MarkerArray MarkerViz::buildMessage(const rclcpp::Time& stamp) const {
-    visualization_msgs::msg::MarkerArray out = markers_;
-
+visualization_msgs::msg::MarkerArray MarkerViz::takeMessage(const rclcpp::Time& stamp) {
     // A message is the whole picture, never a patch on the last one: a shape
     // the algorithm stopped staging has to vanish, and only this can make it.
     //
@@ -255,13 +253,18 @@ visualization_msgs::msg::MarkerArray MarkerViz::buildMessage(const rclcpp::Time&
     // means.  It goes first because the viewer consumes the array in order.
     visualization_msgs::msg::Marker reset;
     reset.action = visualization_msgs::msg::Marker::DELETEALL;
-    out.markers.insert(out.markers.begin(), std::move(reset));
+    markers_.markers.insert(markers_.markers.begin(), std::move(reset));
 
-    for (auto& m : out.markers) {
+    // Stamped in place — and that is the whole point of taking rather than
+    // building: the array moves out below with its point vectors intact, so a
+    // publish of N markers costs one pass over N headers, not N deep copies.
+    for (auto& m : markers_.markers) {
         m.header.frame_id = frame_;
         m.header.stamp = stamp;
     }
-    return out;
+
+    next_marker_id_ = 0;  // handed over: the next cycle numbers its shapes afresh
+    return std::move(markers_);
 }
 
 }  // namespace finenav::viz

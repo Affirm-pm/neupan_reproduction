@@ -58,11 +58,18 @@ void PointCloudViz::addColoredPoint(float x, float y, float z, double value,
 
 // ── Batch control ──────────────────────────────────────────────────
 
-sensor_msgs::msg::PointCloud2 PointCloudViz::buildMessage(const rclcpp::Time& stamp) const {
+sensor_msgs::msg::PointCloud2 PointCloudViz::takeMessage(const rclcpp::Time& stamp) {
     sensor_msgs::msg::PointCloud2 msg;
     pcl::toROSMsg(cloud_, msg);
     msg.header.frame_id = frame_;
     msg.header.stamp = stamp;
+
+    // Handed over: the message owns its own copy of the points, so the staging
+    // buffer has nothing left to keep.  Emptying it here instead of in the
+    // clear() that follows a publish is what makes that clear() a no-op on a
+    // cycle that published — and the capacity survives, so the next cycle
+    // stages into memory that is already there.
+    cloud_.clear();
     return msg;
 }
 

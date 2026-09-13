@@ -11,6 +11,8 @@
 
     <depend>rclcpp</depend>
     <depend>rclcpp_action</depend>
+    <!-- common/log_macros.hpp is a public header and includes <fmt/format.h>. -->
+    <depend>fmt</depend>
 
     <export>
         <build_type>ament_cmake</build_type>

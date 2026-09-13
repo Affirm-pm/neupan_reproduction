@@ -21,8 +21,8 @@
 namespace finenav::viz {
 
 /// Staging buffer for rigid-body markers — somewhere to accumulate shapes, not
-/// a way to publish them.  Its public surface stages and clears; the publisher
-/// it caches comes from TypedChannel, and the only thing that reaches it is
+/// a way to publish them.  Its public surface stages, and nothing else; the
+/// publisher it caches comes from TypedChannel, and the only thing that reaches it is
 /// FineNavVisualizer::publish().  So reading an algorithm tells you exactly
 /// which topic its data reaches, and a buffer that is never published costs
 /// nothing but memory.
@@ -102,23 +102,24 @@ public:
     void addText(const Eigen::Vector3d& pos, const std::string& text,
                  double height = 0.1, const Color& color = ColorName::DEFAULT);
 
-    // ── Staging buffer ─────────────────────────────────────────────
+private:
+    // ── Staging buffer — machinery, reached only through VizChannel ──
+
+    std::string subtopic() const override { return "/markers"; }
+
+    /// The staged markers as a message, stamped — and handed over: the array
+    /// and every point vector in it move into the message, so a publish copies
+    /// nothing.  Ids restart at 0 behind it, so the same shapes staged twice
+    /// produce the same message twice; the viewer is cleaned up by the DELETEALL
+    /// that leads the message, not by the numbering.
+    visualization_msgs::msg::MarkerArray takeMessage(const rclcpp::Time& stamp) override;
 
     bool empty() const override { return markers_.markers.empty(); }
 
-    /// Discard accumulated markers without publishing.  Ids restart at 0, so
-    /// the same shapes staged twice produce the same message twice — the
-    /// viewer is cleaned up by the DELETEALL that leads every publish, not by
-    /// this, so the numbering is free to be deterministic.
     void clear() override {
         markers_.markers.clear();
         next_marker_id_ = 0;
     }
-
-private:
-    std::string subtopic() const override { return "/markers"; }
-
-    visualization_msgs::msg::MarkerArray buildMessage(const rclcpp::Time& stamp) const override;
 
     std::int32_t allocateId();
 

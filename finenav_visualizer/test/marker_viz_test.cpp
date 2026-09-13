@@ -3,6 +3,11 @@
 #include <Eigen/Core>
 #include <rclcpp/rclcpp.hpp>
 
+// Pulled in by the finenav headers below, so it has to be parsed BEFORE the
+// access hack: `#define private public` is only meant to open finenav's own
+// declarations, not a third-party library's internals.
+#include <fmt/format.h>
+
 #define private public
 #include "finenav_visualizer/marker_viz.hpp"
 #undef private
@@ -141,14 +146,35 @@ TEST(MarkerVizTest, LeadsEveryMessageWithADisplayWideDelete)
   markers.addSphere(Eigen::Vector3d{0.0, 0.0, 0.0}, 0.5);
   markers.addLineStrip(points(0.0));
 
-  const auto msg = markers.buildMessage(rclcpp::Time{0, 0, RCL_ROS_TIME});
+  const auto msg = markers.takeMessage(rclcpp::Time{0, 0, RCL_ROS_TIME});
 
   ASSERT_EQ(msg.markers.size(), 3U);
-  EXPECT_EQ(markers.markers_.markers.size(), 2U);  // no reset in the buffer
+  EXPECT_TRUE(markers.markers_.markers.empty());  // handed over, not copied
   EXPECT_EQ(msg.markers[0].action, visualization_msgs::msg::Marker::DELETEALL);
   EXPECT_TRUE(msg.markers[0].ns.empty());
   EXPECT_EQ(msg.markers[1].action, visualization_msgs::msg::Marker::ADD);
   EXPECT_EQ(msg.markers[2].action, visualization_msgs::msg::Marker::ADD);
+}
+
+// Taking is what makes a publish cheap: the array moves out whole, point
+// vectors and all, so the buffer behind it is empty and numbered afresh — the
+// next cycle stages the same shapes and gets the same message again.
+TEST(MarkerVizTest, TakingHandsTheBufferOverAndRenumbersIds)
+{
+  finenav::viz::MarkerViz markers;
+
+  markers.addLineStrip(points(0.0));
+  const auto first = markers.takeMessage(rclcpp::Time{0, 0, RCL_ROS_TIME});
+  ASSERT_TRUE(markers.markers_.markers.empty());
+
+  markers.addLineStrip(points(4.0));
+  const auto second = markers.takeMessage(rclcpp::Time{0, 0, RCL_ROS_TIME});
+
+  ASSERT_EQ(second.markers.size(), 2U);          // DELETEALL + the strip
+  EXPECT_EQ(second.markers[1].id, 0);            // afresh, not 1
+  EXPECT_EQ(second.markers[1].points.size(), 3U);  // points travelled with it
+  EXPECT_FLOAT_EQ(second.markers[1].points[0].x, 4.0F);
+  EXPECT_EQ(first.markers[1].points.size(), 3U);
 }
 
 // Persistence is the default and the only behaviour: a zero lifetime is what
@@ -159,7 +185,7 @@ TEST(MarkerVizTest, ShapesCarryNoExpiry)
 
   markers.addSphere(Eigen::Vector3d{0.0, 0.0, 0.0}, 0.5);
 
-  const auto msg = markers.buildMessage(rclcpp::Time{0, 0, RCL_ROS_TIME});
+  const auto msg = markers.takeMessage(rclcpp::Time{0, 0, RCL_ROS_TIME});
 
   ASSERT_EQ(msg.markers.size(), 2U);
   EXPECT_EQ(msg.markers[1].lifetime.sec, 0);

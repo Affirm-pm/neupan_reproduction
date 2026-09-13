@@ -10,6 +10,11 @@
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/string.hpp>
 
+// Pulled in by the finenav header below, so it has to be parsed BEFORE the
+// access hack: `#define private public` is only meant to open finenav's own
+// declarations, not a third-party library's internals.
+#include <fmt/format.h>
+
 #define private public
 #include "finenav_visualizer/viz_channel.hpp"
 #undef private
@@ -17,25 +22,28 @@
 namespace
 {
 
-/// A channel whose only job is to count how often its message is BUILT.
+/// A channel whose only job is to count how often its message is TAKEN.
 ///
-/// Building is the half the subscription gate exists to skip: the staged data
-/// is copied into a message and then serialised, and with nobody to receive it
-/// both are pure waste.  A gate that skipped only the send would be invisible
-/// here, which is the point — this counts the expensive step.
+/// Taking is the half the subscription gate exists to skip: the staged data is
+/// converted into its wire form and then serialised, and with nobody to receive
+/// it both are pure waste.  A gate that skipped only the send would be
+/// invisible here, which is the point — this counts the expensive step.
 class ProbeChannel : public finenav::viz::TypedChannel<std_msgs::msg::String> {
 public:
+  // The two state queries stay public HERE, though the base keeps them
+  // protected: a test has to drive them, and access is read off the static
+  // type, so widening the override costs the real interface nothing.
   void stage() { staged_ = true; }
   bool empty() const override { return !staged_; }
   void clear() override { staged_ = false; }
 
-  mutable int builds{0};  // buildMessage is const — counting must not change that
+  int takes{0};
 
 private:
   std::string subtopic() const override { return "/probe"; }
 
-  std_msgs::msg::String buildMessage(const rclcpp::Time&) const override {
-    ++builds;
+  std_msgs::msg::String takeMessage(const rclcpp::Time&) override {
+    ++takes;
     return std_msgs::msg::String{};
   }
 
@@ -44,11 +52,11 @@ private:
 
 }  // namespace
 
-// An unwatched publish is not a cheap no-op: it is a full build and serialise of
-// data the middleware then drops.  With no subscriber anywhere, none of that
-// may happen — and the publisher is still created, so the cycle after this one
-// is already gated rather than paying for the publisher again.
-TEST(VizChannelTest, BuildsNothingWhenNobodyIsSubscribed)
+// An unwatched publish is not a cheap no-op: it is a full conversion and
+// serialise of data the middleware then drops.  With no subscriber anywhere,
+// none of that may happen — and the publisher is still created, so the cycle
+// after this one is already gated rather than paying for the publisher again.
+TEST(VizChannelTest, TakesNothingWhenNobodyIsSubscribed)
 {
   auto node = std::make_shared<rclcpp::Node>("viz_channel_unwatched");
   ProbeChannel channel;
@@ -56,7 +64,7 @@ TEST(VizChannelTest, BuildsNothingWhenNobodyIsSubscribed)
   channel.stage();
   channel.publishStaged(*node, "finenav_probe_unwatched", node->get_clock()->now());
 
-  EXPECT_EQ(channel.builds, 0);
+  EXPECT_EQ(channel.takes, 0);
   EXPECT_EQ(channel.pubs_.count("finenav_probe_unwatched/probe"), 1U);
 }
 
@@ -73,7 +81,7 @@ TEST(VizChannelTest, GatedPublishStillLeavesTheChannelClearable)
   channel.clear();
 
   EXPECT_TRUE(channel.empty());
-  EXPECT_EQ(channel.builds, 0);
+  EXPECT_EQ(channel.takes, 0);
 }
 
 // A channel that stages nothing keeps its old contract exactly: no message, and
@@ -87,7 +95,7 @@ TEST(VizChannelTest, EmptyChannelCreatesNoPublisher)
   channel.publishStaged(*node, "finenav_probe_empty", node->get_clock()->now());
 
   EXPECT_TRUE(channel.pubs_.empty());
-  EXPECT_EQ(channel.builds, 0);
+  EXPECT_EQ(channel.takes, 0);
 }
 
 int main(int argc, char** argv)
