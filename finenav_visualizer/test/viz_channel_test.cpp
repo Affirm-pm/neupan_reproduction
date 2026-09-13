@@ -17,7 +17,7 @@
 #include <fmt/format.h>
 
 #define private public
-#include "finenav_visualizer/viz_channel.hpp"
+#include "finenav_visualizer/detail/viz_channel.hpp"
 #undef private
 
 namespace
@@ -29,10 +29,10 @@ namespace
 /// converted into its wire form and then serialised, and with nobody to receive
 /// it both are pure waste.  A gate that skipped only the send would be
 /// invisible here, which is the point — this counts the expensive step.
-class ProbeChannel : public finenav::viz::TypedChannel<std_msgs::msg::String> {
+class ProbeChannel : public finenav::viz::detail::TypedChannel<std_msgs::msg::String> {
 public:
   ProbeChannel(std::string topic)
-      : finenav::viz::TypedChannel<std_msgs::msg::String>(std::move(topic)) {}
+      : finenav::viz::detail::TypedChannel<std_msgs::msg::String>(std::move(topic)) {}
 
   // The two state queries stay public HERE, though the base keeps them
   // protected: a test has to drive them, and access is read off the static

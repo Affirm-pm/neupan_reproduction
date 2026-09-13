@@ -17,8 +17,10 @@
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::viz {
-
 class FineNavVisualizer;
+}  // namespace finenav::viz
+
+namespace finenav::viz::detail {
 
 /// What every staging channel is, regardless of the shape of the data it
 /// stages: the topic it lands on, whether anything is staged, how to discard it,
@@ -75,7 +77,7 @@ protected:
     std::string topic_;
 
     /// Guards everything mutable on a concrete channel: the staging buffer, the
-    /// marker id counter, and the publisher cache.  Every public entry takes it,
+    /// marker id counter, and the publisher.  Every public entry takes it,
     /// and the virtuals above — empty(), clearUnlocked(), takeMessage() — are all
     /// called with it already held.
     ///
@@ -86,7 +88,7 @@ protected:
     std::mutex mutex_;
 
 private:
-    friend class FineNavVisualizer;
+    friend class finenav::viz::FineNavVisualizer;
 
     /// Locked wrapper: discard everything staged, publishing nothing.  The
     /// visualizer reaches this through friendship; a test reaches it through the
@@ -174,4 +176,4 @@ private:
     std::shared_ptr<rclcpp::Publisher<MsgT>> pub_;
 };
 
-}  // namespace finenav::viz
+}  // namespace finenav::viz::detail

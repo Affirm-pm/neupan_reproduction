@@ -12,9 +12,9 @@
 
 #include <rclcpp/node.hpp>
 
+#include "finenav_visualizer/detail/viz_channel.hpp"
 #include "finenav_visualizer/marker_viz.hpp"
 #include "finenav_visualizer/point_cloud_viz.hpp"
-#include "finenav_visualizer/viz_channel.hpp"
 
 namespace finenav::viz {
 
@@ -73,12 +73,13 @@ PointCloudViz& FineNavVisualizer::pointCloud(const std::string& topic) {
 }
 
 void FineNavVisualizer::publish(MarkerViz& channel, common::Frame frame) {
-    // Bound to VizChannel on purpose: publishStaged() and clear() are declared
-    // protected there and narrowed to private again by each concrete channel,
-    // and friendship names VizChannel alone — so the channel driven here is the
-    // one declaration the visualizer is a friend of.  It is the same object
-    // either way; the reference only says which declaration is being reached.
-    VizChannel& viz = channel;
+    // Bound to detail::VizChannel on purpose: publishStaged() and clear() are
+    // declared protected there and narrowed to private again by each concrete
+    // channel, and friendship names detail::VizChannel alone — so the channel
+    // driven here is the one declaration the visualizer is a friend of.  It is
+    // the same object either way; the reference only says which declaration is
+    // being reached.
+    detail::VizChannel& viz = channel;
     // No backend means no node to publish through.  It is not an error state —
     // it is the state a member sits in until setVisualizer() fills it — so the
     // send is simply skipped; the staged data is still consumed, exactly as a
@@ -91,7 +92,7 @@ void FineNavVisualizer::publish(MarkerViz& channel, common::Frame frame) {
 }
 
 void FineNavVisualizer::publish(PointCloudViz& channel, common::Frame frame) {
-    VizChannel& viz = channel;
+    detail::VizChannel& viz = channel;
     if (rclcpp::Node* node = impl_->node_.get()) {
         viz.publishStaged(*node, frame, node->get_clock()->now());  // drains internally
     } else {
@@ -100,11 +101,11 @@ void FineNavVisualizer::publish(PointCloudViz& channel, common::Frame frame) {
 }
 
 void FineNavVisualizer::clear(MarkerViz& channel) {
-    static_cast<VizChannel&>(channel).clear();
+    static_cast<detail::VizChannel&>(channel).clear();
 }
 
 void FineNavVisualizer::clear(PointCloudViz& channel) {
-    static_cast<VizChannel&>(channel).clear();
+    static_cast<detail::VizChannel&>(channel).clear();
 }
 
 }  // namespace finenav::viz

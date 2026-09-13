@@ -17,13 +17,13 @@
 #include <visualization_msgs/msg/marker_array.hpp>
 
 #include "finenav_visualizer/color.hpp"
-#include "finenav_visualizer/viz_channel.hpp"
+#include "finenav_visualizer/detail/viz_channel.hpp"
 
 namespace finenav::viz {
 
 /// Staging buffer for rigid-body markers — somewhere to accumulate shapes, not
 /// a way to publish them.  Its public surface stages, and nothing else; the
-/// publisher it caches comes from TypedChannel, and the only thing that reaches it is
+/// publisher it caches comes from detail::TypedChannel, and the only thing that reaches it is
 /// FineNavVisualizer::publish().  So reading an algorithm tells you exactly
 /// which topic its data reaches, and a buffer that is never published costs
 /// nothing but memory.
@@ -51,10 +51,10 @@ namespace finenav::viz {
 /// here decides when a shape goes away; the next call to publish() does.
 ///
 /// Publishes to the topic it was created with, as visualization_msgs/MarkerArray.
-class MarkerViz : public TypedChannel<visualization_msgs::msg::MarkerArray> {
+class MarkerViz : public detail::TypedChannel<visualization_msgs::msg::MarkerArray> {
 public:
     explicit MarkerViz(std::string topic)
-        : TypedChannel<visualization_msgs::msg::MarkerArray>(std::move(topic)) {}
+        : detail::TypedChannel<visualization_msgs::msg::MarkerArray>(std::move(topic)) {}
 
     // ── Shapes (accumulate; nothing leaves until publish()) ───────────
     //
@@ -110,7 +110,7 @@ public:
                  double height = 0.1, const Color& color = ColorName::DEFAULT);
 
 private:
-    // ── Staging buffer — machinery, reached only through VizChannel ──
+    // ── Staging buffer — machinery, reached only through detail::VizChannel ──
 
     /// The staged markers as a message, stamped — and handed over: the array
     /// and every point vector in it move into the message, so a publish copies

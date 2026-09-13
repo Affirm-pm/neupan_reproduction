@@ -14,7 +14,7 @@
 #include <pcl/point_types.h>
 
 #include "finenav_visualizer/color.hpp"
-#include "finenav_visualizer/viz_channel.hpp"
+#include "finenav_visualizer/detail/viz_channel.hpp"
 
 namespace finenav::viz {
 
@@ -28,16 +28,16 @@ namespace finenav::viz {
 /// atomic against another thread staging into the same cloud.
 ///
 /// The frame is chosen when the buffer is published, not when it is created
-/// (see VizChannel) — and here it is not merely a convention: a PointCloud2
+/// (see detail::VizChannel) — and here it is not merely a convention: a PointCloud2
 /// carries exactly one header.frame_id, so all the points staged in one buffer
 /// must genuinely live in the same frame, and the publish is where that is
 /// asserted.
 ///
 /// Publishes to the topic it was created with, as sensor_msgs/PointCloud2.
-class PointCloudViz : public TypedChannel<sensor_msgs::msg::PointCloud2> {
+class PointCloudViz : public detail::TypedChannel<sensor_msgs::msg::PointCloud2> {
 public:
     explicit PointCloudViz(std::string topic)
-        : TypedChannel<sensor_msgs::msg::PointCloud2>(std::move(topic)) {}
+        : detail::TypedChannel<sensor_msgs::msg::PointCloud2>(std::move(topic)) {}
 
     /// Promise room for @p n points.  Purely an optimisation and never
     /// required — a buffer grows on its own — so it is here for the one caller
