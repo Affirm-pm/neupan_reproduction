@@ -67,7 +67,7 @@ TEST(VizChannelTest, TakesNothingWhenNobodyIsSubscribed)
   channel.publishStaged(*node, finenav::common::Frame::World, node->get_clock()->now());
 
   EXPECT_EQ(channel.takes, 0);
-  EXPECT_EQ(channel.pubs_.count("finenav_probe_unwatched"), 1U);
+  EXPECT_NE(channel.pub_, nullptr);
 }
 
 // The gate delays the publish, it does not move the boundary: publishStaged
@@ -98,7 +98,7 @@ TEST(VizChannelTest, EmptyChannelCreatesNoPublisher)
 
   channel.publishStaged(*node, finenav::common::Frame::World, node->get_clock()->now());
 
-  EXPECT_TRUE(channel.pubs_.empty());
+  EXPECT_FALSE(channel.pub_);
   EXPECT_EQ(channel.takes, 0);
 }
 

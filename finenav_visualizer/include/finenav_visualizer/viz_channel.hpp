@@ -7,7 +7,6 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <utility>
 
 #include <rclcpp/node.hpp>
@@ -98,9 +97,9 @@ private:
     }
 };
 
-/// The layer that answers "a channel of MsgT": the per-topic publisher cache,
-/// the lazy creation and the empty-check live here, once, so neither the
-/// visualizer nor a concrete channel repeats them.
+/// The layer that answers "a channel of MsgT": the lazily-created publisher and the
+/// empty-check live here, once, so neither the visualizer nor a concrete channel
+/// repeats them.
 ///
 /// A concrete channel is then only what is genuinely its own — the message it
 /// shapes; the topic it lands on is the one it was created with.
@@ -130,7 +129,7 @@ protected:
 private:
     void publishStaged(rclcpp::Node& node, common::Frame frame,
                        const rclcpp::Time& stamp) final {
-        // One boundary, one atomic step: the staged check, the publisher cache,
+        // One boundary, one atomic step: the staged check, the publisher,
         // the subscription count, the take and the send all happen with the
         // channel locked, and a cycle that sends nothing still drains it below.
         // The lock is held across the send on purpose — a channel is published
@@ -140,10 +139,8 @@ private:
         if (empty()) {
             return;  // nothing staged: no message, and no publisher created
         }
-        const std::string& topic = topic_;
-        auto& pub = pubs_[topic];
-        if (!pub) {
-            pub = node.create_publisher<MsgT>(topic, 10);
+        if (!pub_) {
+            pub_ = node.create_publisher<MsgT>(topic_, 10);
         }
 
         // Nobody subscribed: stop before taking the message.  The conversion is
@@ -156,14 +153,14 @@ private:
         // for the publisher, and every cycle after it is already gated.  Both
         // counts matter — a subscriber in this process is invisible to the
         // DDS-level count, so testing that one alone would starve it forever.
-        const bool watched = pub->get_subscription_count() > 0 ||
-                             pub->get_intra_process_subscription_count() > 0;
+        const bool watched = pub_->get_subscription_count() > 0 ||
+                             pub_->get_intra_process_subscription_count() > 0;
         if (!watched) {
             // Debug, not warn: staging into a viewer nobody has open is the
             // normal state of a robot at rest, not a fault.  Throttled and
             // level-gated, so a cycle that publishes pays nothing for it.
             FINENAV_LOG_DEBUG_THROTTLE(node.get_logger(), 5000,
-                                       "Nothing subscribed to '{}' — publish skipped.", topic);
+                                       "Nothing subscribed to '{}' — publish skipped.", topic_);
             // The gate skips the send, not the boundary: a publish boundary
             // drains the channel whether or not anyone was watching, so what a
             // caller staged is consumed either way.
@@ -171,10 +168,10 @@ private:
             return;
         }
 
-        pub->publish(takeMessage(frame, stamp));
+        pub_->publish(takeMessage(frame, stamp));
     }
 
-    std::unordered_map<std::string, std::shared_ptr<rclcpp::Publisher<MsgT>>> pubs_;
+    std::shared_ptr<rclcpp::Publisher<MsgT>> pub_;
 };
 
 }  // namespace finenav::viz
