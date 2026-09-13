@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -52,16 +53,21 @@ protected:
     /// A channel is its topic (see topic_), and nothing else.
     explicit VizChannel(std::string topic) : topic_(std::move(topic)) {}
 
-    /// True when nothing is staged — the state publish() leaves the channel in.
+    /// True when nothing is staged — the state a publish leaves the channel in.
+    /// Unlocked: the caller holds mutex_.
     virtual bool empty() const = 0;
 
-    /// Discard everything staged, publishing nothing.  FineNavVisualizer calls
-    /// this on the channel after each publish, so staged data never crosses a
-    /// publish boundary.
-    virtual void clear() = 0;
+    /// Discard everything staged, publishing nothing.  Unlocked: the caller holds
+    /// mutex_, which is what makes clearing the buffer and resetting the id
+    /// counter one step rather than two.
+    virtual void clearUnlocked() = 0;
 
-    /// Send what is staged, if anything, on topic_, stamped with @p frame.
-    /// Called only by FineNavVisualizer::publish(channel, frame).
+    /// Send what is staged, if anything, on topic_, stamped with @p frame — and
+    /// drain the channel, whether or not anything was sent, so that a publish
+    /// boundary is ONE step.  A send followed by a separate clear() would leave a
+    /// window for another thread to stage into, and that staging would then be
+    /// thrown away by the clear.  Locks mutex_ itself; called only by
+    /// FineNavVisualizer::publish(channel, frame).
     virtual void publishStaged(rclcpp::Node& node, common::Frame frame,
                                const rclcpp::Time& stamp) = 0;
 
@@ -69,8 +75,27 @@ protected:
     /// FineNavVisualizer keeps it under.  Nothing is ever appended to it.
     std::string topic_;
 
+    /// Guards everything mutable on a concrete channel: the staging buffer, the
+    /// marker id counter, and the publisher cache.  Every public entry takes it,
+    /// and the virtuals above — empty(), clearUnlocked(), takeMessage() — are all
+    /// called with it already held.
+    ///
+    /// Not recursive, deliberately: a public method that needs another one's work
+    /// calls the *Unlocked helper rather than re-entering, so a composite shape
+    /// (addPath, addAxis) is one lock from its first marker to its last instead of
+    /// one lock per sub-shape.
+    std::mutex mutex_;
+
 private:
     friend class FineNavVisualizer;
+
+    /// Locked wrapper: discard everything staged, publishing nothing.  The
+    /// visualizer reaches this through friendship; a test reaches it through the
+    /// private->public hack.  The unlocked work is clearUnlocked().
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        clearUnlocked();
+    }
 };
 
 /// The layer that answers "a channel of MsgT": the per-topic publisher cache,
@@ -98,12 +123,20 @@ protected:
     /// clearing that follows from FineNavVisualizer is then a no-op on a cycle
     /// that published, and the whole of it on one that did not.
     ///
-    /// Called only on a cycle that has someone to receive it.
+    /// Called only on a cycle that has someone to receive it, and with mutex_
+    /// held — from publishStaged() — so it locks nothing itself.
     virtual MsgT takeMessage(common::Frame frame, const rclcpp::Time& stamp) = 0;
 
 private:
     void publishStaged(rclcpp::Node& node, common::Frame frame,
                        const rclcpp::Time& stamp) final {
+        // One boundary, one atomic step: the staged check, the publisher cache,
+        // the subscription count, the take and the send all happen with the
+        // channel locked, and a cycle that sends nothing still drains it below.
+        // The lock is held across the send on purpose — a channel is published
+        // once per planning cycle, not at bus rates, and releasing it here would
+        // be the very window this exists to close.
+        std::lock_guard<std::mutex> lock(mutex_);
         if (empty()) {
             return;  // nothing staged: no message, and no publisher created
         }
@@ -131,6 +164,10 @@ private:
             // level-gated, so a cycle that publishes pays nothing for it.
             FINENAV_LOG_DEBUG_THROTTLE(node.get_logger(), 5000,
                                        "Nothing subscribed to '{}' — publish skipped.", topic);
+            // The gate skips the send, not the boundary: a publish boundary
+            // drains the channel whether or not anyone was watching, so what a
+            // caller staged is consumed either way.
+            clearUnlocked();
             return;
         }
 

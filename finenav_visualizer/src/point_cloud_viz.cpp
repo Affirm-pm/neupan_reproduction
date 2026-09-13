@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
 
 #include <pcl_conversions/pcl_conversions.h>
 
@@ -26,6 +27,11 @@ uint8_t toByte(float channel) {
 // ── Basic addPoint ──────────────────────────────────────────────────
 
 void PointCloudViz::addPoint(float x, float y, float z, const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    addPointUnlocked(x, y, z, color);
+}
+
+void PointCloudViz::addPointUnlocked(float x, float y, float z, const Color& color) {
     pcl::PointXYZRGB pt;
     pt.x = x; pt.y = y; pt.z = z;
     pt.r = toByte(color.r);
@@ -39,6 +45,9 @@ void PointCloudViz::addPoint(float x, float y, float z, const Color& color) {
 void PointCloudViz::addColoredPoint(float x, float y, float z, double value,
                                      double vmin, double vmax,
                                      const Color& low, const Color& high) {
+    // One point, one lock — taken here so the mix and the stage are one step, and
+    // the shared body is reached unlocked rather than through the public addPoint.
+    std::lock_guard<std::mutex> lock(mutex_);
     const double range = vmax - vmin;
     const double clamped = (range > 0.0) ? std::clamp((value - vmin) / range, 0.0, 1.0) : 0.5;
 
@@ -53,7 +62,7 @@ void PointCloudViz::addColoredPoint(float x, float y, float z, double value,
         low.b + (high.b - low.b) * t,
     };
 
-    addPoint(x, y, z, mixed);
+    addPointUnlocked(x, y, z, mixed);
 }
 
 // ── Batch control ──────────────────────────────────────────────────
@@ -66,10 +75,10 @@ sensor_msgs::msg::PointCloud2 PointCloudViz::takeMessage(common::Frame frame,
     msg.header.stamp = stamp;
 
     // Handed over: the message owns its own copy of the points, so the staging
-    // buffer has nothing left to keep.  Emptying it here instead of in the
-    // clear() that follows a publish is what makes that clear() a no-op on a
-    // cycle that published — and the capacity survives, so the next cycle
-    // stages into memory that is already there.
+    // buffer has nothing left to keep.  Emptying it here is what drains the
+    // channel on a cycle that published — the capacity survives, so the next
+    // cycle stages into memory that is already there.  Called with mutex_ held
+    // (from publishStaged), so the hand-over and the drain are one step.
     cloud_.clear();
     return msg;
 }

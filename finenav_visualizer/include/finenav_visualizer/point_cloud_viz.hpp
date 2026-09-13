@@ -23,6 +23,10 @@ namespace finenav::viz {
 /// stages, and nothing else; publishing is reached only through
 /// FineNavVisualizer::publish().
 ///
+/// Each point takes the channel's mutex, and addColoredPoint takes it once for
+/// the whole of what it does — the mix and the stage — so a caller's call is
+/// atomic against another thread staging into the same cloud.
+///
 /// The frame is chosen when the buffer is published, not when it is created
 /// (see VizChannel) — and here it is not merely a convention: a PointCloud2
 /// carries exactly one header.frame_id, so all the points staged in one buffer
@@ -63,12 +67,19 @@ private:
     /// conversion that must copy.  What it does not do is make that copy twice:
     /// the source is emptied here, in the same step, so the buffer behind it
     /// keeps only its capacity for the next cycle.
+    ///
+    /// Called with mutex_ held (from publishStaged), so it locks nothing itself.
     sensor_msgs::msg::PointCloud2 takeMessage(common::Frame frame,
                                               const rclcpp::Time& stamp) override;
 
     bool empty() const override { return cloud_.empty(); }
 
-    void clear() override { cloud_.clear(); }
+    void clearUnlocked() override { cloud_.clear(); }
+
+    /// addPoint()'s body, without the lock: addColoredPoint() mixes a colour and
+    /// then stages exactly one point, so the mix and the stage are one step under
+    /// one lock rather than a lock each.  Called with mutex_ held.
+    void addPointUnlocked(float x, float y, float z, const Color& color);
 
     pcl::PointCloud<pcl::PointXYZRGB> cloud_;
 };

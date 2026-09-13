@@ -28,6 +28,11 @@ namespace finenav::viz {
 /// which topic its data reaches, and a buffer that is never published costs
 /// nothing but memory.
 ///
+/// Each shape takes the channel's mutex for its whole body, so a caller's add* is
+/// atomic: a shape lands complete, and a composite (addPath, addAxis) lands as the
+/// one picture it is meant to be rather than as pieces another thread could
+/// interleave its own shapes into.
+///
 /// The frame is chosen when the buffer is published, not when it is created: a
 /// frame belongs to the DATA, and only the algorithm knows whether what it
 /// staged is world-referenced (a global path, a costmap, a goal) or
@@ -111,17 +116,36 @@ private:
     /// and every point vector in it move into the message, so a publish copies
     /// nothing.  Ids restart at 0 behind it, so the same shapes staged twice
     /// produce the same message twice; the viewer is cleaned up by the DELETEALL
-    /// that leads the message, not by the numbering.
+    /// that leads the message, not by the numbering.  Called with mutex_ held
+    /// (from publishStaged), so it locks nothing itself — and the hand-over below
+    /// is what drains the channel on a cycle that published.
     visualization_msgs::msg::MarkerArray takeMessage(common::Frame frame,
                                                      const rclcpp::Time& stamp) override;
 
     bool empty() const override { return markers_.markers.empty(); }
 
-    void clear() override {
+    void clearUnlocked() override {
         markers_.markers.clear();
         next_marker_id_ = 0;
     }
 
+    // ── Unlocked shapes — what a composite calls without re-locking ───
+    //
+    // addPath() and addAxis() are one shape to a caller and many markers to the
+    // viewer, and the lock has to span the whole of what they stage: a parcel of
+    // arrows another thread could interleave into would not be the picture either
+    // caller asked for.  So a composite holds mutex_ once and calls these, which
+    // are the same code the public method runs.  No defaults here on purpose —
+    // these are called from inside, where every argument is already in hand.
+
+    void addArrowUnlocked(const Eigen::Vector3d& start, const Eigen::Vector3d& end,
+                          double shaft_d, double head_d, double head_len,
+                          const Color& color);
+
+    void addCylinderUnlocked(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
+                             double radius, const Color& color);
+
+    /// Next marker id.  Unlocked: called with mutex_ held, from the shape bodies.
     std::int32_t allocateId();
 
     visualization_msgs::msg::MarkerArray markers_;

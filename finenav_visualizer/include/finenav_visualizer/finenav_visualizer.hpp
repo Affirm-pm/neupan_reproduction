@@ -52,6 +52,17 @@ class PointCloudViz;
 /// setVisualizer() — symmetric with setLogger — and never store a raw pointer
 /// into the framework.
 ///
+/// THREAD SAFETY: every channel is guarded by its own mutex and the factory by
+/// another, so staging and publishing are safe from any thread — including
+/// several threads staging into ONE topic, which is the shape a parallel
+/// trajectory sampler has.  Each public call is atomic and whole: an add* that
+/// builds several markers (addPath, addAxis) lands as the one picture it was
+/// asked for, a publish takes its message and drains the channel in one step,
+/// and a clear discards in one step.  What the framework does NOT provide is a
+/// cross-call transaction — if you need "publish only after every worker has
+/// staged this cycle", that barrier is yours to place, exactly as it is with any
+/// thread-safe publisher.
+///
 /// The channel types are declared here, not included: include
 /// finenav_visualizer/marker_viz.hpp or point_cloud_viz.hpp to stage into one.
 /// A plugin that only receives the handle in setVisualizer() — the common case

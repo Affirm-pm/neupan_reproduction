@@ -5,6 +5,7 @@
 #include "finenav_visualizer/marker_viz.hpp"
 
 #include <cmath>
+#include <mutex>
 #include <utility>
 
 #include <geometry_msgs/msg/point.hpp>
@@ -65,6 +66,7 @@ std::int32_t MarkerViz::allocateId()
 
 void MarkerViz::addSphere(const Eigen::Vector3d& center, double radius,
                                const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
     visualization_msgs::msg::Marker m;
     m.ns = "Sphere";
     m.id = allocateId();
@@ -79,6 +81,13 @@ void MarkerViz::addSphere(const Eigen::Vector3d& center, double radius,
 void MarkerViz::addArrow(const Eigen::Vector3d& start, const Eigen::Vector3d& end,
                          double shaft_d, double head_d, double head_len,
                          const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    addArrowUnlocked(start, end, shaft_d, head_d, head_len, color);
+}
+
+void MarkerViz::addArrowUnlocked(const Eigen::Vector3d& start, const Eigen::Vector3d& end,
+                                 double shaft_d, double head_d, double head_len,
+                                 const Color& color) {
     visualization_msgs::msg::Marker m;
     m.ns = "Arrow";
     m.id = allocateId();
@@ -93,6 +102,7 @@ void MarkerViz::addArrow(const Eigen::Vector3d& start, const Eigen::Vector3d& en
 
 void MarkerViz::addCuboid(const Eigen::Isometry3d& pose, double depth, double width, double height,
                                const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
     visualization_msgs::msg::Marker m;
     m.ns = "Cuboid";
     m.id = allocateId();
@@ -107,6 +117,7 @@ void MarkerViz::addCuboid(const Eigen::Isometry3d& pose, double depth, double wi
 void MarkerViz::addWireframeCuboid(const Eigen::Isometry3d& pose,
                                         double depth, double width, double height,
                                         const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
     const double hd = depth / 2.0, hw = width / 2.0, hh = height / 2.0;
     const Eigen::Vector3d corners[8] = {
         pose * Eigen::Vector3d(-hd, -hw, -hh), pose * Eigen::Vector3d( hd, -hw, -hh),
@@ -133,6 +144,7 @@ void MarkerViz::addWireframeCuboid(const Eigen::Isometry3d& pose,
 
 void MarkerViz::addCone(const Eigen::Isometry3d& pose, double angle, double max_range,
                              const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
     const double r = std::tan(angle) * max_range;
     constexpr int N = 32;
     for (int i = 0; i < N; ++i) {
@@ -158,6 +170,12 @@ void MarkerViz::addCone(const Eigen::Isometry3d& pose, double angle, double max_
 
 void MarkerViz::addCylinder(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
                                  double radius, const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    addCylinderUnlocked(p1, p2, radius, color);
+}
+
+void MarkerViz::addCylinderUnlocked(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
+                                    double radius, const Color& color) {
     visualization_msgs::msg::Marker m;
     m.ns = "Cylinder";
     m.id = allocateId();
@@ -179,6 +197,7 @@ void MarkerViz::addCylinder(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2
 
 void MarkerViz::addLine(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
                         double width, const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
     visualization_msgs::msg::Marker m;
     m.ns = "Line";
     m.id = allocateId();
@@ -193,6 +212,7 @@ void MarkerViz::addLine(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2,
 
 void MarkerViz::addLineStrip(const std::vector<Eigen::Vector3d>& points,
                              double width, const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (points.empty()) return;
 
     visualization_msgs::msg::Marker m;
@@ -212,24 +232,31 @@ void MarkerViz::addLineStrip(const std::vector<Eigen::Vector3d>& points,
 
 void MarkerViz::addPath(const std::vector<Eigen::Vector3d>& points,
                         double radius, const Color& color) {
+    // One path, one lock: the cylinders below are the segments of a single
+    // shape, and the *Unlocked helper is the same code addCylinder() runs.
+    std::lock_guard<std::mutex> lock(mutex_);
     if (points.size() < 2) return;
     for (size_t i = 0; i < points.size() - 1; ++i) {
-        addCylinder(points[i], points[i + 1], radius, color);
+        addCylinderUnlocked(points[i], points[i + 1], radius, color);
     }
 }
 
 void MarkerViz::addAxis(const Eigen::Isometry3d& pose, double length, double radius) {
+    // Three arrows are one axis to whoever asked for it, so the lock spans all
+    // three: another thread's shapes cannot land between the X and the Z.
+    std::lock_guard<std::mutex> lock(mutex_);
     const Eigen::Vector3d o = pose.translation();
     const Eigen::Vector3d x = o + pose.rotation() * Eigen::Vector3d(length, 0, 0);
     const Eigen::Vector3d y = o + pose.rotation() * Eigen::Vector3d(0, length, 0);
     const Eigen::Vector3d z = o + pose.rotation() * Eigen::Vector3d(0, 0, length);
-    addArrow(o, x, radius, radius * 3, length * 0.3f, Color{1.0f, 0.1f, 0.1f});
-    addArrow(o, y, radius, radius * 3, length * 0.3f, Color{0.1f, 1.0f, 0.1f});
-    addArrow(o, z, radius, radius * 3, length * 0.3f, Color{0.1f, 0.3f, 1.0f});
+    addArrowUnlocked(o, x, radius, radius * 3, length * 0.3f, Color{1.0f, 0.1f, 0.1f});
+    addArrowUnlocked(o, y, radius, radius * 3, length * 0.3f, Color{0.1f, 1.0f, 0.1f});
+    addArrowUnlocked(o, z, radius, radius * 3, length * 0.3f, Color{0.1f, 0.3f, 1.0f});
 }
 
 void MarkerViz::addText(const Eigen::Vector3d& pos, const std::string& text,
                         double height, const Color& color) {
+    std::lock_guard<std::mutex> lock(mutex_);
     visualization_msgs::msg::Marker m;
     m.ns = "Text";
     m.id = allocateId();

@@ -5,6 +5,7 @@
 #include "finenav_visualizer/finenav_visualizer.hpp"
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -33,6 +34,13 @@ struct FineNavVisualizer::Impl {
     std::unordered_map<std::string, std::unique_ptr<MarkerViz>> marker_channels_;
     std::unordered_map<std::string, std::unique_ptr<PointCloudViz>> cloud_channels_;
 
+    /// Guards both maps.  One mutex, not two: the two are looked up by the same
+    /// call shapes and are never held against each other, so a second would only
+    /// be a second thing to get wrong.  A channel found here is then locked by its
+    /// OWN mutex for staging — this one is released as soon as the reference is
+    /// handed back, so holding it never blocks a publish.
+    std::mutex channels_mutex_;
+
     rclcpp::Node::SharedPtr node_;
 };
 
@@ -45,14 +53,18 @@ FineNavVisualizer::FineNavVisualizer(rclcpp::Node::SharedPtr node)
 FineNavVisualizer::~FineNavVisualizer() = default;
 
 MarkerViz& FineNavVisualizer::markers(const std::string& topic) {
+    std::lock_guard<std::mutex> lock(impl_->channels_mutex_);
     auto it = impl_->marker_channels_.find(topic);
     if (it == impl_->marker_channels_.end()) {
         it = impl_->marker_channels_.emplace(topic, std::make_unique<MarkerViz>(topic)).first;
     }
+    // The reference outlives the lock: the channel is heap-allocated, so it stays
+    // where it is however the map rehashes around it.
     return *it->second;
 }
 
 PointCloudViz& FineNavVisualizer::pointCloud(const std::string& topic) {
+    std::lock_guard<std::mutex> lock(impl_->channels_mutex_);
     auto it = impl_->cloud_channels_.find(topic);
     if (it == impl_->cloud_channels_.end()) {
         it = impl_->cloud_channels_.emplace(topic, std::make_unique<PointCloudViz>(topic)).first;
@@ -69,23 +81,22 @@ void FineNavVisualizer::publish(MarkerViz& channel, common::Frame frame) {
     VizChannel& viz = channel;
     // No backend means no node to publish through.  It is not an error state —
     // it is the state a member sits in until setVisualizer() fills it — so the
-    // send is simply skipped, exactly as it is for an empty channel.
+    // send is simply skipped; the staged data is still consumed, exactly as a
+    // real publish consumes it.
     if (rclcpp::Node* node = impl_->node_.get()) {
-        viz.publishStaged(*node, frame, node->get_clock()->now());
+        viz.publishStaged(*node, frame, node->get_clock()->now());  // drains internally
+    } else {
+        viz.clear();
     }
-    // Publishing is the boundary: what was staged does not survive it, so a
-    // cycle that forgets to re-stage shows up as nothing rather than as last
-    // cycle's leftovers.  That holds with no backend too, which is why the
-    // clear sits outside the branch above.
-    viz.clear();
 }
 
 void FineNavVisualizer::publish(PointCloudViz& channel, common::Frame frame) {
     VizChannel& viz = channel;
     if (rclcpp::Node* node = impl_->node_.get()) {
-        viz.publishStaged(*node, frame, node->get_clock()->now());
+        viz.publishStaged(*node, frame, node->get_clock()->now());  // drains internally
+    } else {
+        viz.clear();
     }
-    viz.clear();
 }
 
 void FineNavVisualizer::clear(MarkerViz& channel) {

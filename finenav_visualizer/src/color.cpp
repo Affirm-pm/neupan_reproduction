@@ -41,7 +41,12 @@ Color::Color(ColorName name) noexcept {
     case ColorName::TRANSLUCENT_DARK:   *this = rgb(0.1f, 0.1f, 0.1f, 0.50f); return;
     case ColorName::CLEAR:              *this = rgb(1.0f, 1.0f, 1.0f, 0.0f);  return;
     case ColorName::RAND: {
-        static std::mt19937 rng(42);
+        // Per-thread, because a colour is drawn from algorithm threads: a single
+        // process-global engine would be raced on by every thread that staged a
+        // random-coloured shape at once.  Seeded from random_device rather than a
+        // constant so two threads do not replay the identical sequence — the
+        // sequence only has to be uncorrelated, not reproducible.
+        thread_local std::mt19937 rng(std::random_device{}());
         std::uniform_real_distribution<float> d(0.1f, 0.9f);
         *this = rgb(d(rng), d(rng), d(rng));
         return;

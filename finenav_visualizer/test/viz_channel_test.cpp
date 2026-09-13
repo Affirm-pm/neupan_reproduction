@@ -39,7 +39,7 @@ public:
   // type, so widening the override costs the real interface nothing.
   void stage() { staged_ = true; }
   bool empty() const override { return !staged_; }
-  void clear() override { staged_ = false; }
+  void clearUnlocked() override { staged_ = false; }
 
   int takes{0};
 
@@ -70,9 +70,11 @@ TEST(VizChannelTest, TakesNothingWhenNobodyIsSubscribed)
   EXPECT_EQ(channel.pubs_.count("finenav_probe_unwatched"), 1U);
 }
 
-// The gate delays the publish, it does not move the boundary: the visualizer
-// still clears every channel after every publish, so an unwatched cycle leaves
-// nothing staged behind it either.
+// The gate delays the publish, it does not move the boundary: publishStaged
+// drains the channel itself on the way out, watched or not, so an unwatched cycle
+// leaves nothing staged behind it.  The explicit clear() afterwards is the other
+// route to the same state — it is a no-op here, and either way the channel ends
+// empty.
 TEST(VizChannelTest, GatedPublishStillLeavesTheChannelClearable)
 {
   auto node = std::make_shared<rclcpp::Node>("viz_channel_unwatched_clear");
