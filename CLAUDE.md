@@ -50,7 +50,7 @@ Planners **do not own maps**; they receive lightweight `IMapView` adapters that 
 | `finenav_localizer` | ESKF (Error-State Kalman Filter) for 6-DOF state estimation |
 | `finenav_motion_decorator` | Trajectory post-processing: trim, smooth, seek-to-nearest |
 | `finenav_collision_model` | OBB collision model with precompute/check API |
-| `finenav_util` | Utilities: AlgoConfigurator, NodeThread, CloudPublishHelper, SimpleActionServer |
+| `finenav_util` | Utilities: AlgoConfigurator, NodeThread, SimpleActionServer |
 | `finenav_msgs` | ROS 2 message/action definitions |
 | `finenav_demo` | Integration demos (STVL + MPPI) |
 | `finenav_route` | (WIP, untracked) |

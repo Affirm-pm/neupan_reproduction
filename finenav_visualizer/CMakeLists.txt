@@ -67,6 +67,13 @@ if (BUILD_TESTING)
 
     target_link_libraries(marker_viz_test ${PROJECT_NAME})
     ament_target_dependencies(marker_viz_test rclcpp visualization_msgs)
+
+    ament_add_gtest(viz_channel_test
+        test/viz_channel_test.cpp
+    )
+
+    target_link_libraries(viz_channel_test ${PROJECT_NAME})
+    ament_target_dependencies(viz_channel_test rclcpp std_msgs)
 endif()
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)

@@ -69,6 +69,13 @@ private:
 ///
 /// A concrete channel is then only what is genuinely its own — the message it
 /// shapes and the sub-topic it lands on.
+///
+/// A send also depends on someone listening: with no subscriber, the message is
+/// built, serialised and then dropped by the middleware, so it is never built.
+/// That is the visualizer's business, not the caller's — an algorithm stages
+/// what it wants drawn and never asks whether anyone is watching.  The cost of
+/// an unwatched cycle is one subscription count per channel; the cost of a
+/// watched one is what it always was.
 template <typename MsgT>
 class TypedChannel : public VizChannel {
 protected:
@@ -76,7 +83,8 @@ protected:
     virtual std::string subtopic() const = 0;
 
     /// A copy of what is staged, stamped with frame() and @p stamp.  Copy, not
-    /// move: clearing is the visualizer's step, after the send.
+    /// move: clearing is the visualizer's step, after the send.  Called only on
+    /// a cycle that has someone to receive it.
     virtual MsgT buildMessage(const rclcpp::Time& stamp) const = 0;
 
 private:
@@ -90,6 +98,22 @@ private:
         if (!pub) {
             pub = node.create_publisher<MsgT>(topic, 10);
         }
+
+        // Nobody subscribed: stop before building.  The build is the expensive
+        // half — a full copy of the staged data, then serialisation — so a gate
+        // that only skipped the send would save almost nothing.
+        //
+        // The publisher has to exist before it can be asked, which is why the
+        // count is read here and not before its creation: the first cycle pays
+        // for the publisher, and every cycle after it is already gated.  Both
+        // counts matter — a subscriber in this process is invisible to the
+        // DDS-level count, so testing that one alone would starve it forever.
+        const bool watched = pub->get_subscription_count() > 0 ||
+                             pub->get_intra_process_subscription_count() > 0;
+        if (!watched) {
+            return;
+        }
+
         pub->publish(buildMessage(stamp));
     }
 
