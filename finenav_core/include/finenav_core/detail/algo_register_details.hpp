@@ -11,8 +11,8 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/detail/named_registry.hpp"
-#include "finenav_core/common/i_param_pollable.hpp"
+#include "finenav_common/detail/named_registry.hpp"
+#include "finenav_common/i_param_pollable.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
 
 namespace finenav::core::detail {
@@ -72,7 +72,7 @@ std::shared_ptr<finenav::viz::FineNavVisualizer> injectVisualizer(
  * @tparam ListenerT generate_parameter_library ParamListener (PARAM_NS::ParamListener).
  */
 template <typename AlgoT, typename ParamsT, typename ListenerT>
-std::shared_ptr<IParamPollable> makeParamPollable(
+std::shared_ptr<common::IParamPollable> makeParamPollable(
     rclcpp::Node::SharedPtr node, AlgoT& algo, std::string_view algo_name) {
     // Inject framework resources FIRST — configure() may already rely on the
     // logger / visualizer being present.
@@ -84,7 +84,7 @@ std::shared_ptr<IParamPollable> makeParamPollable(
     auto params = listener->get_params();
     algo.configure(params);
 
-    struct ParamPollable : public IParamPollable {
+    struct ParamPollable : public common::IParamPollable {
         std::shared_ptr<ListenerT> listener;
         std::shared_ptr<finenav::viz::FineNavVisualizer> viz;
         AlgoT* algo_ptr;
@@ -124,9 +124,9 @@ std::shared_ptr<IParamPollable> makeParamPollable(
  * @tparam ListenerT generate_parameter_library ParamListener (PARAM_NS::ParamListener).
  */
 template <typename AlgoT, typename ParamsT, typename ListenerT>
-ConfigLoader makeConfigLoader(std::string_view algo_name) {
+common::detail::ConfigLoader makeConfigLoader(std::string_view algo_name) {
     return [algo_name](rclcpp::Node::SharedPtr node, void* instance)
-        -> std::shared_ptr<IParamPollable> {
+        -> std::shared_ptr<common::IParamPollable> {
         return makeParamPollable<AlgoT, ParamsT, ListenerT>(
             node, *static_cast<AlgoT*>(instance), algo_name);
     };

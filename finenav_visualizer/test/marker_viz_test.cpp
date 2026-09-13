@@ -177,6 +177,37 @@ TEST(MarkerVizTest, TakingHandsTheBufferOverAndRenumbersIds)
   EXPECT_EQ(first.markers[1].points.size(), 3U);
 }
 
+// A frame is a TAG resolved on the way out, not a name copied at set time: a
+// system that renamed the frames at startup gets its own names stamped in, and
+// no spelling of a frame id exists for a caller to get wrong.
+TEST(MarkerVizTest, StampsTheNameBehindTheFrameTag)
+{
+  finenav::viz::MarkerViz markers;
+
+  markers.addSphere(Eigen::Vector3d{0.0, 0.0, 0.0}, 0.5);
+  markers.setFrame(finenav::common::Frame::Robot);
+
+  const auto msg = markers.takeMessage(rclcpp::Time{0, 0, RCL_ROS_TIME});
+
+  ASSERT_EQ(msg.markers.size(), 2U);
+  EXPECT_EQ(msg.markers[1].header.frame_id, "base_link");
+}
+
+// The framework does not choose a frame for data it did not create, so a
+// channel nobody gave one to publishes an empty frame_id — which a viewer reads
+// as its fixed frame.
+TEST(MarkerVizTest, LeavesTheFrameEmptyWhenNoneWasSet)
+{
+  finenav::viz::MarkerViz markers;
+
+  markers.addSphere(Eigen::Vector3d{0.0, 0.0, 0.0}, 0.5);
+
+  const auto msg = markers.takeMessage(rclcpp::Time{0, 0, RCL_ROS_TIME});
+
+  ASSERT_EQ(msg.markers.size(), 2U);
+  EXPECT_TRUE(msg.markers[1].header.frame_id.empty());
+}
+
 // Persistence is the default and the only behaviour: a zero lifetime is what
 // the viewer reads as "until I am replaced", so nothing stamps one.
 TEST(MarkerVizTest, ShapesCarryNoExpiry)

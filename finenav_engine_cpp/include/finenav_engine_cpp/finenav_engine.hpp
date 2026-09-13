@@ -16,7 +16,7 @@
 #include <behaviortree_cpp/utils/shared_library.h>
 
 #include "finenav_interfaces/action/navigate_to_pose.hpp"
-#include "finenav_core/common/frames.hpp"
+#include "finenav_common/frames.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
@@ -70,7 +70,7 @@ public:
      * @return false if any layer or map already exists, or if the names had
      *         already been set — in both cases nothing changed (ERROR logged).
      */
-    bool setFrameNames(core::FrameNames names);
+    bool setFrameNames(common::FrameNames names);
 
     /**
      * @brief Read-only access to the current robot state.

@@ -18,8 +18,8 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/detail/algo_register_details.hpp"
-#include "finenav_core/common/detail/named_registry.hpp"
+#include "finenav_common/detail/named_registry.hpp"
+#include "finenav_core/detail/algo_register_details.hpp"
 #include "finenav_core/map/map_access.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"  // PlanningContext<PlannerT>
@@ -47,10 +47,11 @@ struct WorldViewEntry {
  * MapRegistry, creates (and dedups) the MapServer(s) + ControlLayer, then
  * invokes build() to wire the view into the layer.
  *
- * Shares the RegistryTable bottom with PlanRegistry / MapRegistry, so the same
- * cross-DSO-singleton discipline + "keep-first" name semantics apply.
+ * Shares the common::detail::RegistryTable bottom with PlanRegistry /
+ * MapRegistry, so the same cross-DSO-singleton discipline + "keep-first" name
+ * semantics apply.
  */
-class WorldViewRegistry : public RegistryTable<WorldViewEntry> {
+class WorldViewRegistry : public common::detail::RegistryTable<WorldViewEntry> {
 public:
     using BuildFn = WorldViewEntry::BuildFn;
     using Entry   = WorldViewEntry;
@@ -117,7 +118,7 @@ makeWorldView(MapAccess& maps, rclcpp::Node::SharedPtr node) {
  * be cast back down to ViewT before the concrete configure() can be called.
  */
 template <typename ViewT, typename ParamsT, typename ListenerT, typename PlannerT>
-std::shared_ptr<IParamPollable> makeWorldViewParams(
+std::shared_ptr<common::IParamPollable> makeWorldViewParams(
     rclcpp::Node::SharedPtr node, const std::shared_ptr<void>& view, std::string_view name) {
     auto* base = static_cast<typename PlannerT::IWorldView*>(view.get());
     auto* concrete = static_cast<ViewT*>(base);

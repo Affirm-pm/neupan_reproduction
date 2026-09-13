@@ -11,7 +11,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/i_param_pollable.hpp"
+#include "finenav_common/i_param_pollable.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 
 namespace finenav::core {
@@ -34,9 +34,9 @@ struct BuiltWorldView {
     /// Type-erased `void(const PlanningContext<PlannerT>*)`.
     using PrepareFn = std::function<void(const void*)>;
 
-    std::shared_ptr<void>           view;     ///< already upcast to PlannerT::IWorldView
-    std::shared_ptr<IParamPollable> params;   ///< param channel (+ visualizer lifetime)
-    PrepareFn                       prepare;  ///< WorldView::prepare() invoker
+    std::shared_ptr<void>                   view;     ///< already upcast to PlannerT::IWorldView
+    std::shared_ptr<common::IParamPollable> params;   ///< param channel (+ visualizer lifetime)
+    PrepareFn                               prepare;  ///< WorldView::prepare() invoker
 };
 
 /**

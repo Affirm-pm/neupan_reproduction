@@ -9,6 +9,7 @@
 #include "test_helpers.hpp"
 
 using namespace finenav::core;
+using finenav::common::Position3D;
 
 TEST(LockedMapRO, AccessibleViaOperatorArrow) {
     SmokeMap map;

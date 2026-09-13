@@ -13,7 +13,7 @@ namespace finenav::core::detail {
 FINENAV_DEFINE_REGISTRY_SINGLETON(MapRegistry)
 
 void MapRegistry::registerMapImpl(std::string name, Factory factory,
-                                  ConfigLoader loader, std::string type_name) {
+                                  common::detail::ConfigLoader loader, std::string type_name) {
     bool inserted = insertOrKeep(name, MapEntry{
         std::move(factory), std::move(loader), std::move(type_name)});
     if (!inserted) {
@@ -37,13 +37,13 @@ std::shared_ptr<IMapResource> MapRegistry::createMap(
         FINENAV_LOG_ERROR(rclcpp::get_logger("MapRegistry"),
             "createMap: map '{}' is not registered. "
             "Available maps: [{}]",
-            algo_name, joinNames(names()));
+            algo_name, common::detail::joinNames(names()));
         return nullptr;
     }
     return entry->factory(node, server_name, state);
 }
 
-std::shared_ptr<IParamPollable> MapRegistry::loadMapParams(
+std::shared_ptr<common::IParamPollable> MapRegistry::loadMapParams(
     const std::string& algo_name, rclcpp::Node::SharedPtr node, void* instance)
 {
     auto entry = lookup(algo_name);

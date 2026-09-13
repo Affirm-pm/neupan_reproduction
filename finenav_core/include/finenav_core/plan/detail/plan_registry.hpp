@@ -16,7 +16,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/detail/named_registry.hpp"
+#include "finenav_common/detail/named_registry.hpp"
 #include "finenav_core/plan/execution_policy.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
@@ -33,9 +33,9 @@ struct PlanEntry {
     using Factory = std::function<std::shared_ptr<IPipelineNode>(
         rclcpp::Node::SharedPtr, const std::string&, ExecutionPolicyVariant, RobotStateProvider*)>;
 
-    Factory      factory;  ///< (node, layer_name, policy, state) → IPipelineNode
-    ConfigLoader loader;   ///< (node, void* planner) → IParamPollable
-    std::string  type;     ///< typeid(PlannerT).name()
+    Factory                      factory;  ///< (node, layer_name, policy, state) → IPipelineNode
+    common::detail::ConfigLoader loader;   ///< (node, void* planner) → IParamPollable
+    std::string                  type;     ///< typeid(PlannerT).name()
 };
 
 /**
@@ -45,8 +45,11 @@ struct PlanEntry {
  * { factory, config loader, type }.  The engine looks the factory up by name to
  * build a ControlLayer, and reverse-resolves type→name when assembling a
  * WorldView.
+ *
+ * The table bottom and the cross-DSO singleton discipline come from
+ * finenav_common; only the Entry shape is navigation vocabulary and stays here.
  */
-class PlanRegistry : public RegistryTable<PlanEntry> {
+class PlanRegistry : public common::detail::RegistryTable<PlanEntry> {
 public:
     using Factory = PlanEntry::Factory;
     using Entry   = PlanEntry;
@@ -55,7 +58,7 @@ public:
 
     /// Self-registration: record the planner factory + config loader under @p name.
     template <Planner PlannerT>
-    void registerPlanner(std::string name, ConfigLoader loader);
+    void registerPlanner(std::string name, common::detail::ConfigLoader loader);
 
     /// Build a ControlLayer for the planner registered under @p algo_name.
     /// Returns nullptr + ERROR log on unknown name.
@@ -65,7 +68,7 @@ public:
         ExecutionPolicyVariant policy, RobotStateProvider* state);
 
     /// Look up the config loader registered under @p algo_name (nullptr if unknown).
-    std::shared_ptr<IParamPollable> loadPlannerParams(
+    std::shared_ptr<common::IParamPollable> loadPlannerParams(
         const std::string& algo_name, rclcpp::Node::SharedPtr node, void* instance);
 
     std::vector<std::string> plannerNames() const;
@@ -75,11 +78,11 @@ public:
 
 private:
     void registerPlannerImpl(std::string name, Factory factory,
-                             ConfigLoader loader, std::string type_name);
+                             common::detail::ConfigLoader loader, std::string type_name);
 };
 
 template <Planner PlannerT>
-void PlanRegistry::registerPlanner(std::string name, ConfigLoader loader) {
+void PlanRegistry::registerPlanner(std::string name, common::detail::ConfigLoader loader) {
     registerPlannerImpl(
         name,
         [name](rclcpp::Node::SharedPtr node, const std::string& layer_name,
@@ -95,7 +98,7 @@ void PlanRegistry::registerPlanner(std::string name, ConfigLoader loader) {
 /// Self-registrar for a planner; instantiated as `inline static` in the macro.
 template <typename T>
 struct PlannerSelfRegistrar {
-    explicit PlannerSelfRegistrar(std::string name, ConfigLoader loader) {
+    explicit PlannerSelfRegistrar(std::string name, common::detail::ConfigLoader loader) {
         PlanRegistry::instance().registerPlanner<T>(std::move(name), std::move(loader));
     }
 };

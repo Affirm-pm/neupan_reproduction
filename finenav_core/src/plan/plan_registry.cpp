@@ -13,7 +13,7 @@ namespace finenav::core::detail {
 FINENAV_DEFINE_REGISTRY_SINGLETON(PlanRegistry)
 
 void PlanRegistry::registerPlannerImpl(std::string name, Factory factory,
-                                       ConfigLoader loader, std::string type_name) {
+                                       common::detail::ConfigLoader loader, std::string type_name) {
     bool inserted = insertOrKeep(name, PlanEntry{
         std::move(factory), std::move(loader), std::move(type_name)});
     if (!inserted) {
@@ -37,13 +37,13 @@ std::shared_ptr<IPipelineNode> PlanRegistry::createLayer(
         FINENAV_LOG_ERROR(rclcpp::get_logger("PlanRegistry"),
             "createLayer: planner '{}' is not registered. "
             "Available planners: [{}]",
-            algo_name, joinNames(names()));
+            algo_name, common::detail::joinNames(names()));
         return nullptr;
     }
     return entry->factory(node, layer_name, std::move(policy), state);
 }
 
-std::shared_ptr<IParamPollable> PlanRegistry::loadPlannerParams(
+std::shared_ptr<common::IParamPollable> PlanRegistry::loadPlannerParams(
     const std::string& algo_name, rclcpp::Node::SharedPtr node, void* instance)
 {
     auto entry = lookup(algo_name);

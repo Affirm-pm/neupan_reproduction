@@ -16,7 +16,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/detail/named_registry.hpp"
+#include "finenav_common/detail/named_registry.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
@@ -32,9 +32,9 @@ struct MapEntry {
     using Factory = std::function<std::shared_ptr<IMapResource>(
         rclcpp::Node::SharedPtr, const std::string&, RobotStateProvider*)>;
 
-    Factory      factory;  ///< (node, server_name, state) → IMapResource
-    ConfigLoader loader;   ///< (node, void* map) → IParamPollable
-    std::string  type;     ///< typeid(MapT).name()
+    Factory                      factory;  ///< (node, server_name, state) → IMapResource
+    common::detail::ConfigLoader loader;   ///< (node, void* map) → IParamPollable
+    std::string                  type;     ///< typeid(MapT).name()
 };
 
 /**
@@ -43,8 +43,11 @@ struct MapEntry {
  * A map .so self-registers here (via FINENAV_REGISTER_MAP): name →
  * { factory, config loader, type }.  The engine looks the factory up by name to
  * build a MapServer, and reverse-resolves type→name when assembling a WorldView.
+ *
+ * The table bottom and the cross-DSO singleton discipline come from
+ * finenav_common; only the Entry shape is navigation vocabulary and stays here.
  */
-class MapRegistry : public RegistryTable<MapEntry> {
+class MapRegistry : public common::detail::RegistryTable<MapEntry> {
 public:
     using Factory = MapEntry::Factory;
     using Entry   = MapEntry;
@@ -53,7 +56,7 @@ public:
 
     /// Self-registration: record the map factory + config loader under @p name.
     template <Map MapT>
-    void registerMap(std::string name, ConfigLoader loader);
+    void registerMap(std::string name, common::detail::ConfigLoader loader);
 
     /// Build a MapServer for the map registered under @p algo_name.
     /// Returns nullptr + ERROR log on unknown name.
@@ -63,7 +66,7 @@ public:
         RobotStateProvider* state);
 
     /// Look up the config loader registered under @p algo_name (nullptr if unknown).
-    std::shared_ptr<IParamPollable> loadMapParams(
+    std::shared_ptr<common::IParamPollable> loadMapParams(
         const std::string& algo_name, rclcpp::Node::SharedPtr node, void* instance);
 
     std::vector<std::string> mapNames() const;
@@ -73,11 +76,11 @@ public:
 
 private:
     void registerMapImpl(std::string name, Factory factory,
-                         ConfigLoader loader, std::string type_name);
+                         common::detail::ConfigLoader loader, std::string type_name);
 };
 
 template <Map MapT>
-void MapRegistry::registerMap(std::string name, ConfigLoader loader) {
+void MapRegistry::registerMap(std::string name, common::detail::ConfigLoader loader) {
     registerMapImpl(
         name,
         [name](rclcpp::Node::SharedPtr node, const std::string& server_name,
@@ -91,7 +94,7 @@ void MapRegistry::registerMap(std::string name, ConfigLoader loader) {
 /// Self-registrar for a map; instantiated as `inline static` in the macro.
 template <typename T>
 struct MapSelfRegistrar {
-    explicit MapSelfRegistrar(std::string name, ConfigLoader loader) {
+    explicit MapSelfRegistrar(std::string name, common::detail::ConfigLoader loader) {
         MapRegistry::instance().registerMap<T>(std::move(name), std::move(loader));
     }
 };

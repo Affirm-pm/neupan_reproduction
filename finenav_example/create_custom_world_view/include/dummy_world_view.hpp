@@ -68,7 +68,7 @@ public:
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
 
     // ── Query path: must be cheap ─────────────────────────────────────────
-    bool isWalkable(const finenav::core::Position3D& p) const override {
+    bool isWalkable(const finenav::common::Position3D& p) const override {
         return !map_.isOccupied(p);
     }
 

@@ -88,7 +88,7 @@ FineNavEngine::FineNavEngine(const std::shared_ptr<rclcpp::Node>& node)
         [this](const geometry_msgs::msg::PoseStamped& msg) { navigateTo({msg.pose}); });
 }
 
-bool FineNavEngine::setFrameNames(core::FrameNames names) {
+bool FineNavEngine::setFrameNames(common::FrameNames names) {
     // Ordering guard.  The localizer and navigator built in the constructor read
     // frames() lazily as they publish, so they are unaffected; but a plugin's
     // visualizer takes the frame when the layer is built, so once anything is
@@ -100,7 +100,7 @@ bool FineNavEngine::setFrameNames(core::FrameNames names) {
             layers_.size(), maps_.size());
         return false;
     }
-    return core::detail::setFrameNames(std::move(names));
+    return common::detail::setFrameNames(std::move(names));
 }
 
 bool FineNavEngine::removeControlLayer(const std::string& name) {

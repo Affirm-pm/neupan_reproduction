@@ -43,7 +43,7 @@ target_include_directories(test_branch_table PRIVATE ${CORE_INCLUDE_DIRS})
 target_link_libraries(test_branch_table ${PROJECT_NAME})
 
 # --- test_algo_register_details (logger / visualizer injection probes) ---
-ament_add_gtest(test_algo_register_details common/test_algo_register_details.cpp)
+ament_add_gtest(test_algo_register_details detail/test_algo_register_details.cpp)
 target_include_directories(test_algo_register_details PRIVATE ${CORE_INCLUDE_DIRS})
 target_link_libraries(test_algo_register_details ${PROJECT_NAME})
 ament_target_dependencies(test_algo_register_details rclcpp)

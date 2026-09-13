@@ -14,7 +14,7 @@
 #include <nav_msgs/msg/odometry.hpp>
 
 #include "finenav_util/common/log_macros.hpp"
-#include "finenav_core/common/frames.hpp"
+#include "finenav_common/frames.hpp"
 #include "finenav_core/robot_state/eigen_conversions.hpp"
 
 namespace finenav::localizer {
@@ -331,8 +331,8 @@ void FineNavLocalizer::publishOutput(const rclcpp::Time& now) {
     if (tf_br_) {
         geometry_msgs::msg::TransformStamped tf;
         tf.header.stamp    = now;
-        tf.header.frame_id = core::frames().world_fixed;
-        tf.child_frame_id  = core::frames().robot;
+        tf.header.frame_id = common::frames().world_fixed;
+        tf.child_frame_id  = common::frames().robot;
         tf.transform.translation.x = state_.pose.position.x;
         tf.transform.translation.y = state_.pose.position.y;
         tf.transform.translation.z = state_.pose.position.z;
@@ -346,8 +346,8 @@ void FineNavLocalizer::publishOutput(const rclcpp::Time& now) {
     if (nav_state_pub_) {
         nav_msgs::msg::Odometry odom;
         odom.header.stamp    = now;
-        odom.header.frame_id = core::frames().world_fixed;
-        odom.child_frame_id  = core::frames().robot;
+        odom.header.frame_id = common::frames().world_fixed;
+        odom.child_frame_id  = common::frames().robot;
         odom.pose.pose.position.x    = state_.pose.position.x;
         odom.pose.pose.position.y    = state_.pose.position.y;
         odom.pose.pose.position.z    = state_.pose.position.z;

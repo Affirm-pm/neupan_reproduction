@@ -68,7 +68,8 @@ public:
     // ── Staging channels — add shapes, set their frame ────────────────
 
     /// Rigid-body markers → @c topic_name @c + @c "/markers".
-    /// Set the frame of what you stage with markers().setFrame(...).
+    /// Set the frame of what you stage with markers().setFrame(...) — a Frame
+    /// tag (finenav_common/frames.hpp), resolved at publish time.
     MarkerViz&     markers();
 
     /// Coloured point cloud → @c topic_name @c + @c "/cloud".

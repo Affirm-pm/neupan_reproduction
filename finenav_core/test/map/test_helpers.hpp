@@ -24,24 +24,24 @@ struct SmokeMap {
 
     void configure(const int&) {}
 
-    bool isInside(const finenav::core::Position3D& p) const {
+    bool isInside(const finenav::common::Position3D& p) const {
         return contains(bounds_, p);
     }
-    finenav::core::Region3D getWindowBounds() const { return bounds_; }
-    finenav::core::Position3D getWindowCenter() const { return center(bounds_); }
+    finenav::common::Region3D getWindowBounds() const { return bounds_; }
+    finenav::common::Position3D getWindowCenter() const { return center(bounds_); }
 
-    void shiftWindowTo(const finenav::core::Position3D& center) {
+    void shiftWindowTo(const finenav::common::Position3D& center) {
         auto half = sizes(bounds_) * 0.5;
-        bounds_ = finenav::core::Region3D{center - half, center + half};
+        bounds_ = finenav::common::Region3D{center - half, center + half};
     }
 
     // selfManage — minimal no-op for tests that don't need data sources
     void selfManage(finenav::core::MapRuntime&) {}
 
 private:
-    finenav::core::Region3D bounds_{
-        finenav::core::Position3D{-50, -50, -5},
-        finenav::core::Position3D{ 50,  50,  5}};
+    finenav::common::Region3D bounds_{
+        finenav::common::Position3D{-50, -50, -5},
+        finenav::common::Position3D{ 50,  50,  5}};
 };
 
 static_assert(finenav::core::Map<SmokeMap>);

@@ -7,7 +7,7 @@
 #include <concepts>
 #include <utility>
 
-#include "finenav_core/common/geometry_types.hpp"
+#include "finenav_common/geometry_types.hpp"
 
 namespace finenav::core {
 
@@ -59,11 +59,11 @@ concept Map =
  */
 template <typename T>
 concept ShiftableMap = Map<T> &&
-    requires(T map, const Position3D& pos) {
-        { std::as_const(map).isInside(pos) }      -> std::same_as<bool>;
-        { std::as_const(map).getWindowBounds() }  -> std::convertible_to<Region3D>;
-        { std::as_const(map).getWindowCenter() }  -> std::convertible_to<Position3D>;
-        { map.shiftWindowTo(pos) }                -> std::same_as<void>;
+    requires(T map, const common::Position3D& pos) {
+        { std::as_const(map).isInside(pos) }     -> std::same_as<bool>;
+        { std::as_const(map).getWindowBounds() } -> std::convertible_to<common::Region3D>;
+        { std::as_const(map).getWindowCenter() } -> std::convertible_to<common::Position3D>;
+        { map.shiftWindowTo(pos) }               -> std::same_as<void>;
     };
 
 }  // namespace finenav::core

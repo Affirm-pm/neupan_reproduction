@@ -20,7 +20,7 @@ namespace finenav::example {
 
 class DummyWorldView {
 public:
-    virtual bool isWalkable(const finenav::core::Position3D&) const = 0;
+    virtual bool isWalkable(const finenav::common::Position3D&) const = 0;
     virtual ~DummyWorldView() = default;
 };
 

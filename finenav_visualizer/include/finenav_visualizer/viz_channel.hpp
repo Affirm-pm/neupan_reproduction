@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -12,6 +13,7 @@
 #include <rclcpp/publisher.hpp>
 #include <rclcpp/time.hpp>
 
+#include "finenav_common/frames.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::viz {
@@ -43,11 +45,24 @@ class VizChannel {
 public:
     virtual ~VizChannel() = default;
 
-    /// Frame the staged data will be stamped with.  There is no default: the
-    /// framework does not choose a frame for the algorithm, because a frame
-    /// belongs to the DATA — a global path is world-referenced, a footprint is
-    /// body-referenced — and only the algorithm knows which it just staged.
-    void setFrame(const std::string& frame) { frame_ = frame; }
+    /// Frame the staged data will be stamped with.
+    ///
+    /// A tag, not a name: `setFrame("map")` and `setFrame("odom")` would both
+    /// compile, and a typo would draw into a frame the framework never publishes
+    /// — which then reads as a localization bug.  common::Frame cannot be
+    /// misspelled, and its NAME is resolved from frames() at publish time, so a
+    /// system that renamed the frames at startup gets the new names.  (A plugin
+    /// names this type finenav::common::Frame — the one spelling, because a
+    /// frame tag is a framework convention rather than a finenav_core type, and
+    /// this header sits below finenav_core and could not name a core type
+    /// anyway.)
+    ///
+    /// There is no default: the framework does not choose a frame for the
+    /// algorithm, because a frame belongs to the DATA — a global path is
+    /// world-referenced, a footprint is body-referenced — and only the algorithm
+    /// knows which it just staged.  A channel nobody gave a frame publishes an
+    /// empty frame_id, which a viewer reads as its fixed frame.
+    void setFrame(common::Frame frame) { frame_ = frame; }
 
 protected:
     VizChannel() = default;
@@ -65,7 +80,17 @@ protected:
     virtual void publishStaged(rclcpp::Node& node, const std::string& topic_name,
                                const rclcpp::Time& stamp) = 0;
 
-    std::string frame_;
+    /// The name to stamp with — resolved HERE, on the way out, not in
+    /// setFrame(): the frame names are the surrounding system's choice and can
+    /// be renamed up to the moment anything is assembled, so a tag is only
+    /// turned into a name when a message is actually being made.  Empty when
+    /// nobody set a frame.
+    const std::string& frameId() const {
+        static const std::string none;
+        return frame_ ? common::frameName(*frame_) : none;
+    }
+
+    std::optional<common::Frame> frame_;
 
 private:
     friend class FineNavVisualizer;

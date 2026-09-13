@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <unordered_set>
 
-#include "finenav_core/common/frames.hpp"
+#include "finenav_common/frames.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::navigator {
@@ -26,7 +26,7 @@ void PipelineController::publishNavigationGoal(std::vector<Pose> poses) {
     auto fb = std::make_unique<FeedbackMsg>();
     fb->status = FeedbackMsg::RUNNING;
     fb->trajectory.header.stamp = node_->now();
-    fb->trajectory.header.frame_id = core::frames().world_fixed;
+    fb->trajectory.header.frame_id = common::frames().world_fixed;
     fb->trajectory.valid_fields = finenav_interfaces::msg::Trajectory::TRAJ_POSE;
     fb->trajectory.poses = std::move(poses);
     root_feedback_pub_->publish(std::move(fb));

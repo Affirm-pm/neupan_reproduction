@@ -5,6 +5,18 @@
 // Framework-internal machinery shared by the name-keyed algorithm registries.
 // Not part of the public API — plugin authors reach the registries only through
 // FINENAV_REGISTER_* (finenav_core/algo_register_macros.hpp).
+//
+// It lives in finenav_common, next to frames.hpp, because the two are the same
+// thing: the framework's "one definition per process" discipline.  A registry
+// table shared across plugin DSOs and a frame vocabulary shared across plugin
+// DSOs fail in exactly the same way when one DSO gets its own copy — silently,
+// and only under dlopen — so they are kept and read together, one layer below
+// both finenav_core and finenav_visualizer.
+//
+// The concrete registries stay in finenav_core: their Entry types (MapEntry,
+// PlanEntry, WorldViewEntry) are navigation concepts, and their `instance()`
+// definitions are therefore emitted into finenav_core.so.  What is shared here is
+// the discipline, not the tables.
 
 #pragma once
 
@@ -21,9 +33,9 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/i_param_pollable.hpp"
+#include "finenav_common/i_param_pollable.hpp"
 
-namespace finenav::core::detail {
+namespace finenav::common::detail {
 
 /// Type-erased parameter loader shared by planner / map / world_view registries.
 /// (node, void* instance) → IParamPollable; `instance` is cast back to the
@@ -37,8 +49,9 @@ using ConfigLoader = std::function<std::shared_ptr<IParamPollable>(
  * Provides thread-safe "keep-first" registration + lookup + sorted names.  A
  * concrete registry derives from this (one instantiation per Entry type) and
  * supplies its own `instance()` — a NON-inline function-local static defined in
- * finenav_core.so via FINENAV_DEFINE_REGISTRY_SINGLETON, so every plugin DSO
- * shares ONE table.
+ * the DSO that owns the registry (finenav_core.so for the three algorithm
+ * registries) via FINENAV_DEFINE_REGISTRY_SINGLETON, so every plugin DSO shares
+ * ONE table.
  *
  * This base exists to capture the cross-DSO-singleton discipline + the
  * name-table semantics in one place; each registry's Entry shape, factory and
@@ -81,10 +94,11 @@ protected:
 /**
  * @brief Defines a registry's shared cross-DSO singleton.
  *
- * Call ONCE in a finenav_core .cpp (never inline in a header) — a function-local
- * static defined in the core shared object is what makes every plugin DSO see
- * the same table.  An inline definition in a header would instead give each DSO
- * its own table and silently break registration.
+ * Call ONCE in the .cpp of the DSO that owns the registry — finenav_core.so for
+ * the three algorithm registries — and never inline in a header.  A
+ * function-local static defined in one shared object is what makes every plugin
+ * DSO see the same table; an inline definition in a header would instead give
+ * each DSO its own table and silently break registration.
  */
 #define FINENAV_DEFINE_REGISTRY_SINGLETON(RegistryClass) \
     RegistryClass& RegistryClass::instance() {           \
@@ -102,4 +116,4 @@ inline std::string joinNames(const std::vector<std::string>& names) {
     return joined;
 }
 
-}  // namespace finenav::core::detail
+}  // namespace finenav::common::detail

@@ -39,6 +39,7 @@ Planners **do not own maps**; they receive lightweight `IMapView` adapters that 
 
 | Package | Role |
 |---|---|
+| `finenav_common` | Bottom layer shared by `finenav_core` and `finenav_visualizer`: the `Position3D`/`Region3D` geometry vocabulary, the `Frame`/`frames()` vocabulary, `IParamPollable`, and the cross-DSO registry spine (`RegistryTable`, `FINENAV_DEFINE_REGISTRY_SINGLETON`) |
 | `finenav_core` | Core framework: concepts, MapServer, ControlLayer, PlannerSet, DataPacket |
 | `finenav_engine` | Top-level `FineNavEngine` orchestrator |
 | `finenav_interface` | **Reference implementations** showing how to implement MapConcept / PlannerConcept |
@@ -50,11 +51,31 @@ Planners **do not own maps**; they receive lightweight `IMapView` adapters that 
 | `finenav_localizer` | ESKF (Error-State Kalman Filter) for 6-DOF state estimation |
 | `finenav_motion_decorator` | Trajectory post-processing: trim, smooth, seek-to-nearest |
 | `finenav_collision_model` | OBB collision model with precompute/check API |
-| `finenav_util` | Utilities: AlgoConfigurator, NodeThread, SimpleActionServer |
+| `finenav_util` | Generic ROS plumbing, no navigation vocabulary: NodeThread, SimpleActionServer, `FINENAV_LOG_*` macros, Stopwatch |
 | `finenav_msgs` | ROS 2 message/action definitions |
 | `finenav_demo` | Integration demos (STVL + MPPI) |
 | `finenav_route` | (WIP, untracked) |
 | `finenav_simulator` | (WIP, untracked) |
+
+### One spelling per name
+
+A plugin includes **only** the role entry it needs (`finenav_core/plugin_map.hpp`,
+`plugin_planner.hpp`, `plugin_world_view.hpp`, or `algo_register_macros.hpp`) —
+the include root *is* the plugin contract; anything under a subdirectory is
+framework-internal. Names then split by layer, with no second spelling for
+either:
+
+- **Vocabulary → `finenav::common::`** — `Position3D`, `Region3D`, `Frame`,
+  `frames()`. These are conventions the whole framework shares, defined below
+  `finenav_core` (the visualizer needs them too). Their free functions
+  (`operator+`, `norm`, `abs`, `contains`, `center`, `sizes`) are found by ADL,
+  so no using-declaration is needed at a call site.
+- **Role interface → `finenav::core::`** — the `Map` / `Planner` / `WorldView`
+  concepts, `Trajectory`, `IOProfile`, `MapRuntime`, `PlanningContext`.
+
+`finenav_core` deliberately does **not** re-export the vocabulary under a
+`finenav::core::` name: one type has one spelling, so a plugin author never has
+to guess which of two names for the same type is the right one.
 
 ---
 

@@ -8,7 +8,7 @@
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
-#include "finenav_core/common/frames.hpp"
+#include "finenav_common/frames.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::navigator {
@@ -205,7 +205,7 @@ void BtNavigator::execute()
             if (auto rs = state_provider_->getRobotState()) {
                 auto fb = std::make_shared<typename ActionT::Feedback>();
                 fb->current_pose.header.stamp = pnode_->now();
-                fb->current_pose.header.frame_id = core::frames().world_fixed;
+                fb->current_pose.header.frame_id = common::frames().world_fixed;
                 fb->current_pose.pose.position.x    = rs->pose.position.x;
                 fb->current_pose.pose.position.y    = rs->pose.position.y;
                 fb->current_pose.pose.position.z    = rs->pose.position.z;

@@ -7,13 +7,16 @@
 // The one header a plugin includes to register itself — the framework's
 // registration façade, in the same spirit as pluginlib/class_list_macros.hpp.
 //
-// It sits ABOVE the layers rather than inside common/, because a registration
-// macro is the join point between an algorithm type and the framework and so
-// must know every kind the framework can host.  common/ stays pure bottom:
-// nothing there reaches up into plan/ map/ or worldview/.  The generic
-// machinery these macros expand into (RegistrationSlot / WorldViewRegistrationSlot
-// / makeConfigLoader / makeParamPollable) lives in common/detail/algo_register_details.hpp.
-#include "finenav_core/common/detail/algo_register_details.hpp"
+// It sits at the top of finenav_core rather than inside one module directory,
+// because a registration macro is the join point between an algorithm type and
+// the framework and so must know every kind the framework can host: plan/,
+// map/ and worldview/ all stay ignorant of one another.  The generic machinery
+// these macros expand into (RegistrationSlot / WorldViewRegistrationSlot /
+// makeConfigLoader / makeParamPollable) lives in
+// finenav_core/detail/algo_register_details.hpp — the one detail header that
+// cannot move down into finenav_common, because it injects the visualizer, and
+// the visualizer sits above finenav_common.
+#include "finenav_core/detail/algo_register_details.hpp"
 #include "finenav_core/plan/detail/plan_registry.hpp"
 #include "finenav_core/map/detail/map_registry.hpp"
 #include "finenav_core/worldview/detail/world_view_registry.hpp"

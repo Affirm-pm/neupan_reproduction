@@ -227,7 +227,7 @@ void MapServer<MapT>::runUpdateCycle(const rclcpp::Time& now) {
             return;
         }
         const auto& pt = maybe_state->pose.position;
-        const Position3D robot_pose{pt.x, pt.y, pt.z};
+        const common::Position3D robot_pose{pt.x, pt.y, pt.z};
         if (!map_instance_->isInside(robot_pose)) {
             const auto bounds = map_instance_->getWindowBounds();
             const auto center = map_instance_->getWindowCenter();
@@ -262,7 +262,7 @@ void MapServer<MapT>::runShiftCycle(const rclcpp::Time& now) {
         if (!maybe_state) return;
 
         const auto& pt = maybe_state->pose.position;
-        const Position3D robot_pose{pt.x, pt.y, pt.z};
+        const common::Position3D robot_pose{pt.x, pt.y, pt.z};
         std::unique_lock<std::shared_mutex> lock(rw_mutex_);
 
         if (!map_instance_->isInside(robot_pose)) {

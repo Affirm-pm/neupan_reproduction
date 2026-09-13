@@ -8,7 +8,7 @@
 #include <gtest/gtest.h>
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/detail/algo_register_details.hpp"
+#include "finenav_core/detail/algo_register_details.hpp"
 
 namespace {
 

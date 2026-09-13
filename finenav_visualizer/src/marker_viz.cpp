@@ -259,7 +259,7 @@ visualization_msgs::msg::MarkerArray MarkerViz::takeMessage(const rclcpp::Time& 
     // building: the array moves out below with its point vectors intact, so a
     // publish of N markers costs one pass over N headers, not N deep copies.
     for (auto& m : markers_.markers) {
-        m.header.frame_id = frame_;
+        m.header.frame_id = frameId();
         m.header.stamp = stamp;
     }
 

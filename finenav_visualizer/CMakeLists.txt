@@ -16,6 +16,7 @@ find_package(eigen3_cmake_module REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common)
 find_package(pcl_conversions REQUIRED)
 find_package(fmt REQUIRED)
+find_package(finenav_common REQUIRED)
 find_package(finenav_util REQUIRED)
 if (BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
@@ -47,6 +48,7 @@ ament_target_dependencies(${PROJECT_NAME} PUBLIC
     std_msgs
     sensor_msgs
     pcl_conversions
+    finenav_common
     finenav_util
 )
 
@@ -62,7 +64,7 @@ install(DIRECTORY include/finenav_visualizer/
 )
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
-ament_export_dependencies(rclcpp visualization_msgs std_msgs sensor_msgs Eigen3 PCL fmt finenav_util)
+ament_export_dependencies(rclcpp visualization_msgs std_msgs sensor_msgs Eigen3 PCL fmt finenav_common finenav_util)
 
 if (BUILD_TESTING)
     ament_add_gtest(marker_viz_test

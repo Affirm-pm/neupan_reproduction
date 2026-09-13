@@ -40,13 +40,20 @@
 // PCL + visualization_msgs), and declaring setVisualizer() is OPTIONAL.  A
 // plugin that does not visualize should not include it.
 //
-// Everything below is re-exported for the WorldView role:
+// Everything below is what a WorldView is given, and it comes from two layers:
 //
-//   common/frames.hpp              FrameNames / frames() — the world-fixed and
-//                                  robot frame ids for message headers
-//                                  (default "map" / "base_link")
-//   common/geometry_types.hpp      Position3D / Region3D
-//   worldview/world_view_concept.hpp  the WorldView concept
+//   finenav_common/frames.hpp          FrameNames / Frame / frames() — the
+//                                      world-fixed and robot frame ids for
+//                                      message headers, and the tag a marker is
+//                                      stamped with
+//   finenav_common/geometry_types.hpp  Position3D / Region3D
+//   worldview/world_view_concept.hpp   the WorldView concept
+//
+// One rule covers both layers: the VOCABULARY — the shared types whose
+// definition precedes finenav_core, so every role and the visualizer can name
+// them — is spelled finenav::common::; the ROLE interface is spelled
+// finenav::core::.  Neither has a second name: a type with two spellings is a
+// coin-flip a plugin author should never have to make.
 //
 // Note the dependency direction: world_view_concept.hpp includes
 // plan/planner_concept.hpp, so this file is a strict SUPERSET of
@@ -62,6 +69,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/frames.hpp"
-#include "finenav_core/common/geometry_types.hpp"
+#include "finenav_common/frames.hpp"
+#include "finenav_common/geometry_types.hpp"
 #include "finenav_core/worldview/world_view_concept.hpp"

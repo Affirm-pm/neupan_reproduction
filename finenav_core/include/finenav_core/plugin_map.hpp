@@ -37,25 +37,34 @@
 // PCL + visualization_msgs), and declaring setVisualizer() is OPTIONAL.  A
 // plugin that does not visualize should not include it.
 //
-// Everything below is re-exported for the map role:
+// Everything below is what a Map is given, and it comes from two layers:
 //
-//   common/frames.hpp           FrameNames / frames() — the world-fixed and
-//                               robot frame ids for message headers
-//                               (default "map" / "base_link")
-//   common/geometry_types.hpp   Position3D / Region3D — the geometry vocabulary
-//   map/map_concept.hpp         the Map / ShiftableMap concepts
-//   map/map_runtime.hpp         MapRuntime — the ONLY framework type a Map
-//                               touches, and the one selfManage() is handed.
-//                               Re-exported rather than forward-declared so a
-//                               map can actually WIRE itself (add an
-//                               observation source, a pre/post-update hook)
-//                               without reaching into a subdirectory.
+//   finenav_common/frames.hpp          FrameNames / Frame / frames() — the
+//                                      world-fixed and robot frame ids for
+//                                      message headers, and the tag a marker or
+//                                      cloud is stamped with
+//   finenav_common/geometry_types.hpp  Position3D / Region3D — the geometry
+//                                      vocabulary
+//   map/map_concept.hpp                the Map / ShiftableMap concepts
+//   map/map_runtime.hpp                MapRuntime — the ONLY framework type a
+//                                      Map touches, and the one selfManage() is
+//                                      handed.  Re-exported rather than
+//                                      forward-declared so a map can actually
+//                                      WIRE itself (add an observation source, a
+//                                      pre/post-update hook) without reaching
+//                                      into a subdirectory.
+//
+// One rule covers both layers: the VOCABULARY — the shared types whose
+// definition precedes finenav_core, so every role and the visualizer can name
+// them — is spelled finenav::common::; the ROLE interface is spelled
+// finenav::core::.  Neither has a second name: a type with two spellings is a
+// coin-flip a plugin author should never have to make.
 //
 // A Map never sees MapServer: the server drives the map through this runtime.
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/frames.hpp"
-#include "finenav_core/common/geometry_types.hpp"
+#include "finenav_common/frames.hpp"
+#include "finenav_common/geometry_types.hpp"
 #include "finenav_core/map/map_concept.hpp"
 #include "finenav_core/map/map_runtime.hpp"
