@@ -4,27 +4,33 @@
 
 #include "finenav_visualizer/point_cloud_viz.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include <pcl_conversions/pcl_conversions.h>
 
 namespace finenav::viz {
 
-// ── Basic addPoint overloads ────────────────────────────────────────
+namespace {
 
-void PointCloudViz::addPoint(float x, float y, float z, ColorName c) {
-    const auto color = getColor(c);
-    addPoint(x, y, z,
-             static_cast<uint8_t>(color.r * 255),
-             static_cast<uint8_t>(color.g * 255),
-             static_cast<uint8_t>(color.b * 255));
+/// PCL stores color as bytes; Color carries it as float channels in [0, 1].
+/// This is the one place the two meet — and so the one place a channel narrows,
+/// because a byte is genuinely a different representation, not a smaller float.
+uint8_t toByte(float channel) {
+    return static_cast<uint8_t>(std::clamp(channel, 0.0f, 1.0f) * 255.0f);
 }
 
-void PointCloudViz::addPoint(float x, float y, float z,
-                              uint8_t r, uint8_t g, uint8_t b) {
+}  // namespace
+
+// ── Basic addPoint ──────────────────────────────────────────────────
+
+void PointCloudViz::addPoint(float x, float y, float z, const Color& color) {
     pcl::PointXYZRGB pt;
     pt.x = x; pt.y = y; pt.z = z;
-    pt.r = r; pt.g = g; pt.b = b;
+    pt.r = toByte(color.r);
+    pt.g = toByte(color.g);
+    pt.b = toByte(color.b);
     cloud_.push_back(pt);
 }
 
@@ -32,21 +38,22 @@ void PointCloudViz::addPoint(float x, float y, float z,
 
 void PointCloudViz::addColoredPoint(float x, float y, float z, double value,
                                      double vmin, double vmax,
-                                     ColorName low, ColorName high) {
+                                     const Color& low, const Color& high) {
     const double range = vmax - vmin;
-    const double t = (range > 0.0) ? std::clamp((value - vmin) / range, 0.0, 1.0) : 0.5;
+    const double clamped = (range > 0.0) ? std::clamp((value - vmin) / range, 0.0, 1.0) : 0.5;
 
-    const auto c_lo = getColor(low);
-    const auto c_hi = getColor(high);
+    // The gradient position is a scalar input, not a colour channel, so it is
+    // the one thing here that narrows: quantize it once, then mix in float so
+    // the channels themselves convert nothing.
+    const float t = static_cast<float>(clamped);
 
-    const float r = static_cast<float>(c_lo.r + (c_hi.r - c_lo.r) * t);
-    const float g = static_cast<float>(c_lo.g + (c_hi.g - c_lo.g) * t);
-    const float b = static_cast<float>(c_lo.b + (c_hi.b - c_lo.b) * t);
+    const Color mixed{
+        low.r + (high.r - low.r) * t,
+        low.g + (high.g - low.g) * t,
+        low.b + (high.b - low.b) * t,
+    };
 
-    addPoint(x, y, z,
-             static_cast<uint8_t>(r * 255),
-             static_cast<uint8_t>(g * 255),
-             static_cast<uint8_t>(b * 255));
+    addPoint(x, y, z, mixed);
 }
 
 // ── Batch control ──────────────────────────────────────────────────

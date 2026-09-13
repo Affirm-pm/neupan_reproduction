@@ -4,12 +4,10 @@
 
 #pragma once
 
-#include <cstdint>
 #include <string>
 
 #include <rclcpp/time.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <std_msgs/msg/color_rgba.hpp>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -38,18 +36,19 @@ public:
 
     // ── Points (accumulate; nothing leaves until publish()) ──────────
 
-    /// Add a point with a preset color name.
-    void addPoint(float x, float y, float z, ColorName c);
-
-    /// Add a point with raw RGB bytes (0–255).
-    void addPoint(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b);
+    /// Add a point in the given color — named or computed, one type either way.
+    /// Alpha is not carried into the cloud: a PointCloud2 holds RGB, so a
+    /// translucent Color is drawn opaque here.  Use a marker when the alpha
+    /// matters.
+    void addPoint(float x, float y, float z, const Color& color);
 
     /// Add a point colored by a scalar value (e.g. height, cost).
     /// @param vmin, vmax — value range for the gradient.
+    /// @param low, high — the color at each end of the range.
     void addColoredPoint(float x, float y, float z, double value,
                          double vmin, double vmax,
-                         ColorName low = ColorName::BLUE,
-                         ColorName high = ColorName::RED);
+                         const Color& low = ColorName::BLUE,
+                         const Color& high = ColorName::RED);
 
     // ── Staging buffer ─────────────────────────────────────────────
 

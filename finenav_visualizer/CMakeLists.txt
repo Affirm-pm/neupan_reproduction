@@ -41,6 +41,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME} PUBLIC
     rclcpp
     visualization_msgs
+    std_msgs
     sensor_msgs
     pcl_conversions
 )
@@ -57,7 +58,7 @@ install(DIRECTORY include/finenav_visualizer/
 )
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
-ament_export_dependencies(rclcpp visualization_msgs sensor_msgs Eigen3 PCL)
+ament_export_dependencies(rclcpp visualization_msgs std_msgs sensor_msgs Eigen3 PCL)
 
 if (BUILD_TESTING)
     ament_add_gtest(marker_viz_test

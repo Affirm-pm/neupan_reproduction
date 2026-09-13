@@ -10,6 +10,7 @@
 
     <depend>rclcpp</depend>
     <depend>visualization_msgs</depend>
+    <depend>std_msgs</depend>
     <depend>sensor_msgs</depend>
     <depend>eigen</depend>
     <depend>eigen3_cmake_module</depend>
