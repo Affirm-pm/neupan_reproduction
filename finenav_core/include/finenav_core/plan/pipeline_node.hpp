@@ -25,6 +25,11 @@
 
 namespace finenav::core {
 
+/// Validity of the stashed upstream reference, as seen by the trigger policy.
+/// Both policies gate on this so an upstream FAULT propagates deterministically
+/// instead of surfacing as "planner returned nullopt" or a silently dropped event.
+enum class PlanRefState { kNoInput, kValid, kUpstreamFaulted };
+
 /**
  * @brief PipelineNode — the shared core of a single-planner pipeline stage.
  *
@@ -78,6 +83,9 @@ protected:
     /// Stash the latest upstream reference (thread-safe).
     void storePlanRef(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
 
+    /// Validity of the stashed upstream reference (thread-safe).
+    PlanRefState planRefState() const;
+
     /// Reset the planner at an episode boundary.
     void resetPlanner();
 
@@ -121,7 +129,9 @@ protected:
     /// (cmd_sub_, feedback_pub_ and, after connectFrom(), ref_sub_).
     std::unique_ptr<finenav::core::TaskWorker> worker_;
 
-    std::mutex                       plan_ref_mutex_;
+    /// Mutable so the const accessor planRefState() can lock it (same idiom as
+    /// RobotState::history_mutex_).
+    mutable std::mutex               plan_ref_mutex_;
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;
 
     /// Converted reference (msg → planner InputTrajectoryT), rebuilt only when a

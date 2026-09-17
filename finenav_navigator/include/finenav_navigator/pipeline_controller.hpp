@@ -55,10 +55,22 @@ public:
 
     /// 某条 branch 的 stage 序列（不含 _root）。未知 branch 返回空。
     std::vector<std::string> branchStages(const std::string& branch_name) const;
+
+    /// 当前活跃支路的 stage 序列（不含 _root），按上游→下游顺序。
+    /// 无活跃支路 → 空。BT 侧据此定位「最上游的故障层」。
+    const std::vector<std::string>& activeStages() const { return active_; }
+
     /// 停一条 branch：逆序 STOP 其全部 stage。
     void stopBranch(const std::string& branch_name);
     /// 重启一条 branch：逆序 STOP 再顺序 START（自愈 FAULTED 层，等价旧 onStart=startLayer）。
+    /// 该 branch 同时被记为当前活跃支路。
     void restartBranch(const std::string& branch_name);
+
+    /// 从 @p control_layer 起重启活跃支路的下游后缀：逆序 STOP 再顺序 START
+    /// [control_layer .. leaf]。上游前缀保持不动。@p control_layer 不在活跃支路中
+    /// → ERROR 日志 + no-op。用于定点自愈：故障已向上游传播，最上游的故障层
+    /// 即根因，从它重启即可覆盖整条故障后缀。
+    void restartFrom(const std::string& control_layer);
 
 private:
     rclcpp::Node::SharedPtr node_;

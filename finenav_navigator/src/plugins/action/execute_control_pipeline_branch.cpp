@@ -55,7 +55,9 @@ BT::NodeStatus ExecuteControlPipelineBranch::onRunning() {
     // 或在 BT 侧用其它条件节点决定何时把本节点 hal 掉（onHalted → stopBranch）。
     for (const auto& s : stages) {
         auto fb = pipeline->feedback(s);
-        if (fb && fb->status == FeedbackMsg::FAULTED) return BT::NodeStatus::FAILURE;
+        if (fb && fb->status == FeedbackMsg::FAULTED) {
+            return BT::NodeStatus::FAILURE;
+        }
     }
 
     // 其余 → RUNNING（含 feedback 未发布的预热态）。

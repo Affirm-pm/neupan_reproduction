@@ -27,7 +27,9 @@ public:
         : BT::StatefulActionNode(name, config) {}
 
     static BT::PortsList providedPorts() {
-        return {BT::InputPort<std::string>("branch", "Name of the pipeline branch to activate")};
+        return {
+            BT::InputPort<std::string>("branch", "Name of the pipeline branch to activate"),
+        };
     }
 
     BT::NodeStatus onStart() override;

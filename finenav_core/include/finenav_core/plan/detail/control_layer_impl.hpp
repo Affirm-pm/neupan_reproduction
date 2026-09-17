@@ -102,6 +102,19 @@ void ControlLayer<PlannerT>::runPeriodic() {
             return;
         }
 
+        switch (this->planRefState()) {
+            case PlanRefState::kUpstreamFaulted:
+                FINENAV_LOG_WARN(this->pnode_->get_logger(),
+                    "Periodic layer '{}': upstream faulted — propagating fault.", this->layer_name_);
+                this->worker_->publishFaulted();
+                return;
+            case PlanRefState::kNoInput:
+                rate.sleep();
+                continue;
+            case PlanRefState::kValid:
+                break;
+        }
+
         auto out = this->planOnce();
         if (!out) {
             FINENAV_LOG_ERROR(this->pnode_->get_logger(), "Periodic: plan() faulted — aborting.");
@@ -148,6 +161,23 @@ template <Planner PlannerT>
 void ControlLayer<PlannerT>::react() {
     // An event-driven node reacts to the upstream reference trajectory alone
     // (the goal is its last pose).  Runs on the subscription callback thread.
+    switch (this->planRefState()) {
+        case PlanRefState::kUpstreamFaulted:
+            FINENAV_LOG_WARN(this->pnode_->get_logger(),
+                "EventDriven layer '{}': upstream faulted — propagating fault.", this->layer_name_);
+            this->worker_->publishFaulted();
+            // Latch the fault: unlike the Periodic body (which returns outright),
+            // an event-driven layer keeps its subscription alive, so a later
+            // RUNNING reference would silently revive it.  Drop the START latch
+            // so the fault is terminal until an explicit restart.
+            this->started_.store(false);
+            return;
+        case PlanRefState::kNoInput:
+            return;
+        case PlanRefState::kValid:
+            break;
+    }
+
     auto out = this->planOnce();
     if (!out) return;
     this->worker_->publishRunning(std::move(*out));

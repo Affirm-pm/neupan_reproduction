@@ -123,6 +123,17 @@ void PipelineNode<PlannerT>::storePlanRef(
     plan_ref_msg_ = std::move(msg);  // zero-copy: shared_ptr pass-through
 }
 
+template <Planner PlannerT>
+PlanRefState PipelineNode<PlannerT>::planRefState() const {
+    std::lock_guard<std::mutex> lock(plan_ref_mutex_);
+    if (!plan_ref_msg_) return PlanRefState::kNoInput;
+    switch (plan_ref_msg_->status) {
+        case FeedbackMsg::FAULTED: return PlanRefState::kUpstreamFaulted;
+        case FeedbackMsg::RUNNING: return PlanRefState::kValid;
+        default: return PlanRefState::kNoInput;   // IDLE / STOPPED / unknown
+    }
+}
+
 // ==============================================================================
 // Shared Helpers
 // ==============================================================================

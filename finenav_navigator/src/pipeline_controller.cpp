@@ -96,6 +96,35 @@ void PipelineController::restartBranch(const std::string& branch_name) {
     for (const auto& s : stages) {
         master_->start(s);
     }
+
+    // 激活即记账：restartBranch 是 BT 侧唯一的支路激活入口，活跃支路的状态
+    // 必须随之更新，否则 restartFrom() 与 BT 的 GetFaultedControlLayer 无从
+    // 知道「当前跑的是哪条支路」。
+    active_     = stages;
+    active_set_ = std::unordered_set<std::string>(stages.begin(), stages.end());
+}
+
+void PipelineController::restartFrom(const std::string& control_layer) {
+    const auto it = std::find(active_.begin(), active_.end(), control_layer);
+    if (it == active_.end()) {
+        std::string stages;
+        for (const auto& s : active_) stages += " " + s;
+        FINENAV_LOG_ERROR(node_->get_logger(),
+            "restartFrom: ControlLayer '{}' is not in the active branch (stages[{}]). No-op.",
+            control_layer, stages);
+        return;
+    }
+
+    const std::size_t pos = static_cast<std::size_t>(it - active_.begin());
+
+    // 逆序 STOP 下游后缀（leaf 先停），再顺序 START [control_layer .. leaf]。
+    // 上游前缀保持运行 —— 它没有故障，重启它只会白白打断已经正确的产出。
+    for (std::size_t k = active_.size(); k-- > pos;) {
+        master_->stop(active_[k]);
+    }
+    for (std::size_t k = pos; k < active_.size(); ++k) {
+        master_->start(active_[k]);
+    }
 }
 
 }  // namespace finenav::navigator
