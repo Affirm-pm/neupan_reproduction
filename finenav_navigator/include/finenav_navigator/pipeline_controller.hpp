@@ -60,9 +60,13 @@ public:
     /// 无活跃支路 → 空。BT 侧据此定位「最上游的故障层」。
     const std::vector<std::string>& activeStages() const { return active_; }
 
+    /// 当前活跃支路是否就是 @p branch_name。onHalted 用它区分「取消/抢占（仍活跃，
+    /// 需清停）」与「多支路切换（已被 activateBranch 切走，停止已由集合差完成）」。
+    bool isActive(const std::string& branch_name) const;
+
     /// 停一条 branch：逆序 STOP 其全部 stage。
     void stopBranch(const std::string& branch_name);
-    /// 重启一条 branch：逆序 STOP 再顺序 START（自愈 FAULTED 层，等价旧 onStart=startLayer）。
+    /// 显式整条重启一条 branch：逆序 STOP 再顺序 START（升级/兜底用，非默认执行入口）。
     /// 该 branch 同时被记为当前活跃支路。
     void restartBranch(const std::string& branch_name);
 

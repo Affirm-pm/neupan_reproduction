@@ -14,11 +14,12 @@ namespace finenav::navigator {
  * @brief ExecuteControlPipelineBranch — 有状态地激活并持有一条 control_pipeline 支路。
  *
  * 从黑盒读取 `_pipeline`，端口 `branch` 为支路名。StatefulActionNode：
- * onStart 里调用 restartBranch(branch)（逆序 STOP + 顺序 START，自愈 FAULTED 层）
+ * onStart 里调用 activateBranch(branch)（集合差：停旧−新、起新−旧、共享 stage 保留）
  * 并返回 RUNNING；此后每次 onRunning 轮询该支路全部 stage 的最新 feedback，
  * 按「任一 FAULTED → FAILURE；否则 RUNNING」聚合返回。被外部 halt
- * （如 ReactiveFallback 因 IsGoalReached 成功而切走）时 onHalted 调用
- * stopBranch(branch) 停掉整条支路。
+ * （如 ReactiveFallback 因 IsGoalReached 成功而切走）时，onHalted 仅在本支路
+ * 仍是活跃支路时整管清停 stopAll()（取消/抢占）；若已被 activateBranch 切走
+ * （多支路切换，停止已由集合差完成）则 no-op。
  * 未知支路名 → onStart 返回 FAILURE（候选名列日志）。
  */
 class ExecuteControlPipelineBranch : public BT::StatefulActionNode {

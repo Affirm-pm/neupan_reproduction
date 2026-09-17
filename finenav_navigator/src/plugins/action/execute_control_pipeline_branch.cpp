@@ -37,7 +37,7 @@ BT::NodeStatus ExecuteControlPipelineBranch::onStart() {
         return BT::NodeStatus::FAILURE;
     }
 
-    pipeline->restartBranch(branch_);
+    pipeline->activateBranch(branch_);
     return BT::NodeStatus::RUNNING;
 }
 
@@ -52,7 +52,7 @@ BT::NodeStatus ExecuteControlPipelineBranch::onRunning() {
 
     // 任一 layer FAULTED → FAILURE；否则一直 RUNNING。
     // 分支的"完成"不由这里判定 —— 由 task_master（IsGoalReached 等条件）下达 STOP，
-    // 或在 BT 侧用其它条件节点决定何时把本节点 hal 掉（onHalted → stopBranch）。
+    // 或在 BT 侧用其它条件节点决定何时把本节点 hal 掉（onHalted → 条件清停）。
     for (const auto& s : stages) {
         auto fb = pipeline->feedback(s);
         if (fb && fb->status == FeedbackMsg::FAULTED) {
@@ -67,7 +67,12 @@ BT::NodeStatus ExecuteControlPipelineBranch::onRunning() {
 void ExecuteControlPipelineBranch::onHalted() {
     PipelineController* pipeline = nullptr;
     if (config().blackboard->get("_pipeline", pipeline) && pipeline) {
-        pipeline->stopBranch(branch_);
+        // 仅当本支路仍是活跃支路时才整管清停（取消/抢占）。若已被 activateBranch
+        // 切走（多支路切换，新支路 onStart 先于本 onHalted），停止已由集合差完成，
+        // 这里什么都不做，以免误停共享 stage / 新支路。
+        if (pipeline->isActive(branch_)) {
+            pipeline->stopAll();
+        }
     }
 }
 

@@ -83,6 +83,10 @@ std::vector<std::string> PipelineController::branchStages(const std::string& bra
     return pipe_->branch(branch_name);
 }
 
+bool PipelineController::isActive(const std::string& branch_name) const {
+    return !active_.empty() && active_ == branchStages(branch_name);
+}
+
 void PipelineController::stopBranch(const std::string& branch_name) {
     const auto& stages = pipe_->branch(branch_name);   // 未知 branch → 空，自然 no-op
     for (auto it = stages.rbegin(); it != stages.rend(); ++it) {
@@ -97,9 +101,8 @@ void PipelineController::restartBranch(const std::string& branch_name) {
         master_->start(s);
     }
 
-    // 激活即记账：restartBranch 是 BT 侧唯一的支路激活入口，活跃支路的状态
-    // 必须随之更新，否则 restartFrom() 与 BT 的 GetFaultedControlLayer 无从
-    // 知道「当前跑的是哪条支路」。
+    // 显式整条重启同样建立激活态：该 branch 现在是活跃支路，restartFrom() 与
+    // BT 的 GetFaultedControlLayer 据此定位「当前跑的是哪条支路」。
     active_     = stages;
     active_set_ = std::unordered_set<std::string>(stages.begin(), stages.end());
 }
