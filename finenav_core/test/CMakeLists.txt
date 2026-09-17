@@ -42,6 +42,12 @@ ament_add_gtest(test_branch_table plan/test_branch_table.cpp)
 target_include_directories(test_branch_table PRIVATE ${CORE_INCLUDE_DIRS})
 target_link_libraries(test_branch_table ${PROJECT_NAME})
 
+# --- test_pipeline_node_ref (episode-boundary reference hygiene) ---
+ament_add_gtest(test_pipeline_node_ref plan/test_pipeline_node_ref.cpp)
+target_include_directories(test_pipeline_node_ref PRIVATE ${CORE_INCLUDE_DIRS})
+target_link_libraries(test_pipeline_node_ref ${PROJECT_NAME})
+ament_target_dependencies(test_pipeline_node_ref rclcpp finenav_interfaces)
+
 # --- test_algo_register_details (logger / visualizer injection probes) ---
 ament_add_gtest(test_algo_register_details detail/test_algo_register_details.cpp)
 target_include_directories(test_algo_register_details PRIVATE ${CORE_INCLUDE_DIRS})

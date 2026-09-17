@@ -134,6 +134,14 @@ PlanRefState PipelineNode<PlannerT>::planRefState() const {
     }
 }
 
+template <Planner PlannerT>
+void PipelineNode<PlannerT>::clearFaultedPlanRef() {
+    std::lock_guard<std::mutex> lock(plan_ref_mutex_);
+    if (plan_ref_msg_ && plan_ref_msg_->status == FeedbackMsg::FAULTED) {
+        plan_ref_msg_.reset();
+    }
+}
+
 // ==============================================================================
 // Shared Helpers
 // ==============================================================================

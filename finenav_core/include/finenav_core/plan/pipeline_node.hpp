@@ -86,6 +86,14 @@ protected:
     /// Validity of the stashed upstream reference (thread-safe).
     PlanRefState planRefState() const;
 
+    /// Clear the stashed upstream reference if it is FAULTED (thread-safe).
+    /// A RUNNING reference is kept — it is the current valid input (the navigation
+    /// goal for the first stage, or the upstream's live output), not stale state.
+    /// Called at an episode boundary (publishFaulted / publishStopped) so a
+    /// restarted layer waits for fresh upstream output instead of re-propagating
+    /// a stale fault.
+    void clearFaultedPlanRef();
+
     /// Reset the planner at an episode boundary.
     void resetPlanner();
 

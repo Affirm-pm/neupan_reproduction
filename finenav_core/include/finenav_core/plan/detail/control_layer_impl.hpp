@@ -65,6 +65,7 @@ void ControlLayer<PlannerT>::startWorker(std::function<void()> episode_body) {
             if (this->worker_->hasStart()) {
                 this->worker_->ackStart();
                 if (!waitForState()) {
+                    this->clearFaultedPlanRef();
                     if (this->worker_->shouldStop()) this->worker_->publishStopped();
                     else this->worker_->publishFaulted();
                     continue;
@@ -98,6 +99,7 @@ void ControlLayer<PlannerT>::runPeriodic() {
 
     while (rclcpp::ok()) {
         if (this->worker_->shouldStop()) {
+            this->clearFaultedPlanRef();
             this->worker_->publishStopped();
             return;
         }
@@ -106,6 +108,7 @@ void ControlLayer<PlannerT>::runPeriodic() {
             case PlanRefState::kUpstreamFaulted:
                 FINENAV_LOG_WARN(this->pnode_->get_logger(),
                     "Periodic layer '{}': upstream faulted — propagating fault.", this->layer_name_);
+                this->clearFaultedPlanRef();
                 this->worker_->publishFaulted();
                 return;
             case PlanRefState::kNoInput:
@@ -118,6 +121,7 @@ void ControlLayer<PlannerT>::runPeriodic() {
         auto out = this->planOnce();
         if (!out) {
             FINENAV_LOG_ERROR(this->pnode_->get_logger(), "Periodic: plan() faulted — aborting.");
+            this->clearFaultedPlanRef();
             this->worker_->publishFaulted();
             return;
         }
@@ -154,6 +158,7 @@ void ControlLayer<PlannerT>::runEventDriven() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     started_.store(false);
+    this->clearFaultedPlanRef();
     this->worker_->publishStopped();
 }
 
@@ -165,6 +170,7 @@ void ControlLayer<PlannerT>::react() {
         case PlanRefState::kUpstreamFaulted:
             FINENAV_LOG_WARN(this->pnode_->get_logger(),
                 "EventDriven layer '{}': upstream faulted — propagating fault.", this->layer_name_);
+            this->clearFaultedPlanRef();
             this->worker_->publishFaulted();
             // Latch the fault: unlike the Periodic body (which returns outright),
             // an event-driven layer keeps its subscription alive, so a later
