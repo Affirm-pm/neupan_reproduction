@@ -53,7 +53,6 @@ private:
     // ── episode bodies ──────────────────────────────────────────────────────
     void runPeriodic();
     void runEventDriven();
-    void react();
 
     ExecutionPolicyVariant policy_;
 
@@ -62,8 +61,9 @@ private:
     std::thread        worker_thread_;
     std::atomic<bool>  stop_{false};
 
-    // event gating: true while the layer is STARTed and listening
-    std::atomic<bool>  started_{false};
+    // Event gating: set by onPlanRef() when a new upstream reference arrives,
+    // consumed (and cleared) by the EventDriven episode body on the worker thread.
+    std::atomic<bool>  ref_pending_{false};
 };
 
 } // namespace finenav::core

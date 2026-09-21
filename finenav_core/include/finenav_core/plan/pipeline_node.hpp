@@ -43,12 +43,11 @@ enum class PlanRefState { kNoInput, kValid, kUpstreamFaulted };
  * `FineNavVisualizer`.  See the API review note in planner_concept.hpp.
  *
  * It deliberately knows nothing about *how* a plan is triggered or *where* the
- * result is published — that is the single dimension the two concrete node types
- * differ on:
- *   - ControlLayer  (commanded): a TaskWorker feeds it goals, an episode loop
- *     calls planOnce() at policy rate and publishes through the TaskChannel.
- *   - DecoratorNode (feedback-driven): the upstream feedback callback fires
- *     planOnce() immediately and publishes straight to its feedback topic.
+ * result is published — that is the single dimension its two execution policies
+ * differ on (see ControlLayer):
+ *   - PeriodicPolicy:    a clock loop calls planOnce() at N Hz.
+ *   - EventDrivenPolicy: each new upstream reference triggers one planOnce().
+ * Both publish through the TaskChannel.
  *
  * @tparam PlannerT  The planner type owned by this node.
  */
@@ -75,9 +74,9 @@ protected:
 
     ~PipelineNode() override;
 
-    /// React to an upstream reference-trajectory message.  Default (commanded)
-    /// behaviour is to stash it for the next planOnce(); the feedback-driven
-    /// subclass overrides this to fire a plan immediately.
+    /// React to an upstream reference-trajectory message.  The base implementation
+    /// only stashes it for the next planOnce(); ControlLayer overrides this to also
+    /// flag a pending reference for its EventDrivenPolicy loop.
     virtual void onPlanRef(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
 
     /// Stash the latest upstream reference (thread-safe).

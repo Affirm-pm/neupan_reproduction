@@ -138,55 +138,51 @@ template <Planner PlannerT>
 void ControlLayer<PlannerT>::onPlanRef(
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg)
 {
+    // Both policies only stash the reference here and flag a pending event; the
+    // EventDriven episode body consumes the flag on the worker thread.  (Periodic
+    // ignores the flag and plans on its own clock.)
     this->storePlanRef(std::move(msg));
-
-    std::visit([this](auto& p) {
-        using P = std::decay_t<decltype(p)>;
-        if constexpr (std::is_same_v<P, EventDrivenPolicy>) {
-            if (started_.load()) react();
-        }
-    }, policy_);
+    ref_pending_.store(true, std::memory_order_release);
 }
 
 template <Planner PlannerT>
 void ControlLayer<PlannerT>::runEventDriven() {
-    // While STARTed, keep listening; the subscription callback (onPlanRef)
-    // fires react() for every incoming reference.  STOP flips started_ off so
-    // later references are only stashed until the next START.
-    started_.store(true);
+    // Event-driven = one plan() per new upstream reference, executed on the
+    // worker thread.  The subscription callback (onPlanRef) only stashes the ref
+    // and sets ref_pending_; this loop consumes it.  Planning here — not on the
+    // callback thread — keeps the planner single-threaded with resetPlanner() and
+    // makes FAULTED terminal (the body returns outright, like runPeriodic).
     while (rclcpp::ok() && !this->worker_->shouldStop()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    started_.store(false);
-    this->clearFaultedPlanRef();
-    this->worker_->publishStopped();
-}
+        if (!ref_pending_.exchange(false, std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            continue;
+        }
 
-template <Planner PlannerT>
-void ControlLayer<PlannerT>::react() {
-    // An event-driven node reacts to the upstream reference trajectory alone
-    // (the goal is its last pose).  Runs on the subscription callback thread.
-    switch (this->planRefState()) {
-        case PlanRefState::kUpstreamFaulted:
-            FINENAV_LOG_WARN(this->pnode_->get_logger(),
-                "EventDriven layer '{}': upstream faulted — propagating fault.", this->layer_name_);
+        switch (this->planRefState()) {
+            case PlanRefState::kUpstreamFaulted:
+                FINENAV_LOG_WARN(this->pnode_->get_logger(),
+                    "EventDriven layer '{}': upstream faulted — propagating fault.", this->layer_name_);
+                this->clearFaultedPlanRef();
+                this->worker_->publishFaulted();
+                return;
+            case PlanRefState::kNoInput:
+                continue;   // event consumed but no usable reference — wait for the next
+            case PlanRefState::kValid:
+                break;
+        }
+
+        auto out = this->planOnce();
+        if (!out) {
+            FINENAV_LOG_ERROR(this->pnode_->get_logger(),
+                "EventDriven layer '{}': plan() faulted — aborting.", this->layer_name_);
             this->clearFaultedPlanRef();
             this->worker_->publishFaulted();
-            // Latch the fault: unlike the Periodic body (which returns outright),
-            // an event-driven layer keeps its subscription alive, so a later
-            // RUNNING reference would silently revive it.  Drop the START latch
-            // so the fault is terminal until an explicit restart.
-            this->started_.store(false);
             return;
-        case PlanRefState::kNoInput:
-            return;
-        case PlanRefState::kValid:
-            break;
+        }
+        this->worker_->publishRunning(std::move(*out));
     }
-
-    auto out = this->planOnce();
-    if (!out) return;
-    this->worker_->publishRunning(std::move(*out));
+    this->clearFaultedPlanRef();
+    this->worker_->publishStopped();
 }
 
 } // namespace finenav::core
