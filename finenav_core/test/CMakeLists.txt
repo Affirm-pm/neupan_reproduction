@@ -48,6 +48,12 @@ target_include_directories(test_pipeline_node_ref PRIVATE ${CORE_INCLUDE_DIRS})
 target_link_libraries(test_pipeline_node_ref ${PROJECT_NAME})
 ament_target_dependencies(test_pipeline_node_ref rclcpp finenav_interfaces)
 
+# --- test_control_layer_fault (event-driven/periodic FAULTED over the real task bus) ---
+ament_add_gtest(test_control_layer_fault plan/test_control_layer_fault.cpp)
+target_include_directories(test_control_layer_fault PRIVATE ${ROBOT_STATE_HELPERS_DIR} ${CORE_INCLUDE_DIRS})
+target_link_libraries(test_control_layer_fault ${PROJECT_NAME})
+ament_target_dependencies(test_control_layer_fault rclcpp finenav_interfaces)
+
 # --- test_algo_register_details (logger / visualizer injection probes) ---
 ament_add_gtest(test_algo_register_details detail/test_algo_register_details.cpp)
 target_include_directories(test_algo_register_details PRIVATE ${CORE_INCLUDE_DIRS})
