@@ -25,6 +25,18 @@ void TaskMaster::manageLayer(const std::string& name) {
             if (it != channels_.end())
                 std::atomic_store(&it->second.latest_fb, std::move(msg));
         });
+
+    // A managed layer is IDLE by construction: seed the latch now, so
+    // feedback(name) is IDLE rather than nullptr for a layer that has not
+    // published yet.  The worker cannot do this itself — it is constructed
+    // (createLayer()) BEFORE this master exists/subscribes, so a worker-side
+    // IDLE would be published into the void and dropped.  Written before the
+    // channel becomes reachable, hence a plain store (the atomic accessors guard
+    // the racing subscriber callback, not this pre-publication init).
+    auto idle = std::make_shared<FeedbackMsg>();
+    idle->status = FeedbackMsg::IDLE;
+    ch.latest_fb = std::move(idle);
+
     channels_.emplace(name, std::move(ch));
 }
 
@@ -88,9 +100,9 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
     feedback_pub_ = node_->create_publisher<FeedbackMsg>(
         TaskChannel::feedbackTopic(channel_name), 10);
 
-    // Every layer starts life explicitly IDLE (created / at rest).  The master's
-    // manageLayer() subscription is created before the worker, so this is received.
-    publishIdle();
+    // No IDLE publish here: the master seeds IDLE as a structural default at
+    // manageLayer() (see TaskMaster::manageLayer).  A worker-side IDLE would be
+    // published before the master's subscription exists and be dropped.
 
     cmd_sub_ = node_->create_subscription<CmdMsg>(
         TaskChannel::cmdTopic(channel_name), 10,
@@ -134,12 +146,6 @@ void TaskWorker::publishRunning(finenav_interfaces::msg::Trajectory&& traj) {
     auto msg        = std::make_unique<FeedbackMsg>();
     msg->status     = FeedbackMsg::RUNNING;
     msg->trajectory = std::move(traj);
-    feedback_pub_->publish(std::move(msg));
-}
-
-void TaskWorker::publishIdle() {
-    auto msg    = std::make_unique<FeedbackMsg>();
-    msg->status = FeedbackMsg::IDLE;
     feedback_pub_->publish(std::move(msg));
 }
 

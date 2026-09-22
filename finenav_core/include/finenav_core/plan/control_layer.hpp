@@ -54,6 +54,14 @@ private:
     void runPeriodic();
     void runEventDriven();
 
+    /// Evaluate the stashed reference once and plan if it is usable — the single
+    /// gate both event-driven entry and every consumed ref_pending_ event go
+    /// through (the periodic body has its own copy of this switch, because it
+    /// additionally rate-sleeps on kNoInput).
+    /// @return false when the episode must terminate (upstream FAULTED, or
+    ///         planOnce() returned nullopt → FAULTED published, terminal).
+    bool evaluateRefAndPlan();
+
     ExecutionPolicyVariant policy_;
 
     // commanded plumbing (shared by both policies); worker_ itself is

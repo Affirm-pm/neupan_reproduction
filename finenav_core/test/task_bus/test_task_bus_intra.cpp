@@ -37,6 +37,15 @@ TEST(TaskBusIntra, FeedbackIsZeroCopy)
     TaskWorker worker(node2, "test_layer");
     master.manageLayer("test_layer");
 
+    // IDLE is the structural default: registering the layer seeds the master's
+    // latch, so feedback() is non-null (IDLE) before the worker publishes
+    // anything — a managed-but-unstarted layer is never "silence".
+    {
+        auto seeded = master.feedback("test_layer");
+        ASSERT_NE(seeded, nullptr);
+        EXPECT_EQ(seeded->status, TaskFeedback::IDLE);
+    }
+
     Trajectory traj;
     traj.poses.resize(128);
     for (auto& p : traj.poses) p.position.x = 1.0;
@@ -48,9 +57,12 @@ TEST(TaskBusIntra, FeedbackIsZeroCopy)
     exec.add_node(node1);
     exec.add_node(node2);
 
+    // Wait for the RUNNING to replace the seeded IDLE (a non-null check is no
+    // longer enough: the IDLE seed satisfies it immediately).
     auto fb = master.feedback("test_layer");
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (fb == nullptr && std::chrono::steady_clock::now() < deadline) {
+    while ((fb == nullptr || fb->status != TaskFeedback::RUNNING) &&
+           std::chrono::steady_clock::now() < deadline) {
         exec.spin_some();
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
         fb = master.feedback("test_layer");

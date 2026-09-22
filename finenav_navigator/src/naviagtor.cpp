@@ -145,7 +145,7 @@ void BtNavigator::execute()
             std::vector<std::pair<std::string, std::shared_ptr<const FeedbackMsg>>> fresh;
             for (auto& leaf : pipe_.leaves()) {
                 auto fb = master_->feedback(leaf);
-                if (fb && fb != last_consumed_fb_[leaf]) {
+                if (fb && fb->status == FeedbackMsg::RUNNING && fb != last_consumed_fb_[leaf]) {
                     fresh.emplace_back(leaf, fb);
                 }
             }

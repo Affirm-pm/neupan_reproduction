@@ -41,6 +41,13 @@ public:
 
     /**
      * @brief Register a Worker channel (2 topics). Called once per layer.
+     *
+     * Seeds the channel's feedback latch with IDLE: a layer is at rest by virtue
+     * of being registered, so feedback(name) is non-null (IDLE) from here on,
+     * even before the worker has published anything.  The worker does NOT publish
+     * an IDLE of its own — it is created (createLayer()) before this call, so
+     * such a message would be published before the master's subscription exists
+     * and be dropped.
      */
     void manageLayer(const std::string& name);
     void unmanageLayer(const std::string& name);
@@ -124,12 +131,13 @@ public:
     /**
      * @brief Worker -> Master, publish feedback messages
      * @details
-     * publishIdle()    - Publish IDLE: layer created / not yet STARTed (the safe at-rest state).
+     * IDLE is not published by the worker at all: it is the structural default
+     * the master seeds at manageLayer() (a layer is IDLE by virtue of being
+     * created/registered).
      * publishRunning() - Publish RUNNING: STARTed, actively planning. Carries a trajectory.
      * publishStopped() - Publish STOPPED: received STOP, normal termination. No trajectory.
      * publishFaulted() - Publish FAULTED: plan() returned nullopt, abnormal termination. No trajectory.
      */
-    void publishIdle();
     void publishRunning(finenav_interfaces::msg::Trajectory&& traj);
     void publishStopped();
     void publishFaulted();

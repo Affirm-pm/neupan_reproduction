@@ -146,40 +146,58 @@ void ControlLayer<PlannerT>::onPlanRef(
 }
 
 template <Planner PlannerT>
+bool ControlLayer<PlannerT>::evaluateRefAndPlan() {
+    switch (this->planRefState()) {
+        case PlanRefState::kUpstreamFaulted:
+            FINENAV_LOG_WARN(this->pnode_->get_logger(),
+                "EventDriven layer '{}': upstream faulted — propagating fault.", this->layer_name_);
+            this->clearFaultedPlanRef();
+            this->worker_->publishFaulted();
+            return false;
+        case PlanRefState::kNoInput:
+            return true;   // nothing usable stashed — keep waiting for the next event
+        case PlanRefState::kValid:
+            break;
+    }
+
+    auto out = this->planOnce();
+    if (!out) {
+        FINENAV_LOG_ERROR(this->pnode_->get_logger(),
+            "EventDriven layer '{}': plan() faulted — aborting.", this->layer_name_);
+        this->clearFaultedPlanRef();
+        this->worker_->publishFaulted();
+        return false;
+    }
+    this->worker_->publishRunning(std::move(*out));
+    return true;
+}
+
+template <Planner PlannerT>
 void ControlLayer<PlannerT>::runEventDriven() {
     // Event-driven = one plan() per new upstream reference, executed on the
     // worker thread.  The subscription callback (onPlanRef) only stashes the ref
     // and sets ref_pending_; this loop consumes it.  Planning here — not on the
     // callback thread — keeps the planner single-threaded with resetPlanner() and
     // makes FAULTED terminal (the body returns outright, like runPeriodic).
+    //
+    // Episode ENTRY also evaluates the stashed reference: a restartFrom() on an
+    // event-driven FIRST stage (whose only upstream is _root, which published the
+    // goal once) must re-plan that still-stashed RUNNING goal, not wait forever
+    // for an event that will never come again.  Consuming the flag first keeps
+    // "once per reason": a reference that arrived before start is consumed here
+    // and planned exactly once by the entry evaluation below, not twice.
+    ref_pending_.exchange(false, std::memory_order_acquire);
+
+    // Entry plan() — same switch as every event below, over the current
+    // planRefState() (kNoInput ⇒ wait, kValid ⇒ plan, upstream FAULT ⇒ terminal).
+    if (!evaluateRefAndPlan()) return;
+
     while (rclcpp::ok() && !this->worker_->shouldStop()) {
         if (!ref_pending_.exchange(false, std::memory_order_acquire)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
-
-        switch (this->planRefState()) {
-            case PlanRefState::kUpstreamFaulted:
-                FINENAV_LOG_WARN(this->pnode_->get_logger(),
-                    "EventDriven layer '{}': upstream faulted — propagating fault.", this->layer_name_);
-                this->clearFaultedPlanRef();
-                this->worker_->publishFaulted();
-                return;
-            case PlanRefState::kNoInput:
-                continue;   // event consumed but no usable reference — wait for the next
-            case PlanRefState::kValid:
-                break;
-        }
-
-        auto out = this->planOnce();
-        if (!out) {
-            FINENAV_LOG_ERROR(this->pnode_->get_logger(),
-                "EventDriven layer '{}': plan() faulted — aborting.", this->layer_name_);
-            this->clearFaultedPlanRef();
-            this->worker_->publishFaulted();
-            return;
-        }
-        this->worker_->publishRunning(std::move(*out));
+        if (!evaluateRefAndPlan()) return;
     }
     this->clearFaultedPlanRef();
     this->worker_->publishStopped();
