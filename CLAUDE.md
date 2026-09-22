@@ -165,37 +165,115 @@ int  cost     = model.checkCost([](const Position3D& p) { return map.getCost(p);
 
 ---
 
-## Execution Pipeline
+## Control Pipeline (dynamic scheduling & fault handling)
 
-### Two Planning Policies (`finenav_core/include/finenav_core/plan/execution_policy.hpp`)
+The pipeline is a dataflow of single-planner stages (`ControlLayer<PlannerT>`) chained into branches and started/stopped at runtime by the behavior tree. The subtle part is the **state machine** built from START/STOP commands, per-stage feedback statuses, and the stashed reference between stages — a change that looks local to one of these pieces usually breaks an invariant two layers away.
 
-- **`EventDrivenPolicy`** — Action goal → fires one `plan()` per new goal / upstream input; stays RUNNING until STOP. General server default (route planners, decorators).
-- **`PeriodicPolicy{20.0}`** — Action goal → loop `plan()` at N Hz until canceled or goal reached. For fixed-rate controllers (MPPI).
+Files: `finenav_core/include/finenav_core/plan/{control_layer,pipeline_node,i_pipeline_node,execution_policy}.hpp` (+ `plan/detail/*_impl.hpp`), `finenav_core/{include/finenav_core,src}/task_bus/task_bus.{hpp,cpp}`, `finenav_navigator/{include,src}/pipeline_controller.{hpp,cpp}`, `finenav_navigator/src/plugins/action/*.cpp`.
 
-### Plan Lifecycle (per ControlLayer)
+### Topology & `_root`
+
+- A `BranchTable` holds named, ordered stage sequences; the same stage name in two branches is the **same resource** (fan-in / fan-out), so it is really a small dataflow graph.
+- **`_root` is not a stored node.** `registerControlBranch()` wires `stages.front() → connectFrom("_root")` and `stages[i] → connectFrom(stages[i-1])` (`finenav_engine_cpp/src/finenav_engine.cpp:312-317`). The navigation goal is a `TaskFeedback{RUNNING}` published on `_root/__feedback` by `PipelineController::publishNavigationGoal()`. There is no `_root` worker, so `stopAll()` never touches it and the goal survives every STOP.
+- Branch output is the **leaf**'s feedback, forwarded to `navigator::IChassisCommand`; multiple fresh leaves → refuse + warn.
+- Layers' private nodes and the navigator both use the host node's name as *namespace*, so their topic names agree; intra-process comms make the `shared_ptr<const TaskFeedback>` pass-through zero-copy.
+
+### TaskBus (`TaskMaster` / `TaskWorker`)
+
+Two intra-process topics per stage name:
+
+| Topic | Type | Direction |
+|---|---|---|
+| `<name>/__cmd` | `TaskCmd` (START / STOP) | Master → Worker |
+| `<name>/__feedback` | `TaskFeedback` (IDLE / RUNNING / STOPPED / FAULTED) | Worker → Master, and → every stage that `connectFrom()`-ed it |
+
+- `TaskMaster::feedback(name)` returns `nullptr` until the first message arrives — never treat as a fault.
+- `ackStart()` consumes START **and clears any pending STOP**: *a START supersedes a prior STOP* (`task_bus.hpp:113-135`).
+- Only `RUNNING` carries a trajectory.
+
+### Two-level status model — report, never guess
+
+- **Micro (per stage):** each `ControlLayer` publishes its own status; the only framework policy is *fault propagation* (FAULTED upstream → this stage publishes FAULTED). A broken pipeline therefore shows a FAULTED **suffix**, and the most-upstream FAULTED stage is the root cause — what `GetFaultedControlLayer` returns.
+- **Macro (per branch):** the branch's state = its leaf's state; `ExecuteControlPipelineBranch::onRunning` returns FAILURE if *any* stage is FAULTED.
+- The framework **reports** status and **never chooses recovery**. Recovery is BT logic: `GetFaultedControlLayer → RestartFromControlLayer` (point self-heal from the root cause), `RestartBranch` (whole branch), or let FAILURE propagate to `stopAll()`.
+
+### Trigger policies & worker lifecycle
+
+Each layer runs one parked worker thread (`control_layer_impl.hpp:62-79`):
 
 ```
-Goal arrives → execute()
-  → resetActivePlanner()         [episode boundary]
-  → planOnce(goal):
-      1. build PlanningContext    [robot_state from Localizer, ref_traj]
-      2. map read locks           [RAII shared lock on every map the view reads]
-      3. WorldView::prepare(ctx)  [per-plan heavy derivation, under the read lock]
-      4. planner.plan(ctx, view)  [algorithm execution]
+while (ok && !stop_):
+    if hasStart():
+        ackStart()            # consumes START, clears any STOP
+        waitForState()        # blocks until a RobotState exists (or STOP/shutdown)
+        resetPlanner()        # episode boundary, once per START
+        episode_body()        # runPeriodic() or runEventDriven()
+    sleep(1ms)
 ```
 
-There is deliberately **no** pre-plan / post-plan user callback. Reference
-manipulation (seek / smooth / trim) is an upstream decorator stage, result
-handling is `navigator::IChassisCommand`, and visualization is the injected
-`FineNavVisualizer`. See the note in
-`finenav_core/include/finenav_core/plan/planner_concept.hpp`.
+- **`PeriodicPolicy{frequency_hz}`** — a `rclcpp::Rate` loop: `shouldStop → STOPPED`; `planRefState()` gates (`kUpstreamFaulted → FAULTED`, `kNoInput → sleep+continue`, `kValid → plan`); `planOnce()` `nullopt → FAULTED`.
+- **`EventDrivenPolicy`** — one `planOnce()` per *new* upstream reference, **on the worker thread**. `onPlanRef()` only stashes the reference and sets `ref_pending_`; the episode body consumes the flag (commit `4ca5717`: planning moved off the callback thread → single-threaded planner + terminal FAULTED).
+- `resetPlanner()` runs once per START, so a new mid-episode reference reaches `plan()` **without** a `reset()`.
 
-### Pipeline Chaining
+### `PlanRefState` — the reference gate
 
-Multiple `ControlLayer`s can be chained via `FineNavEngine::registerPipeline()`:
-```
-line_path → [RoutePlanner (EventDriven)] → mppi_layer_plan → [MPPIController (Periodic)] → /cmd_vel
-```
+`plan_ref_msg_` is the single stashed reference (last-writer-wins, never cleared on STOP). `planRefState()` maps its status (`pipeline_node_impl.hpp:127-135`):
+
+| Stashed feedback | `PlanRefState` | Effect |
+|---|---|---|
+| none | `kNoInput` | wait |
+| `FAULTED` | `kUpstreamFaulted` | propagate fault |
+| `RUNNING` | `kValid` | plan |
+| `IDLE` / `STOPPED` / unknown | `kNoInput` | wait |
+
+Both policies gate on this *before* `planOnce()`, so upstream absence/fault surfaces as an explicit state — never as "planner returned nullopt". The reference is converted to `InputTrajectoryT` **copy-on-change**, keyed on the message identity.
+
+### `planOnce()` and the `nullopt` contract
+
+**`nullopt` == failure**: the planner had valid, ready input and produced no trajectory. It is the only thing that legitimately faults a stage. Reachable causes:
+
+| Cause | Meaning |
+|---|---|
+| `getRobotState()` empty mid-episode | localizer dropout (faults the layer) |
+| `planner.plan()` returns `nullopt` | the real algorithm failure |
+
+Misconfiguration (no WorldView / no state provider) and "no reference yet" are **gated out before** `planOnce()` by `waitForState()` + `planRefState()` — do not use `nullopt` to mean "not ready".
+
+Sequence: `pollAll()` → `PlanningContext{state, cached_ref}` (read-only views) → read-lock every map → `prepare_(ctx)` (once per plan, under the lock) → `planner.plan(ctx, view)` → `toROSMsg`. There is deliberately **no** pre/post-plan user callback — reference manipulation is an upstream decorator stage, result handling is `IChassisCommand`, visualization is the injected `FineNavVisualizer`.
+
+### Episode boundary & reference hygiene
+
+`clearFaultedPlanRef()` resets the stashed reference **only if FAULTED**; a `RUNNING` reference is kept (it is the current valid input — the `_root` goal, or the upstream's live output). Called at **every** `publishFaulted()` / `publishStopped()` site, so a restarted stage waits for fresh output but resumes the same goal.
+
+### `PipelineController` — the BT's only entry point
+
+- **`active_` invariant** (`pipeline_controller.hpp:84-87`): the ordered stages of the active branch; **empty = nothing active**. Set by `activateBranch`/`restartBranch`, cleared by `stopAll`; never derived from feedback.
+- `activateBranch(b)` is a **set difference** (not stop-all/start-all): stop `active_∖b` **downstream-first**, start `b∖active_` **upstream-first**, keep shared stages. Re-activating the active branch is a **no-op** (use `restartFrom`/`restartBranch` to restart).
+- `isActive(b)` = `active_ == branchStages(b)` and non-empty — the authority `onHalted()` uses.
+- `restartFrom(layer)` restarts the active branch's suffix `[layer..leaf]`; `restartBranch(b)` restarts the whole branch and marks it active; `stopBranch(b)` stops a branch **without** clearing `active_`.
+
+### BT integration
+
+`ExecuteControlPipelineBranch` (`StatefulActionNode`, port `branch`):
+
+| Callback | Behaviour |
+|---|---|
+| `onStart` | FAILURE if `_pipeline` missing or branch unknown; else `activateBranch` → RUNNING |
+| `onRunning` | FAILURE if branch empty or any stage FAULTED; else RUNNING (never SUCCESS — completion is decided elsewhere) |
+| `onHalted` | `stopAll()` **only if** `isActive(branch)` (a switch already handled stopping via set difference) |
+
+Supporting nodes: `GetFaultedControlLayer`, `RestartFromControlLayer`, `RestartBranch`, `PublishNavigationGoal`, `FollowTargetAsGoal`.
+
+### Invariants / gotchas
+
+1. `nullopt` == failure; "not ready" is gated out before `planOnce()`.
+2. FAULTED is **terminal per episode** (the body returns; a later STOP does not overwrite it).
+3. STOP never clears the reference; only a FAULTED reference is cleared.
+4. A new reference does **not** call `reset()` — planners that accumulate state across a mid-episode reference change must handle it in `plan()`.
+5. An EventDriven stage plans per *event*, not per stashed reference — `ref_pending_` must be set by a fresh `onPlanRef`. Consequence: `restartFrom()` on an event-driven **first** stage (whose only upstream is `_root`) leaves it waiting for a new goal publish instead of re-planning the stashed goal. No reachable code path today, but note it before wiring recovery for a first-stage fault.
+6. Re-activating the active branch is a no-op; `restartFrom`/`restartBranch` are the restart paths.
+7. START supersedes STOP within a 1 ms window — you cannot start-and-stop in one round-trip.
+8. Only `RUNNING` feedback carries a trajectory; `nullptr` feedback is legitimate (pre-warm), not a fault.
 
 ---
 
