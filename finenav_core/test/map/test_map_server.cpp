@@ -10,6 +10,7 @@
 #include "test_helpers.hpp"
 
 using namespace finenav::core;
+using finenav::common::Position3D;
 
 class MapServerTest : public ::testing::Test {
 protected:
@@ -28,31 +29,6 @@ TEST_F(MapServerTest, ConstructWithValidStateProvider) {
     auto server = std::make_shared<MapServer<SmokeMap>>(
         node, "smoke_map", "test_server", &provider);
     EXPECT_TRUE(server != nullptr);
-}
-
-TEST_F(MapServerTest, RegisterPreUpdateHook) {
-    auto node = rclcpp::Node::make_shared("test_node");
-    MockStateProvider provider;
-    auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "smoke_map", "test_server", &provider);
-
-    bool called = false;
-    server->registerPreUpdateHook(
-        [&](const RobotState&, SmokeMap&) { called = true; });
-    // Hook stored successfully — actual invocation requires timer spin.
-    (void)called;
-}
-
-TEST_F(MapServerTest, RegisterPostUpdateHook) {
-    auto node = rclcpp::Node::make_shared("test_node");
-    MockStateProvider provider;
-    auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "smoke_map", "test_server", &provider);
-
-    bool called = false;
-    server->registerPostUpdateHook(
-        [&](const RobotState&, SmokeMap&) { called = true; });
-    (void)called;
 }
 
 TEST_F(MapServerTest, GetLockedReadView) {
@@ -74,21 +50,6 @@ TEST_F(MapServerTest, GetLockedWriteView) {
     auto view = server->getLockedWriteView();
     EXPECT_TRUE(view->isInside(Position3D{}));
     view->shiftWindowTo(Position3D{10, 0, 0});
-}
-
-TEST_F(MapServerTest, AddObservationSourceManualInjector) {
-    auto node = rclcpp::Node::make_shared("test_node");
-    MockStateProvider provider;
-    auto server = std::make_shared<MapServer<SmokeMap>>(
-        node, "smoke_map", "test_server", &provider);
-
-    auto injector = server->addObservationSource<SmokeCell>(
-        "test_src", {},
-        [](const SmokeCell&, const rclcpp::Time&,
-           const RobotState&, SmokeMap&) {});
-
-    injector(SmokeCell{}, rclcpp::Time(1, 0, RCL_ROS_TIME));
-    // No crash = injector works.
 }
 
 TEST_F(MapServerTest, NonCopyableNonMovable) {

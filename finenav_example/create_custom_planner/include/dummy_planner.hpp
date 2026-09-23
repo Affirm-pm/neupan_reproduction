@@ -8,19 +8,20 @@
 
 #include <geometry_msgs/msg/twist.hpp>
 
-#include "finenav_core/common/geometry_types.hpp"
-#include "finenav_core/plan/planner_concept.hpp"
-#include "finenav_core/plan/trajectory.hpp" // TODO： 应该合并
+// The planner role's entry point — it re-exports the concept, the geometry
+// vocabulary and (via planner_concept.hpp) Trajectory / IOProfile, so the
+// three separate includes this file used to carry are now one.
+#include "finenav_core/plugin_planner.hpp"
 
 #include "finenav_example/dummy_planner_params.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
 
 namespace finenav::example {
 
-class DummyMapView {
+class DummyWorldView {
 public:
-    virtual bool isWalkable(const finenav::core::Position3D&) const = 0;
-    virtual ~DummyMapView() = default;
+    virtual bool isWalkable(const finenav::common::Position3D&) const = 0;
+    virtual ~DummyWorldView() = default;
 };
 
 /**
@@ -44,7 +45,7 @@ public:
 class DummyPlanner {
 public:
     using ConfigType    = dummy_planner::Params;
-    using IMapView      = DummyMapView;
+    using IWorldView      = DummyWorldView;
 
     static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
     static constexpr finenav::core::IOProfile OutputProfile{false, true, false, false};
@@ -71,7 +72,7 @@ public:
     using Context = finenav::core::PlanningContext<DummyPlanner>;
     using Result  = std::optional<finenav::core::OutputTrajectoryT<DummyPlanner>>;
 
-    Result plan(const Context& ctx,const IMapView& map_view);
+    Result plan(const Context& ctx,const IWorldView& map_view);
 
 private:
     double linear_speed_  = 0.5;

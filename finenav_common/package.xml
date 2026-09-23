@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<package format="3">
+    <name>finenav_common</name>
+    <version>0.1.0</version>
+    <description>The bottom layer finenav_core and finenav_visualizer both sit on: the
+        frame vocabulary, the pollable-parameter interface, and the cross-DSO
+        registry spine</description>
+
+    <maintainer email="wangjinghui@sjtu.edu.cn">Jinghui Wang</maintainer>
+    <license>MPL 2.0</license>
+
+    <buildtool_depend>ament_cmake_auto</buildtool_depend>
+
+    <depend>rclcpp</depend>
+
+    <!-- finenav_util is the layer BELOW this one: generic ROS plumbing that
+         knows nothing about navigation (node threads, action servers, logging).
+         The one thing used from it here is the FINENAV_LOG_* macros, in
+         src/frame_names.cpp — those are fmt-based, hence fmt below. -->
+    <depend>finenav_util</depend>
+    <depend>fmt</depend>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

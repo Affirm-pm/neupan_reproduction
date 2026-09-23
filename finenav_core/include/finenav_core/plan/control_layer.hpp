@@ -21,12 +21,12 @@ namespace finenav::core {
  * @brief ControlLayer — a single-planner pipeline stage driven by an
  *        ExecutionPolicyVariant.
  *
- * Inherits the plan-once pipeline (planner instance, planOnce(), MapView
+ * Inherits the plan-once pipeline (planner instance, planOnce(), WorldView
  * attachment) from PipelineNode and adds the execution policy, which decides
  * how the node is triggered and where its output goes:
- *   - SingleShotPolicy  → commanded: one plan() per goal
- *   - ContinuousPolicy  → commanded: plan() loop at N Hz
- *   - ReactivePolicy    → commanded: listen for refs; plan() on each while STARTed
+ *   - PeriodicPolicy     → clock-driven: plan() loop at N Hz
+ *   - EventDrivenPolicy  → event-driven: plan() once per new goal / upstream
+ *     reference while STARTed
  *
  * @tparam PlannerT  The planner type owned by this layer.
  */
@@ -37,7 +37,7 @@ public:
         rclcpp::Node::SharedPtr node,
         const std::string& algo_name,
         const std::string& layer_name,
-        ExecutionPolicyVariant policy = SingleShotPolicy{},
+        ExecutionPolicyVariant policy = EventDrivenPolicy{},
         RobotStateProvider* state_provider = nullptr);
 
     ~ControlLayer() override;
@@ -47,26 +47,33 @@ protected:
 
 private:
     // ── construction: one policy → one plumbing set + one episode body ──────
-    void startWorker(std::function<void()> episode_body);   // all three policies
+    void startWorker(std::function<void()> episode_body);   // both policies
     bool waitForState();
 
     // ── episode bodies ──────────────────────────────────────────────────────
-    void runSingleShot();
-    void runContinuous();
-    void runReactive();
-    void react();
+    void runPeriodic();
+    void runEventDriven();
+
+    /// Evaluate the stashed reference once and plan if it is usable — the single
+    /// gate both event-driven entry and every consumed ref_pending_ event go
+    /// through (the periodic body has its own copy of this switch, because it
+    /// additionally rate-sleeps on kNoInput).
+    /// @return false when the episode must terminate (upstream FAULTED, or
+    ///         planOnce() returned nullopt → FAULTED published, terminal).
+    bool evaluateRefAndPlan();
 
     ExecutionPolicyVariant policy_;
 
-    // commanded plumbing (shared by all three policies); worker_ itself is
+    // commanded plumbing (shared by both policies); worker_ itself is
     // inherited from PipelineNode.
     std::thread        worker_thread_;
     std::atomic<bool>  stop_{false};
 
-    // reactive gating: true while the layer is STARTed and listening
-    std::atomic<bool>  started_{false};
+    // Event gating: set by onPlanRef() when a new upstream reference arrives,
+    // consumed (and cleared) by the EventDriven episode body on the worker thread.
+    std::atomic<bool>  ref_pending_{false};
 };
 
 } // namespace finenav::core
 
-#include "finenav_core/plan/control_layer_impl.hpp"
+#include "finenav_core/plan/detail/control_layer_impl.hpp"

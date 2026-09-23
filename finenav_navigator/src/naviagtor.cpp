@@ -8,6 +8,7 @@
 #include <Eigen/Geometry>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include "finenav_common/frames.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
 namespace finenav::navigator {
@@ -100,7 +101,7 @@ void BtNavigator::execute()
     while (rclcpp::ok()) {
         if (action_server_->is_cancel_requested()) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "Cancellation requested.");
-            master_->stopAll();
+            pipeline_->stopAll();
             tree_.haltTree();
             action_server_->terminate_all();
             return;
@@ -108,7 +109,7 @@ void BtNavigator::execute()
 
         if (action_server_->is_preempt_requested()) {
             FINENAV_LOG_INFO(pnode_->get_logger(), "Preemption requested.");
-            master_->stopAll();
+            pipeline_->stopAll();
             tree_.haltTree();
             return;
         }
@@ -144,7 +145,7 @@ void BtNavigator::execute()
             std::vector<std::pair<std::string, std::shared_ptr<const FeedbackMsg>>> fresh;
             for (auto& leaf : pipe_.leaves()) {
                 auto fb = master_->feedback(leaf);
-                if (fb && fb != last_consumed_fb_[leaf]) {
+                if (fb && fb->status == FeedbackMsg::RUNNING && fb != last_consumed_fb_[leaf]) {
                     fresh.emplace_back(leaf, fb);
                 }
             }
@@ -189,12 +190,12 @@ void BtNavigator::execute()
                 }
             }
             result->total_time = rclcpp::Duration(pnode_->now() - episode_start);
-            master_->stopAll();
+            pipeline_->stopAll();
             action_server_->succeeded_current(result);
             return;
         } else if (status == BT::NodeStatus::FAILURE) {
             FINENAV_LOG_ERROR(pnode_->get_logger(), "Navigation failed.");
-            master_->stopAll();
+            pipeline_->stopAll();
             action_server_->terminate_all();
             return;
         }
@@ -204,7 +205,7 @@ void BtNavigator::execute()
             if (auto rs = state_provider_->getRobotState()) {
                 auto fb = std::make_shared<typename ActionT::Feedback>();
                 fb->current_pose.header.stamp = pnode_->now();
-                fb->current_pose.header.frame_id = "map"; // TODO： 弄个宏定义define
+                fb->current_pose.header.frame_id = common::frames().world_fixed;
                 fb->current_pose.pose.position.x    = rs->pose.position.x;
                 fb->current_pose.pose.position.y    = rs->pose.position.y;
                 fb->current_pose.pose.position.z    = rs->pose.position.z;

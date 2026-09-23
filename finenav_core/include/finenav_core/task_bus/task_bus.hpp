@@ -6,7 +6,7 @@
 ///
 /// 2 topics per channel:
 ///   <name>/__cmd       → TaskCmd      (Master→Worker: START/STOP control)
-///   <name>/__feedback  → TaskFeedback (Worker→Master: running/completed/failed)
+///   <name>/__feedback  → TaskFeedback (Worker→Master: idle/running/stopped/faulted)
 
 #pragma once
 
@@ -41,6 +41,13 @@ public:
 
     /**
      * @brief Register a Worker channel (2 topics). Called once per layer.
+     *
+     * Seeds the channel's feedback latch with IDLE: a layer is at rest by virtue
+     * of being registered, so feedback(name) is non-null (IDLE) from here on,
+     * even before the worker has published anything.  The worker does NOT publish
+     * an IDLE of its own — it is created (createLayer()) before this call, so
+     * such a message would be published before the master's subscription exists
+     * and be dropped.
      */
     void manageLayer(const std::string& name);
     void unmanageLayer(const std::string& name);
@@ -97,8 +104,13 @@ public:
                const std::string& channel_name);
 
     /**
-     * @brief Subscribe to a parent layer's __feedback (the reference input).
-     * @param parent_name  Name of the upstream layer whose feedback to consume.
+     * @brief Register a possible predecessor's __feedback as a reference input.
+     *
+     * Idempotent: a second connectFrom() for the same @p parent_name is a no-op
+     * (the subscription already exists).  Different parent names each get their
+     * own subscription (fan-out) — the worker consumes whichever upstream is
+     * publishing on the ACTIVE branch.
+     * @param parent_name  Name of a possible upstream layer.
      * @param on_ref       Invoked with each new reference (zero-copy shared_ptr).
      */
     void connectFrom(const std::string& parent_name,
@@ -119,19 +131,26 @@ public:
     /**
      * @brief Worker -> Master, publish feedback messages
      * @details
-     * publishRunning() - Publish a feedback message indicating that the task is currently running.
-     * publishCompleted() - Publish a feedback message indicating that the task has been completed successfully.
-     * publishFailed() - Publish a feedback message indicating that the task has failed. No trajectories are sent.
+     * IDLE is not published by the worker at all: it is the structural default
+     * the master seeds at manageLayer() (a layer is IDLE by virtue of being
+     * created/registered).
+     * publishRunning() - Publish RUNNING: STARTed, actively planning. Carries a trajectory.
+     * publishStopped() - Publish STOPPED: received STOP, normal termination. No trajectory.
+     * publishFaulted() - Publish FAULTED: plan() returned nullopt, abnormal termination. No trajectory.
      */
     void publishRunning(finenav_interfaces::msg::Trajectory&& traj);
-    void publishCompleted(finenav_interfaces::msg::Trajectory&& traj);
-    void publishFailed();
+    void publishStopped();
+    void publishFaulted();
 
 private:
     std::shared_ptr<rclcpp::Node> node_;
 
     std::shared_ptr<rclcpp::Subscription<CmdMsg>>    cmd_sub_;
-    std::shared_ptr<rclcpp::Subscription<FeedbackMsg>> ref_sub_;
+    // One subscription per possible predecessor (fan-out): a shared stage may
+    // be fed by different upstreams on different branches.  Only the upstream
+    // of the ACTIVE branch publishes, so at most one ref is live at a time
+    // (last-writer-wins switches when the active branch changes).
+    std::unordered_map<std::string, std::shared_ptr<rclcpp::Subscription<FeedbackMsg>>> ref_subs_;
     std::shared_ptr<rclcpp::Publisher<FeedbackMsg>>  feedback_pub_;
 
     std::atomic<bool> start_{false};

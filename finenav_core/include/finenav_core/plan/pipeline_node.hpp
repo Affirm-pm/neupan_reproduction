@@ -13,7 +13,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/common/param_pollable_keeper.hpp"
+#include "finenav_common/detail/param_pollable_keeper.hpp"
 #include "finenav_core/map/i_map_resource.hpp"
 #include "finenav_core/plan/i_pipeline_node.hpp"
 #include "finenav_core/plan/planner_concept.hpp"
@@ -25,43 +25,45 @@
 
 namespace finenav::core {
 
+/// Validity of the stashed upstream reference, as seen by the trigger policy.
+/// Both policies gate on this so an upstream FAULT propagates deterministically
+/// instead of surfacing as "planner returned nullopt" or a silently dropped event.
+enum class PlanRefState { kNoInput, kValid, kUpstreamFaulted };
+
 /**
  * @brief PipelineNode — the shared core of a single-planner pipeline stage.
  *
  * Holds the planner instance and the whole plan-once pipeline:
- *   pre-callback → read-lock MapView → planner.plan() → post-callback → result.
+ *   read-lock WorldView → WorldView::prepare() → planner.plan() → result.
+ *
+ * There is deliberately NO user callback anywhere in this sequence.  What used
+ * to be `on_pre_plan` / `on_post_plan` is now served by the pieces that own the
+ * work: reference manipulation by an upstream decorator stage, result handling
+ * by `navigator::IChassisCommand`, and visualization by the injected
+ * `FineNavVisualizer`.  See the API review note in planner_concept.hpp.
  *
  * It deliberately knows nothing about *how* a plan is triggered or *where* the
- * result is published — that is the single dimension the two concrete node types
- * differ on:
- *   - ControlLayer  (commanded): a TaskWorker feeds it goals, an episode loop
- *     calls planOnce() at policy rate and publishes through the TaskChannel.
- *   - DecoratorNode (reactive): the upstream feedback callback fires planOnce()
- *     immediately and publishes straight to its feedback topic.
+ * result is published — that is the single dimension its two execution policies
+ * differ on (see ControlLayer):
+ *   - PeriodicPolicy:    a clock loop calls planOnce() at N Hz.
+ *   - EventDrivenPolicy: each new upstream reference triggers one planOnce().
+ * Both publish through the TaskChannel.
  *
  * @tparam PlannerT  The planner type owned by this node.
  */
 template <Planner PlannerT>
 class PipelineNode : public IPipelineNode {
 public:
-    using PrePlanCallback  = std::function<bool(PrePlanContext&)>;
-    using PostPlanCallback = std::function<bool(PostPlanContext&)>;
-
     // ── IPipelineNode ─────────────────────────────────────────────────────
 
     void connectFrom(const std::string& parent_name) override;
 
     rclcpp::Node::SharedPtr getPrivateNode() const override;
 
-    /// IPipelineNode — attach a pre-built MapView plus its backing map resources.
-    void attachMapView(
-        std::shared_ptr<void> view,
+    /// IPipelineNode — attach a pre-built WorldView plus its backing map resources.
+    void attachWorldView(
+        BuiltWorldView built,
         std::vector<std::shared_ptr<IMapResource>> maps) override;
-
-    // ── Configuration ──────────────────────────────────────────────────────
-
-    void set_on_pre_plan(PrePlanCallback cb)   { on_pre_plan_  = std::move(cb); }
-    void set_on_post_plan(PostPlanCallback cb) { on_post_plan_ = std::move(cb); }
 
 protected:
     PipelineNode(
@@ -72,19 +74,30 @@ protected:
 
     ~PipelineNode() override;
 
-    /// React to an upstream reference-trajectory message.  Default (commanded)
-    /// behaviour is to stash it for the next planOnce(); the reactive subclass
-    /// overrides this to fire a plan immediately.
+    /// React to an upstream reference-trajectory message.  The base implementation
+    /// only stashes it for the next planOnce(); ControlLayer overrides this to also
+    /// flag a pending reference for its EventDrivenPolicy loop.
     virtual void onPlanRef(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
 
     /// Stash the latest upstream reference (thread-safe).
     void storePlanRef(std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> msg);
 
+    /// Validity of the stashed upstream reference (thread-safe).
+    PlanRefState planRefState() const;
+
+    /// Clear the stashed upstream reference if it is FAULTED (thread-safe).
+    /// A RUNNING reference is kept — it is the current valid input (the navigation
+    /// goal for the first stage, or the upstream's live output), not stale state.
+    /// Called at an episode boundary (publishFaulted / publishStopped) so a
+    /// restarted layer waits for fresh upstream output instead of re-propagating
+    /// a stale fault.
+    void clearFaultedPlanRef();
+
     /// Reset the planner at an episode boundary.
     void resetPlanner();
 
     /**
-     * @brief Run one planning step: pre-cb → read-lock MapView → plan() → post-cb.
+     * @brief Run one planning step: pre-cb → read-lock WorldView → plan() → post-cb.
      *
      * The goal is read from the stashed reference trajectory
      * (`ref_traj.poses.back()`), so no goal argument is needed.
@@ -101,19 +114,18 @@ protected:
     // ── Framework resource (visualizer lives here) ─────────────────────────
     // Declared BEFORE planner_instance_ so it is destroyed AFTER it: the
     // planner holds a raw pointer into the visualizer, so it must die first.
-    ParamPollableKeeper param_keeper_;
+    common::detail::ParamPollableKeeper param_keeper_;
 
     // ── Planner state ──────────────────────────────────────────────────────
 
     PlannerT      planner_instance_;
     std::string   planner_name_;
 
-    // ── Map view + callbacks ───────────────────────────────────────────────
+    // ── World view ─────────────────────────────────────────────────────────
 
-    std::shared_ptr<void>       view_;              ///< type-erased IMapView (map-reading planners only)
+    std::shared_ptr<void>       view_;              ///< type-erased IWorldView (map-reading planners only)
+    BuiltWorldView::PrepareFn   prepare_;           ///< per-plan hook, run under the map read lock
     std::vector<std::shared_ptr<IMapResource>> map_resources_;  ///< maps to read-lock per plan
-    PrePlanCallback             on_pre_plan_;
-    PostPlanCallback            on_post_plan_;
     RobotStateProvider*         state_provider_{nullptr};
 
     // ── Data ───────────────────────────────────────────────────────────────
@@ -124,7 +136,9 @@ protected:
     /// (cmd_sub_, feedback_pub_ and, after connectFrom(), ref_sub_).
     std::unique_ptr<finenav::core::TaskWorker> worker_;
 
-    std::mutex                       plan_ref_mutex_;
+    /// Mutable so the const accessor planRefState() can lock it (same idiom as
+    /// RobotState::history_mutex_).
+    mutable std::mutex               plan_ref_mutex_;
     std::shared_ptr<const finenav_interfaces::msg::TaskFeedback> plan_ref_msg_;
 
     /// Converted reference (msg → planner InputTrajectoryT), rebuilt only when a
@@ -136,4 +150,4 @@ protected:
 
 } // namespace finenav::core
 
-#include "finenav_core/plan/pipeline_node_impl.hpp"
+#include "finenav_core/plan/detail/pipeline_node_impl.hpp"

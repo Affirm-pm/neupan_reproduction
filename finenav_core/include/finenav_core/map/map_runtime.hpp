@@ -9,7 +9,8 @@
 #include <vector>
 
 #include "rclcpp/rclcpp.hpp"
-#include "finenav_core/map/observation_source.hpp"
+#include "finenav_core/map/detail/observation_source.hpp"
+#include "finenav_core/map/observation_buffer_policy.hpp"
 #include "finenav_core/robot_state/robot_state.hpp"
 #include "finenav_util/common/log_macros.hpp"
 
@@ -78,21 +79,7 @@ public:
     std::function<void(MsgT&&, const rclcpp::Time&)> addObservationSource(
         const std::string& source_name,
         ObservationBufferPolicy policy,
-        Fuser<MsgT> fuser)
-    {
-        using Source = ObservationSource<MsgT>;
-        auto source = std::make_shared<Source>(
-            source_name, policy, std::move(fuser), logger_);
-        observation_sources_.push_back(source);
-        FINENAV_LOG_DEBUG(logger_,
-            "MapRuntime: added observation source '{}'.", source_name);
-        std::weak_ptr<Source> weak_source = source;
-        return [weak_source](MsgT&& msg, const rclcpp::Time& stamp) {
-            if (auto src = weak_source.lock()) {
-                src->enqueueThreadSafe(std::move(msg), stamp);
-            }
-        };
-    }
+        Fuser<MsgT> fuser);
 
     /**
      * @brief Register a sensor data source backed by a ROS topic subscription.
@@ -113,33 +100,7 @@ public:
         const std::string& topic_name,
         const rclcpp::QoS& qos,
         ObservationBufferPolicy policy,
-        Fuser<MsgT> fuser)
-    {
-        auto injector = addObservationSource<MsgT>(
-            source_name, policy, std::move(fuser));
-
-        auto sub = node_->create_subscription<MsgT>(
-            topic_name, qos,
-            [injector = std::move(injector), source_name,
-             logger = logger_](std::shared_ptr<MsgT> msg) {
-                rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
-                if constexpr (requires { msg->header.stamp; }) {
-                    stamp = msg->header.stamp;
-                } else {
-                    FINENAV_LOG_WARN_ONCE(logger,
-                        "ObservationSource '{}': message type has no header.stamp — "
-                        "using arrival time as stamp.  Sensor fusion accuracy may be "
-                        "degraded by time-skew.", source_name);
-                    stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
-                }
-                injector(std::move(*msg), stamp);
-            });
-        held_subscriptions_.push_back(sub);
-
-        FINENAV_LOG_INFO(logger_,
-            "MapRuntime: subscribed to '{}' for observation source '{}'.",
-            topic_name, source_name);
-    }
+        Fuser<MsgT> fuser);
 
     // ── Lifecycle hooks ──────────────────────────────────────────────────────
 
@@ -184,8 +145,10 @@ private:
     rclcpp::Logger logger_;
     std::vector<Hook> pre_hooks_;
     std::vector<Hook> post_hooks_;
-    std::vector<std::shared_ptr<IObservationSource>> observation_sources_;
+    std::vector<std::shared_ptr<detail::IObservationSource>> observation_sources_;
     std::vector<rclcpp::SubscriptionBase::SharedPtr> held_subscriptions_;
 };
 
 }  // namespace finenav::core
+
+#include "finenav_core/map/detail/map_runtime_impl.hpp"

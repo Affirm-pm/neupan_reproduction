@@ -25,6 +25,18 @@ void TaskMaster::manageLayer(const std::string& name) {
             if (it != channels_.end())
                 std::atomic_store(&it->second.latest_fb, std::move(msg));
         });
+
+    // A managed layer is IDLE by construction: seed the latch now, so
+    // feedback(name) is IDLE rather than nullptr for a layer that has not
+    // published yet.  The worker cannot do this itself — it is constructed
+    // (createLayer()) BEFORE this master exists/subscribes, so a worker-side
+    // IDLE would be published into the void and dropped.  Written before the
+    // channel becomes reachable, hence a plain store (the atomic accessors guard
+    // the racing subscriber callback, not this pre-publication init).
+    auto idle = std::make_shared<FeedbackMsg>();
+    idle->status = FeedbackMsg::IDLE;
+    ch.latest_fb = std::move(idle);
+
     channels_.emplace(name, std::move(ch));
 }
 
@@ -88,6 +100,10 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
     feedback_pub_ = node_->create_publisher<FeedbackMsg>(
         TaskChannel::feedbackTopic(channel_name), 10);
 
+    // No IDLE publish here: the master seeds IDLE as a structural default at
+    // manageLayer() (see TaskMaster::manageLayer).  A worker-side IDLE would be
+    // published before the master's subscription exists and be dropped.
+
     cmd_sub_ = node_->create_subscription<CmdMsg>(
         TaskChannel::cmdTopic(channel_name), 10,
         [this](std::shared_ptr<const CmdMsg> msg) {
@@ -102,7 +118,9 @@ TaskWorker::TaskWorker(std::shared_ptr<rclcpp::Node> node,
 void TaskWorker::connectFrom(
     const std::string& parent_name,
     std::function<void(std::shared_ptr<const FeedbackMsg>)> on_ref) {
-    ref_sub_ = node_->create_subscription<FeedbackMsg>(
+    if (ref_subs_.count(parent_name)) return;  // idempotent: already subscribed
+
+    ref_subs_[parent_name] = node_->create_subscription<FeedbackMsg>(
         TaskChannel::feedbackTopic(parent_name), 10,
         [on_ref = std::move(on_ref)](std::shared_ptr<const FeedbackMsg> msg) {
             on_ref(std::move(msg));
@@ -131,16 +149,15 @@ void TaskWorker::publishRunning(finenav_interfaces::msg::Trajectory&& traj) {
     feedback_pub_->publish(std::move(msg));
 }
 
-void TaskWorker::publishCompleted(finenav_interfaces::msg::Trajectory&& traj) {
-    auto msg        = std::make_unique<FeedbackMsg>();
-    msg->status     = FeedbackMsg::COMPLETED;
-    msg->trajectory = std::move(traj);
+void TaskWorker::publishStopped() {
+    auto msg    = std::make_unique<FeedbackMsg>();
+    msg->status = FeedbackMsg::STOPPED;
     feedback_pub_->publish(std::move(msg));
 }
 
-void TaskWorker::publishFailed() {
-    auto msg     = std::make_unique<FeedbackMsg>();
-    msg->status  = FeedbackMsg::FAILED;
+void TaskWorker::publishFaulted() {
+    auto msg    = std::make_unique<FeedbackMsg>();
+    msg->status = FeedbackMsg::FAULTED;
     feedback_pub_->publish(std::move(msg));
 }
 

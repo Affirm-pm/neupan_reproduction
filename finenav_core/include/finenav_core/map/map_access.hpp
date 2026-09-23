@@ -13,12 +13,12 @@
 namespace finenav::core {
 
 /**
- * @brief Erased handle to one resolved map handed to a MapView build function.
+ * @brief Erased handle to one resolved map handed to a WorldView build function.
  *
- * The framework resolves the map types a MapView declares into concrete
+ * The framework resolves the map types a WorldView declares into concrete
  * MapServer instances, then passes the build function a MapAccess carrying one
  * handle per map: its concrete type (mangled name) and a pointer to the map
- * data.  The MapView author recovers the typed reference via get<MapT>().
+ * data.  The WorldView author recovers the typed reference via get<MapT>().
  */
 struct MapHandle {
     std::string type_name;  ///< typeid(MapT).name() — stable across plugin DSOs
@@ -26,9 +26,9 @@ struct MapHandle {
 };
 
 /**
- * @brief Type-safe accessor for the maps a MapView depends on.
+ * @brief Type-safe accessor for the maps a WorldView depends on.
  *
- * A MapView's build function recovers each map by TYPE (never by name or index):
+ * A WorldView's build function recovers each map by TYPE (never by name or index):
  * `maps.get<TemporalVoxelMap>()` returns `const TemporalVoxelMap&`.  The
  * framework already matched the type to a concrete MapServer, so a missing or
  * mistyped dependency raises a clear error instead of silently casting.
@@ -46,7 +46,7 @@ public:
             }
         }
         throw std::runtime_error(
-            "MapAccess: this MapView's dependencies do not include a map of type '" +
+            "MapAccess: this WorldView's dependencies do not include a map of type '" +
             std::string(typeid(MapT).name()) + "'.");
     }
 

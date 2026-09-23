@@ -10,6 +10,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(finenav_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(finenav_common REQUIRED)
 find_package(finenav_util REQUIRED)
 find_package(finenav_visualizer REQUIRED)
 
@@ -20,14 +21,15 @@ set(ros_dependencies
         rclcpp_action
         finenav_interfaces
         geometry_msgs
+        finenav_common
         finenav_util
         finenav_visualizer
 )
 
 add_library(${PROJECT_NAME} SHARED
-        src/common/plan_registry.cpp
-        src/common/map_registry.cpp
-        src/common/mapview_registry.cpp
+        src/plan/plan_registry.cpp
+        src/map/map_registry.cpp
+        src/worldview/world_view_registry.cpp
         src/robot_state/robot_state_provider.cpp
         src/task_bus/task_bus.cpp
 )

@@ -6,10 +6,14 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_core/map/observation_source.hpp"
+#include "finenav_core/map/detail/observation_source.hpp"
+#include "finenav_core/map/observation_buffer_policy.hpp"
 #include "test_helpers.hpp"
 
 using namespace finenav::core;
+// The buffered source is framework plumbing, not public API: it lives in
+// detail/ and this test must say so explicitly.
+using finenav::core::detail::ObservationSource;
 
 class ObservationSourceTest : public ::testing::Test {
 protected:

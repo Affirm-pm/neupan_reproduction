@@ -8,7 +8,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include "finenav_engine/finenav_engine.hpp"
+#include "finenav_engine_cpp/finenav_engine.hpp"
 
 using namespace finenav;
 
@@ -21,25 +21,41 @@ int main(int argc, char** argv) {
     // 0. Set the default behavior tree (used by /goal_pose and navigateTo() without bt_id).
     engine->setDefaultBehaviorTree("GettingStartedNavigate");
 
-    // 1. Load the algorithm .so's.  The planner, map and mapview libraries are
+    // 1. Load the algorithm .so's.  The planner, map and world_view libraries are
     //    deliberately NOT linked into this executable (see CMakeLists.txt) — a
     //    self-registering .so the executable references no symbol from would be
     //    dropped by --as-needed.  dlopen forces each registrar to fire, which
-    //    populates the shared PlanRegistry + MapRegistry + MapViewRegistry.
+    //    populates the shared PlanRegistry + MapRegistry + WorldViewRegistry.
     //    "finenav_example/lib" resolves to <prefix>/lib and loads every *.so it finds.
     engine->loadAlgoPlugins({"finenav_example/lib"});
 
-    // 2. Assemble a ControlLayer from a MapView bridge by NAME.
-    //    createLayerByMapView resolves the planner + map TYPES the bridge declares
-    //    back to their registered names ("dummy_planner" / "dummy_map"), reuses
-    //    (or creates) the MapServer, builds the IMapView and attaches it.  The
-    //    end user never names a planner or a map — only the MapView.
-    engine->createLayerByMapView("dummy_mapview", "my_layer", core::ContinuousPolicy{10.0});
+    // 2. Assemble a ControlLayer from a WorldView bridge by NAME.
+    //    createControlLayerByWorldView resolves the planner + map TYPES the bridge
+    //    declares back to their registered names ("dummy_planner" / "dummy_map"),
+    //    reuses (or creates) the MapServer, builds the IWorldView and attaches it.
+    //    The end user never names a planner or a map — only the WorldView.
+    //    The factory reports success rather than handing back a layer handle:
+    //    the assembled stage is the algorithm developer's to drive, so the
+    //    application only learns whether assembly worked.
+    if (!engine->createControlLayerByWorldView("dummy_world_view", "my_layer",
+                                               core::PeriodicPolicy{10.0})) {
+        RCLCPP_ERROR(node->get_logger(),
+            "Failed to assemble 'my_layer' from WorldView 'dummy_world_view'.");
+        rclcpp::shutdown();
+        return 1;
+    }
 
-    // 3. Wire the tree — layers are addressed by their layer_name string.
-    engine->wireControlPipeline({
-        _root >> "my_layer"
-    });
+    // 3. Declare the control pipeline as a named branch.  A branch is an
+    //    ordered sequence of layer names; the first stage implicitly consumes
+    //    _root (the navigation goal).  The branch name ("navigate") is what the
+    //    behavior tree uses in <ExecuteControlPipelineBranch branch="..."/>.
+    if (!engine->registerControlBranch("navigate", {"my_layer"})) {
+        RCLCPP_ERROR(node->get_logger(), "Failed to register branch 'navigate'.");
+        rclcpp::shutdown();
+        return 1;
+    }
+
+    // auto map = engine->getMapServer<example::DummyMap>>("dummy_map");
 
     RCLCPP_INFO(node->get_logger(), "FineNav-Engine ready.");
     rclcpp::spin(node);

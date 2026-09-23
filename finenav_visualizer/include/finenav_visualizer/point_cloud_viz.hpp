@@ -4,65 +4,83 @@
 
 #pragma once
 
-#include <memory>
-#include <shared_mutex>
 #include <string>
-#include <unordered_map>
+#include <utility>
 
-#include <rclcpp/rclcpp.hpp>
+#include <rclcpp/time.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <std_msgs/msg/color_rgba.hpp>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
 #include "finenav_visualizer/color.hpp"
+#include "finenav_visualizer/detail/viz_channel.hpp"
 
 namespace finenav::viz {
 
-class PointCloudViz {
+/// Staging buffer for a coloured point cloud — somewhere to accumulate points,
+/// not a way to publish them.  Same contract as MarkerViz: the public surface
+/// stages, and nothing else; publishing is reached only through
+/// FineNavVisualizer::publish().
+///
+/// Each point takes the channel's mutex, and addScalarPoint takes it once for
+/// the whole of what it does — the mix and the stage — so a caller's call is
+/// atomic against another thread staging into the same cloud.
+///
+/// The frame is chosen when the buffer is published, not when it is created
+/// (see detail::VizChannel) — and here it is not merely a convention: a PointCloud2
+/// carries exactly one header.frame_id, so all the points staged in one buffer
+/// must genuinely live in the same frame, and the publish is where that is
+/// asserted.
+///
+/// Publishes to the topic it was created with, as sensor_msgs/PointCloud2.
+class PointCloudViz : public detail::TypedChannel<sensor_msgs::msg::PointCloud2> {
 public:
-    explicit PointCloudViz(rclcpp::Node::SharedPtr node);
+    explicit PointCloudViz(std::string topic)
+        : detail::TypedChannel<sensor_msgs::msg::PointCloud2>(std::move(topic)) {}
 
-    void setBaseFrame(const std::string& frame) { base_frame_ = frame; }
-    const std::string& baseFrame() const { return base_frame_; }
-
+    /// Promise room for @p n points.  Purely an optimisation and never
+    /// required — a buffer grows on its own — so it is here for the one caller
+    /// that already knows the count, and nothing else depends on it.  Takes the
+    /// channel's mutex like every other public entry, so a reserve cannot race a
+    /// concurrent addPoint into the same buffer.
     void reserve(size_t n);
 
-    // ── Add points (accumulate, no publish until publish()) ──────────
+    // ── Points (accumulate; nothing leaves until publish()) ──────────
 
-    /// Add a point with a preset color name.
-    void addPoint(float x, float y, float z, ColorName c);
+    /// Add a point in the given color — named or computed, one type either way.
+    /// Alpha is not carried into the cloud: a PointCloud2 holds RGB, so a
+    /// translucent Color is drawn opaque here.  Use a marker when the alpha
+    /// matters.
+    void addPoint(float x, float y, float z, const Color& color = ColorName::DEFAULT);
 
-    /// Add a point with raw RGB bytes (0–255).
-    void addPoint(float x, float y, float z, uint8_t r, uint8_t g, uint8_t b);
-
-    /// Add a point colored by a scalar value (e.g. height, cost).
-    /// @param vmin, vmax — value range for the gradient.
-    void addColoredPoint(float x, float y, float z, double value,
-                         double vmin, double vmax,
-                         ColorName low = ColorName::BLUE,
-                         ColorName high = ColorName::RED);
-
-    // ── Batch control ──────────────────────────────────────────────
-
-    /// Publish and clear accumulated points.
-    void publish(const std::string& topic = "finenav_cloud");
-
-    /// Discard accumulated points without publishing.
-    void clear();
-
-    /// Check for subscribers (avoid needless computation).
-    bool hasSubscribers(const std::string& topic) const;
+    /// Add a point colored by a scalar value (height, cost, …) through a
+    /// ColorScale.  The scale — range plus colour band — is a property of the
+    /// dataset, so it is built once and reused; each point names only its value.
+    void addScalarPoint(float x, float y, float z, double value, const ColorScale& scale);
 
 private:
-    rclcpp::Node::SharedPtr node_;
-    pcl::PointCloud<pcl::PointXYZRGB> cloud_;
-    std::string base_frame_ = "map";
+    /// The staged points AS a message, stamped — and handed over.  The points
+    /// genuinely cannot move into the wire form (PCL's own conversion rewrites
+    /// them, field by field, into PointCloud2's layout), so this is the one
+    /// conversion that must copy.  What it does not do is make that copy twice:
+    /// the source is emptied here, in the same step, so the buffer behind it
+    /// keeps only its capacity for the next cycle.
+    ///
+    /// Called with mutex_ held (from publishStaged), so it locks nothing itself.
+    sensor_msgs::msg::PointCloud2 takeMessage(common::Frame frame,
+                                              const rclcpp::Time& stamp) override;
 
-    std::unordered_map<std::string,
-        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr> pubs_;
-    mutable std::shared_mutex pubs_mutex_;
+    bool empty() const override { return cloud_.empty(); }
+
+    void clearUnlocked() override { cloud_.clear(); }
+
+    /// addPoint()'s body, without the lock: addScalarPoint() mixes a colour and
+    /// then stages exactly one point, so the mix and the stage are one step under
+    /// one lock rather than a lock each.  Called with mutex_ held.
+    void addPointUnlocked(float x, float y, float z, const Color& color);
+
+    pcl::PointCloud<pcl::PointXYZRGB> cloud_;
 };
 
 }  // namespace finenav::viz

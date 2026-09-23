@@ -4,42 +4,108 @@
 
 #include "finenav_visualizer/finenav_visualizer.hpp"
 
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
 #include <utility>
+
+#include <rclcpp/node.hpp>
+
+#include "finenav_visualizer/detail/viz_channel.hpp"
+#include "finenav_visualizer/marker_viz.hpp"
+#include "finenav_visualizer/point_cloud_viz.hpp"
 
 namespace finenav::viz {
 
 struct FineNavVisualizer::Impl {
-    Impl(rclcpp::Node::SharedPtr n, std::string topic)
-        : node_(std::move(n)),
-          marker_viz_(node_),
-          cloud_viz_(node_),
-          topic_name_(std::move(topic)) {}
+    /// A null node IS the inert state: channels exist and accept staging, but
+    /// there is no node to create a publisher on, so publish() has nowhere to
+    /// send.  That is the whole of what "no backend" means — no flag to keep in
+    /// sync with node_.
+    explicit Impl(rclcpp::Node::SharedPtr n = nullptr) : node_(std::move(n)) {}
+
+    /// Every channel, keyed by the topic that IS its identity — one map per
+    /// message type, so a topic names a channel unambiguously.
+    ///
+    /// Unique-ptr, not value: a channel is handed out by reference and lives as
+    /// long as the backend, so the object a caller holds must not move.  A map
+    /// that rehashed its elements would invalidate it; pointing at them cannot.
+    std::unordered_map<std::string, std::unique_ptr<MarkerViz>> marker_channels_;
+    std::unordered_map<std::string, std::unique_ptr<PointCloudViz>> cloud_channels_;
+
+    /// Guards both maps.  One mutex, not two: the two are looked up by the same
+    /// call shapes and are never held against each other, so a second would only
+    /// be a second thing to get wrong.  A channel found here is then locked by its
+    /// OWN mutex for staging — this one is released as soon as the reference is
+    /// handed back, so holding it never blocks a publish.
+    std::mutex channels_mutex_;
 
     rclcpp::Node::SharedPtr node_;
-    MarkerViz     marker_viz_;
-    PointCloudViz cloud_viz_;
-    std::string   topic_name_;
 };
 
-FineNavVisualizer::FineNavVisualizer(rclcpp::Node::SharedPtr node,
-                                     const std::string& topic_name)
-    : impl_(std::make_shared<Impl>(node, topic_name)) {}
+FineNavVisualizer::FineNavVisualizer()
+    : impl_(std::make_shared<Impl>()) {}
+
+FineNavVisualizer::FineNavVisualizer(rclcpp::Node::SharedPtr node)
+    : impl_(std::make_shared<Impl>(std::move(node))) {}
 
 FineNavVisualizer::~FineNavVisualizer() = default;
 
-MarkerViz& FineNavVisualizer::markers() { return impl_->marker_viz_; }
-PointCloudViz& FineNavVisualizer::pointCloud() { return impl_->cloud_viz_; }
-
-void FineNavVisualizer::setTopicName(const std::string& n) { impl_->topic_name_ = n; }
-
-std::string FineNavVisualizer::markerTopic() const { return impl_->topic_name_ + "/markers"; }
-std::string FineNavVisualizer::cloudTopic()  const { return impl_->topic_name_ + "/cloud";  }
-
-void FineNavVisualizer::publishAll() {
-    impl_->marker_viz_.publish(markerTopic());
-    impl_->cloud_viz_.publish(cloudTopic());
+MarkerViz& FineNavVisualizer::markers(const std::string& topic) {
+    std::lock_guard<std::mutex> lock(impl_->channels_mutex_);
+    auto it = impl_->marker_channels_.find(topic);
+    if (it == impl_->marker_channels_.end()) {
+        it = impl_->marker_channels_.emplace(topic, std::make_unique<MarkerViz>(topic)).first;
+    }
+    // The reference outlives the lock: the channel is heap-allocated, so it stays
+    // where it is however the map rehashes around it.
+    return *it->second;
 }
 
-rclcpp::Node::SharedPtr FineNavVisualizer::node() const { return impl_->node_; }
+PointCloudViz& FineNavVisualizer::pointCloud(const std::string& topic) {
+    std::lock_guard<std::mutex> lock(impl_->channels_mutex_);
+    auto it = impl_->cloud_channels_.find(topic);
+    if (it == impl_->cloud_channels_.end()) {
+        it = impl_->cloud_channels_.emplace(topic, std::make_unique<PointCloudViz>(topic)).first;
+    }
+    return *it->second;
+}
+
+void FineNavVisualizer::publish(MarkerViz& channel, common::Frame frame) {
+    // Bound to detail::VizChannel on purpose: publishStaged() and clear() are
+    // declared protected there and narrowed to private again by each concrete
+    // channel, and friendship names detail::VizChannel alone — so the channel
+    // driven here is the one declaration the visualizer is a friend of.  It is
+    // the same object either way; the reference only says which declaration is
+    // being reached.
+    detail::VizChannel& viz = channel;
+    // No backend means no node to publish through.  It is not an error state —
+    // it is the state a member sits in until setVisualizer() fills it — so the
+    // send is simply skipped; the staged data is still consumed, exactly as a
+    // real publish consumes it.
+    if (rclcpp::Node* node = impl_->node_.get()) {
+        viz.publishStaged(*node, frame, node->get_clock()->now());  // drains internally
+    } else {
+        viz.clear();
+    }
+}
+
+void FineNavVisualizer::publish(PointCloudViz& channel, common::Frame frame) {
+    detail::VizChannel& viz = channel;
+    if (rclcpp::Node* node = impl_->node_.get()) {
+        viz.publishStaged(*node, frame, node->get_clock()->now());  // drains internally
+    } else {
+        viz.clear();
+    }
+}
+
+void FineNavVisualizer::clear(MarkerViz& channel) {
+    static_cast<detail::VizChannel&>(channel).clear();
+}
+
+void FineNavVisualizer::clear(PointCloudViz& channel) {
+    static_cast<detail::VizChannel&>(channel).clear();
+}
 
 }  // namespace finenav::viz

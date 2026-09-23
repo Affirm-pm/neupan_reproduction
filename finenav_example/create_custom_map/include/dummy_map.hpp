@@ -4,8 +4,9 @@
 
 #pragma once
 
-#include "finenav_core/map/map_concept.hpp"
-#include "finenav_core/common/geometry_types.hpp"
+// The map role's entry point.  Note what is NOT here: no path into a
+// finenav_core subdirectory.  A plugin includes only finenav_core/*.hpp.
+#include "finenav_core/plugin_map.hpp"
 
 #include "finenav_example/dummy_map_params.hpp"
 #include "finenav_visualizer/finenav_visualizer.hpp"
@@ -42,19 +43,19 @@ public:
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
     void setVisualizer(const finenav::viz::FineNavVisualizer& viz) { viz_ = viz; }
 
-    bool isInside(const finenav::core::Position3D& p) const;
-    finenav::core::Region3D   getWindowBounds()  const;
-    finenav::core::Position3D getWindowCenter()  const;
+    bool isInside(const finenav::common::Position3D& p) const;
+    finenav::common::Region3D   getWindowBounds()  const;
+    finenav::common::Position3D getWindowCenter()  const;
 
     // Inline so the getting_started executable needs no symbol from this .so —
     // it recovers the typed handle by header + RTTI only (the .so is dlopened).
-    bool isOccupied(const finenav::core::Position3D&) const { return false; }
+    bool isOccupied(const finenav::common::Position3D&) const { return false; }
 
     void selfManage(finenav::core::MapRuntime&) {}
 
 private:
     double window_size_ = 50.0;
-    finenav::core::Region3D bounds_;
+    finenav::common::Region3D bounds_;
     rclcpp::Logger                logger_{rclcpp::get_logger("DummyMap")};
     finenav::viz::FineNavVisualizer viz_;
 };

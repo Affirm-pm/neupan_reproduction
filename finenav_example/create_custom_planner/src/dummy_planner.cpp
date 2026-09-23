@@ -6,7 +6,7 @@
 
 #include <cmath>
 
-#include "finenav_core/common/algo_register_macros.hpp"
+#include "finenav_core/algo_register_macros.hpp"
 
 namespace finenav::example {
 
@@ -24,7 +24,7 @@ void DummyPlanner::configure(const ConfigType& cfg) {
 
 void DummyPlanner::reset() {}
 
-DummyPlanner::Result DummyPlanner::plan(const Context& ctx,const IMapView& map_view) {
+DummyPlanner::Result DummyPlanner::plan(const Context& ctx,const IWorldView& map_view) {
 
     using Trajectory = finenav::core::Trajectory<OutputProfile>; // TODO：这个写法不错，很漂亮
 
