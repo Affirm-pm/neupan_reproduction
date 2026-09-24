@@ -33,6 +33,7 @@ add_library(neupan
   src/neupan_planner.cpp
   src/tensor_io.cpp
   src/log.cpp
+  src/safety_supervisor.cpp
 )
 add_library(neupan::neupan ALIAS neupan)
 
@@ -52,7 +53,7 @@ if(NEUPAN_BUILD_TESTS)
   enable_testing()
   find_package(GTest REQUIRED)
 
-  foreach(t test_config test_dune test_nrmp test_replay)
+  foreach(t test_config test_dune test_nrmp test_replay test_safety_supervisor)
     add_executable(${t} tests/${t}.cpp)
     target_link_libraries(${t} PRIVATE neupan GTest::gtest GTest::gtest_main)
     target_include_directories(${t} PRIVATE tests)

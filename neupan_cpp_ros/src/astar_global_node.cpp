@@ -31,6 +31,8 @@
 #include <nav_msgs/msg/path.hpp>
 #include <rclcpp/rclcpp.hpp>
 
+#include "msg_utils.hpp"
+
 namespace {
 
 constexpr double kSqrt2 = 1.41421356237;
@@ -50,17 +52,17 @@ class AStarGlobalNode : public rclcpp::Node {
     // Decision layers republish the same goal every tick; without this each one replans.
     goal_tolerance_ = declare_parameter<double>("goal_tolerance", 0.3);
 
-    path_pub_ = create_publisher<nav_msgs::msg::Path>("/initial_path", 10);
+    path_pub_ = create_publisher<nav_msgs::msg::Path>("initial_path", 10);
 
     rclcpp::QoS map_qos(1);
     map_qos.transient_local().reliable();
     map_sub_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
-        "/map", map_qos,
+        "map", map_qos,
         [this](nav_msgs::msg::OccupancyGrid::ConstSharedPtr msg) {
           onMap(*msg);
         });
     goal_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-        "/goal_pose", 10,
+        "goal_pose", 10,
         [this](geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) {
           onGoal(*msg);
         });
@@ -76,7 +78,6 @@ class AStarGlobalNode : public rclcpp::Node {
   // Inflate obstacles/unknowns by robot_radius via multi-source BFS (Chebyshev
   // dilation), so A* only walks cells the robot body can occupy.
   void onMap(const nav_msgs::msg::OccupancyGrid& map) {
-    map_ = map;
     w_ = map.info.width;
     h_ = map.info.height;
     res_ = map.info.resolution;
@@ -299,25 +300,14 @@ class AStarGlobalNode : public rclcpp::Node {
     path.header.frame_id = map_frame_;
     path.header.stamp = now();
     for (size_t i = 0; i < pts.size(); ++i) {
-      geometry_msgs::msg::PoseStamped ps;
-      ps.header = path.header;
-      ps.pose.position.x = pts[i][0];
-      ps.pose.position.y = pts[i][1];
-      double yaw;
-      if (i + 1 < pts.size())
-        yaw = std::atan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0]);
-      else
-        yaw = tf2YawFromQuat(goal.pose.orientation);
-      ps.pose.orientation.z = std::sin(yaw / 2.0);
-      ps.pose.orientation.w = std::cos(yaw / 2.0);
-      path.poses.push_back(ps);
+      const double yaw =
+          i + 1 < pts.size()
+              ? std::atan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0])
+              : neupan_ros::quatToYaw(goal.pose.orientation);
+      path.poses.push_back(
+          neupan_ros::planarPose(path.header, pts[i][0], pts[i][1], yaw));
     }
     path_pub_->publish(path);
-  }
-
-  static double tf2YawFromQuat(const geometry_msgs::msg::Quaternion& q) {
-    return std::atan2(2.0 * (q.w * q.z + q.x * q.y),
-                      1.0 - 2.0 * (q.z * q.z + q.y * q.y));
   }
 
   std::string map_frame_, base_frame_;
@@ -327,7 +317,6 @@ class AStarGlobalNode : public rclcpp::Node {
   double last_goal_x_ = 0.0, last_goal_y_ = 0.0;
   bool have_path_ = false;
 
-  nav_msgs::msg::OccupancyGrid map_;
   std::vector<uint8_t> blocked_;
   int w_ = 0, h_ = 0;
   double res_ = 0.0, ox_ = 0.0, oy_ = 0.0;
