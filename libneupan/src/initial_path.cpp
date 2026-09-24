@@ -15,14 +15,9 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <string>
 
 namespace neupan {
-
-double wrapToPi(double rad) {
-  while (rad > M_PI) rad -= 2.0 * M_PI;
-  while (rad < -M_PI) rad += 2.0 * M_PI;
-  return rad;
-}
 
 InitialPath::InitialPath(const Robot& robot, double ref_speed,
                          const Options& opts)
@@ -32,6 +27,12 @@ InitialPath::InitialPath(const Robot& robot, double ref_speed,
       ref_speed_(ref_speed),
       opts_(opts) {
   interval_ = opts.interval > 0.0 ? opts.interval : dt_ * ref_speed_;
+  // generateLineCurve steps by interval_; zero or negative never terminates.
+  if (!(interval_ > 0.0))
+    throw std::invalid_argument(
+        "initial_path: path interval must be > 0 (interval " +
+        std::to_string(opts.interval) + ", ref_speed " +
+        std::to_string(ref_speed) + ")");
   if (!opts_.waypoints.empty() && opts_.loop)
     throw std::runtime_error("initial_path: loop mode is not ported yet");
 }

@@ -15,6 +15,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <stdexcept>
+#include <string>
 
 namespace neupan {
 
@@ -41,6 +42,24 @@ void NeuPANPlanner::validate(const Config& c) {
 
   if (c.receding < 1 || c.step_time <= 0.0)
     fail("receding must be >= 1 and step_time > 0");
+
+  // ref_speed also sets the default path spacing (step_time * ref_speed);
+  // zero or negative spacing makes path densification loop forever.
+  if (!(c.ref_speed > 0.0))
+    fail("ref_speed must be > 0 (got " + std::to_string(c.ref_speed) + ")");
+
+  if (!(c.max_speed.array() > 0.0).all() || !(c.max_acce.array() > 0.0).all())
+    fail("max_speed and max_acce must be positive in both components");
+
+  if (!(c.length > 0.0) || !(c.width > 0.0))
+    fail("robot length and width must be > 0");
+
+  // Zero points or iterations do not crash; they switch avoidance off.
+  if (c.pan.iter_num < 1 || c.pan.dune_max_num < 1 || a.max_num < 1)
+    fail("iter_num, dune_max_num and nrmp_max_num must all be >= 1");
+
+  // ind_range 0 never advances the path index, so the robot never arrives.
+  if (c.ipath.ind_range < 1) fail("ipath.ind_range must be >= 1");
 
   if (a.d_min < 0.0)
     fail("d_min is negative (" + std::to_string(a.d_min) +

@@ -14,12 +14,11 @@
 
 #include <vector>
 
+#include "neupan/math_utils.hpp"
 #include "neupan/robot.hpp"
 #include "neupan/types.hpp"
 
 namespace neupan {
-
-double wrapToPi(double rad);
 
 // Port of neupan/blocks/initial_path.py restricted to curve_style == "line"
 // (each path point is [x, y, theta, gear], gear always 1 for line paths).
@@ -28,7 +27,7 @@ class InitialPath {
   struct Options {
     std::vector<Vec3> waypoints;
     bool loop = false;
-    double interval = -1.0;  // < 0: default dt * ref_speed
+    double interval = -1.0;  // <= 0: default dt * ref_speed
     double arrive_threshold = 0.1;
     double close_threshold = 0.1;
     int ind_range = 10;
