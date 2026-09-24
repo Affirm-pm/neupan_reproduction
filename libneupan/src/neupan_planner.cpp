@@ -21,9 +21,10 @@ namespace neupan {
 
 namespace {
 
-Robot makeRobot(const NeuPANPlanner::Config& c) {
-  return Robot::diffRectangle(c.receding, c.step_time, c.max_speed,
-                              c.max_acce, c.length, c.width, c.wheelbase);
+std::shared_ptr<const Robot> makeRobot(const NeuPANPlanner::Config& c) {
+  return std::make_shared<const Robot>(
+      Robot::diffRectangle(c.receding, c.step_time, c.max_speed, c.max_acce,
+                           c.length, c.width, c.wheelbase));
 }
 
 // cfg_ is the first member, so this runs before the robot and the blocks.
@@ -76,6 +77,9 @@ void NeuPANPlanner::validate(const Config& c) {
          "only the ro_obs contact penalty repels obstacles (upstream uses "
          "d_min 0.1, d_max 1.0)");
 
+  if (a.solver.max_iter < 1 || !(a.solver.time_limit >= 0.0))
+    fail("osqp.max_iter must be >= 1 and osqp.time_limit >= 0");
+
   if (c.collision_threshold <= 0.0)
     fail("collision_threshold is " + std::to_string(c.collision_threshold) +
          "; stop would then require min_distance < 0, i.e. the footprint "
@@ -116,7 +120,7 @@ NeuPANPlanner NeuPANPlanner::fromYaml(const std::string& yaml_path,
     }
     c.length = r["length"].as<double>(c.length);
     c.width = r["width"].as<double>(c.width);
-    c.wheelbase = r["wheelbase"].as<double>(0.0);
+    c.wheelbase = r["wheelbase"].as<double>(c.wheelbase);
   }
 
   if (const auto ip = y["ipath"]) {
@@ -165,6 +169,17 @@ NeuPANPlanner NeuPANPlanner::fromYaml(const std::string& yaml_path,
     c.adjust.bk = a["bk"].as<double>(c.adjust.bk);
   }
 
+  // Not part of upstream's planner.yaml: QP solver settings of this port.
+  if (const auto o = y["osqp"]) {
+    NRMPParams::Solver& s = c.adjust.solver;
+    s.eps_abs = o["eps_abs"].as<double>(s.eps_abs);
+    s.eps_rel = o["eps_rel"].as<double>(s.eps_rel);
+    s.max_iter = o["max_iter"].as<int>(s.max_iter);
+    s.polish = o["polish"].as<bool>(s.polish);
+    s.time_limit = o["time_limit"].as<double>(s.time_limit);
+    s.verbose = o["verbose"].as<bool>(s.verbose);
+  }
+
   if (!checkpoint_override.empty()) c.dune_checkpoint = checkpoint_override;
   if (c.dune_checkpoint.empty())
     throw std::runtime_error("neupan_cpp: dune_checkpoint (.bin) is required");
@@ -181,11 +196,9 @@ Vec2 NeuPANPlanner::forward(const Vec3& state, const Mat2X& points,
     return Vec2::Zero();
   }
 
-  const InitialPath::NomRef nom =
+  const NomRef nom =
       ipath_.generateNomRefState(state, cur_vel_array_, ref_speed_);
-
-  const PAN::Output out =
-      pan_.forward(nom.nom_s, nom.nom_u, nom.ref_s, nom.ref_us, points);
+  const PAN::Output out = pan_.forward(nom, points);
 
   cur_vel_array_ = out.opt_u;
 
@@ -203,10 +216,23 @@ Vec2 NeuPANPlanner::forward(const Vec3& state, const Mat2X& points,
     return Vec2::Zero();
   }
 
-  // it only bounds a command that a degraded solve might otherwise let slip through to the robot.
+  // A successful solve already respects the speed box; this only guards
+  // against a degraded solve letting an out-of-range command through.
   return out.opt_u.col(0)
-      .cwiseMax(-robot_.max_speed)
-      .cwiseMin(robot_.max_speed);
+      .cwiseMax(-robot_->max_speed)
+      .cwiseMin(robot_->max_speed);
+}
+
+bool NeuPANPlanner::ensurePath(const Vec3& state) {
+  if (!ipath_.hasPath() && ipath_.hasConfiguredWaypoints())
+    ipath_.setIpathWithState(state);
+  return ipath_.hasPath();
+}
+
+void NeuPANPlanner::setReferenceSpeed(double speed) {
+  if (!(speed >= 0.0))
+    throw std::invalid_argument("neupan: reference speed must be >= 0");
+  ref_speed_ = speed;
 }
 
 void NeuPANPlanner::reset() {

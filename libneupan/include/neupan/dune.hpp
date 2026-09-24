@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -25,7 +26,7 @@ namespace neupan {
 // latent distance features mu and lambda, sorted by objective distance.
 class DUNE {
  public:
-  DUNE(const Robot& robot, const std::string& checkpoint_path);
+  DUNE(std::shared_ptr<const Robot> robot, const std::string& checkpoint_path);
 
   struct Output {
     std::vector<Mat> mu_list;          // T+1 of (E, N), distance-sorted
@@ -42,10 +43,8 @@ class DUNE {
   const MLP& model() const { return mlp_; }
 
  private:
+  std::shared_ptr<const Robot> robot_;
   MLP mlp_;
-  Mat G_;
-  Vec h_;
-  int T_;
 };
 
 }  // namespace neupan

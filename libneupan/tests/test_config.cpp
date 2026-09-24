@@ -15,6 +15,7 @@
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 
 #include "neupan/initial_path.hpp"
@@ -69,8 +70,8 @@ TEST(Config, RejectsValuesThatHangOrDisableAvoidance) {
 }
 
 TEST(Config, InitialPathRejectsNonPositiveInterval) {
-  const Robot robot = Robot::diffRectangle(10, 0.1, Vec2(1, 1), Vec2(1, 1),
-                                           0.5, 0.5);
+  const auto robot = std::make_shared<const Robot>(
+      Robot::diffRectangle(10, 0.1, Vec2(1, 1), Vec2(1, 1), 0.5, 0.5));
   InitialPath::Options opts;
   EXPECT_THROW(InitialPath(robot, 0.0, opts), std::invalid_argument);
   opts.interval = 0.2;  // an explicit spacing makes ref_speed irrelevant here

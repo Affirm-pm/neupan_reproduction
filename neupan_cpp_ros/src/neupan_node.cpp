@@ -175,11 +175,7 @@ class NeuPANNode : public rclcpp::Node {
       return;
     }
 
-    auto& ipath = planner_->ipath();
-    if (ipath.hasConfiguredWaypoints() && !ipath.hasPath())
-      ipath.setIpathWithState(robot_state_);
-
-    if (!ipath.hasPath()) {
+    if (!planner_->ensurePath(robot_state_)) {
       halt("waiting for neupan initial path");
       return;
     }
@@ -392,7 +388,7 @@ class NeuPANNode : public rclcpp::Node {
                          msg.poses.size());
 
     // Replacing rather than resetting: a resetting replan is a cold start.
-    if (planner_->ipath().hasPath() && have_state_) {
+    if (planner_->hasPath() && have_state_) {
       planner_->replaceInitialPath(pathMsgToPoints(msg), robot_state_);
     } else {
       planner_->setInitialPath(pathMsgToPoints(msg));

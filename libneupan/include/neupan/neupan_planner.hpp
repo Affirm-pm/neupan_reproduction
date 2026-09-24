@@ -15,6 +15,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "neupan/initial_path.hpp"
 #include "neupan/pan.hpp"
@@ -76,10 +77,13 @@ class NeuPANPlanner {
   // Returns the action (2,1) and fills info.
   Vec2 forward(const Vec3& state, const Mat2X& points, Info& info);
 
+  // Drops progress along the path and the warm-started nominal; the path
+  // itself is kept.
   void reset();
-  void setReferenceSpeed(double speed) { ref_speed_ = speed; }
-  // Override the internal nominal control sequence (testing / bridging).
-  void setCurVelArray(const Mat2X& u) { cur_vel_array_ = u; }
+
+  // ---- reference path ----
+  // Every setter but replaceInitialPath restarts progress at the path start;
+  // follow it with reset() to also drop the nominal from the previous path.
   void updateInitialPathFromGoal(const Vec3& start, const Vec3& goal) {
     ipath_.updateInitialPathFromGoal(start, goal);
   }
@@ -94,16 +98,24 @@ class NeuPANPlanner {
                           const Vec3& state) {
     ipath_.replaceInitialPath(std::move(path), state);
   }
+  // True once a path is set. Builds one from `state` and the configured
+  // ipath waypoints first, if there are any and no path is set yet.
+  bool ensurePath(const Vec3& state);
+  bool hasPath() const { return ipath_.hasPath(); }
+  const InitialPath& ipath() const { return ipath_; }
+
+  // speed >= 0; tracked from the next forward() on.
+  void setReferenceSpeed(double speed);
+  // Override the internal nominal control sequence (testing / bridging).
+  void setCurVelArray(const Mat2X& u) { cur_vel_array_ = u; }
+
   double collisionThreshold() const { return cfg_.collision_threshold; }
   const Config& config() const { return cfg_; }
-
-  InitialPath& ipath() { return ipath_; }
-  PAN& pan() { return pan_; }
-  const Robot& robot() const { return robot_; }
+  const Robot& robot() const { return *robot_; }
 
  private:
   Config cfg_;
-  Robot robot_;
+  std::shared_ptr<const Robot> robot_;  // shared with the blocks below
   InitialPath ipath_;
   PAN pan_;
   double ref_speed_;

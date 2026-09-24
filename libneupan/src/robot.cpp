@@ -95,6 +95,16 @@ Robot Robot::diffRectangle(int receding, double step_time, Vec2 max_speed,
                std::move(max_acce), v);
 }
 
+Vec3 Robot::propagate(const Vec3& s, const Vec2& u) const {
+  switch (kinematics) {
+    case Kinematics::Diff: {
+      const double phi = s(2);
+      return s + dt * Vec3(u(0) * std::cos(phi), u(0) * std::sin(phi), u(1));
+    }
+  }
+  throw std::logic_error("robot: unhandled kinematics");
+}
+
 void Robot::linearize(const Vec3& nom_s_t, const Vec2& nom_u_t, Mat33& A,
                       Mat32& B, Vec3& C) const {
   const double phi = nom_s_t(2);

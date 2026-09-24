@@ -12,11 +12,13 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 
 #include "neupan/neupan_planner.hpp"
 #include "neupan/tensor_io.hpp"
+#include "reference_data.hpp"
 
 using namespace neupan;
 
@@ -31,7 +33,7 @@ const std::string kModel = std::string(NEUPAN_MODEL_DIR) + "/diff_default.bin";
 // random on slower or loaded machines; tools/bench.cpp measures speed.
 TEST(Replay, EndToEndMatchesPython) {
   const TensorFile tf = TensorFile::load(kData + "/replay.nptf");
-  const int n_frames = static_cast<int>(tf.at("meta.n_frames")(0, 0));
+  const int n_frames = ref::scalarInt(tf, "meta.n_frames");
   const Mat2X points = tf.at("points");
 
   NeuPANPlanner planner =
@@ -44,9 +46,7 @@ TEST(Replay, EndToEndMatchesPython) {
   int mismatched_flags = 0, outliers = 0;
 
   for (int f = 0; f < n_frames; ++f) {
-    char buf[32];
-    std::snprintf(buf, sizeof(buf), "r%02d", f);
-    const std::string pre = buf;
+    const std::string pre = ref::replayKey(f);
 
     const Vec3 state = tf.at(pre + ".state").col(0);
     const Vec2 action_py = tf.at(pre + ".action").col(0);

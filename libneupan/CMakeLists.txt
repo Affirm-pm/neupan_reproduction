@@ -32,6 +32,7 @@ add_library(neupan
   src/pan.cpp
   src/neupan_planner.cpp
   src/tensor_io.cpp
+  src/log.cpp
 )
 add_library(neupan::neupan ALIAS neupan)
 
@@ -39,9 +40,10 @@ target_include_directories(neupan PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
-# yaml-cpp only appears in the .cpp files, so it stays out of the interface.
-target_link_libraries(neupan PUBLIC Eigen3::Eigen OsqpEigen::OsqpEigen
-                             PRIVATE yaml-cpp)
+# OSQP and yaml-cpp only appear in the .cpp files, so they stay out of the
+# interface.
+target_link_libraries(neupan PUBLIC Eigen3::Eigen
+                             PRIVATE OsqpEigen::OsqpEigen yaml-cpp)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(neupan PRIVATE -Wall -Wextra)
 endif()
@@ -53,6 +55,7 @@ if(NEUPAN_BUILD_TESTS)
   foreach(t test_config test_dune test_nrmp test_replay)
     add_executable(${t} tests/${t}.cpp)
     target_link_libraries(${t} PRIVATE neupan GTest::gtest GTest::gtest_main)
+    target_include_directories(${t} PRIVATE tests)
     target_compile_definitions(${t} PRIVATE
       NEUPAN_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
       NEUPAN_MODEL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/models")
@@ -63,6 +66,7 @@ endif()
 if(NEUPAN_BUILD_TOOLS)
   add_executable(neupan_bench tools/bench.cpp)
   target_link_libraries(neupan_bench PRIVATE neupan)
+  target_include_directories(neupan_bench PRIVATE tests)
   target_compile_definitions(neupan_bench PRIVATE
     NEUPAN_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/data"
     NEUPAN_MODEL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/models")
