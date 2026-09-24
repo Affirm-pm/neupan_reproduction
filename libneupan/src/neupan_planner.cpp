@@ -108,8 +108,10 @@ NeuPANPlanner NeuPANPlanner::fromYaml(const std::string& yaml_path,
   if (const auto r = y["robot"]) {
     const auto kin = r["kinematics"].as<std::string>("diff");
     if (kin != "diff")
-      throw std::runtime_error("neupan_cpp currently supports only 'diff' "
-                               "kinematics (got '" + kin + "')");
+      throw std::runtime_error(
+          "neupan_cpp currently supports only 'diff' "
+          "kinematics (got '" +
+          kin + "')");
     if (r["max_speed"]) {
       const auto v = r["max_speed"].as<std::vector<double>>();
       c.max_speed = Vec2(v.at(0), v.at(1));
@@ -126,8 +128,10 @@ NeuPANPlanner NeuPANPlanner::fromYaml(const std::string& yaml_path,
   if (const auto ip = y["ipath"]) {
     const auto style = ip["curve_style"].as<std::string>("line");
     if (style != "line")
-      throw std::runtime_error("neupan_cpp currently supports only the "
-                               "'line' curve_style (got '" + style + "')");
+      throw std::runtime_error(
+          "neupan_cpp currently supports only the "
+          "'line' curve_style (got '" +
+          style + "')");
     if (ip["waypoints"])
       for (const auto& w : ip["waypoints"]) {
         const auto v = w.as<std::vector<double>>();

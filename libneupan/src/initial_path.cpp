@@ -39,8 +39,7 @@ std::vector<InitialPath::PathPoint> InitialPath::generateLineCurve(
   // Port of gctl curve_generator.generate_line + curve_from_waypoints
   // followed by initial_path._ensure_consistent_angles.
   std::vector<PathPoint> curve;
-  curve.emplace_back(waypoints[0].x(), waypoints[0].y(), waypoints[0].z(),
-                     1.0);
+  curve.emplace_back(waypoints[0].x(), waypoints[0].y(), waypoints[0].z(), 1.0);
 
   for (size_t i = 0; i + 1 < waypoints.size(); ++i) {
     const Vec2 sp = waypoints[i].head<2>();
@@ -67,7 +66,8 @@ std::vector<InitialPath::PathPoint> InitialPath::generateLineCurve(
     const double dy = curve[i + 1].y() - curve[i].y();
     curve[i](2) = std::atan2(dy, dx);
   }
-  if (curve.size() >= 2) curve[curve.size() - 1](2) = curve[curve.size() - 2](2);
+  if (curve.size() >= 2)
+    curve[curve.size() - 1](2) = curve[curve.size() - 2](2);
 
   return curve;
 }
@@ -171,13 +171,13 @@ bool InitialPath::checkCurveArrive(const Vec3& state) const {
   const double arrive_distance =
       (state.head<2>() - curve.back().head<2>()).norm();
   return arrive_distance < opts_.arrive_threshold &&
-         point_index_ >= static_cast<int>(curve.size()) -
-                             opts_.arrive_index_threshold - 2;
+         point_index_ >=
+             static_cast<int>(curve.size()) - opts_.arrive_index_threshold - 2;
 }
 
 bool InitialPath::checkArrive(const Vec3& state) {
   if (!hasPath()) setIpathWithState(state);
-  // Latch: recomputing every cycle flickers off when the robot settles past the end.
+  // Latched: recomputing flickers off once the robot settles past the end.
   if (arrive_flag_) return true;
   advanceToClosestPoint(state);
 
@@ -241,8 +241,9 @@ Vec3 InitialPath::findInteractionPoint(const Vec3& ref_state, int& ref_index,
   }
 }
 
-NomRef InitialPath::generateNomRefState(
-    const Vec3& state, const Mat2X& cur_vel_array, double ref_speed) const {
+NomRef InitialPath::generateNomRefState(const Vec3& state,
+                                        const Mat2X& cur_vel_array,
+                                        double ref_speed) const {
   const auto& curve = curCurve();
   const int n = static_cast<int>(curve.size());
   const int T = robot_->T;
@@ -276,8 +277,7 @@ NomRef InitialPath::generateNomRefState(
       }
       ref_state = curve[ref_index].head<3>();
     } else {
-      ref_state = findInteractionPoint(ref_state, ref_index,
-                                       ref_speed_forward);
+      ref_state = findInteractionPoint(ref_state, ref_index, ref_speed_forward);
       if (ref_index > n - 1) gear(t) = 0.0;
     }
 

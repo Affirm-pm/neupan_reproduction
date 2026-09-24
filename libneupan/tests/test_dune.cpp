@@ -51,8 +51,7 @@ TEST(Dune, MlpMatchesPyTorch) {
   ASSERT_EQ(mu_cpp.rows(), mu_py.rows());
   ASSERT_EQ(mu_cpp.cols(), mu_py.cols());
 
-  const double max_diff =
-      (mu_cpp.cast<double>() - mu_py).cwiseAbs().maxCoeff();
+  const double max_diff = (mu_cpp.cast<double>() - mu_py).cwiseAbs().maxCoeff();
   std::printf("MLP max|mu_cpp - mu_py| = %.3e over %ld points\n", max_diff,
               static_cast<long>(mu_py.cols()));
   EXPECT_LT(max_diff, 1e-4);
@@ -98,9 +97,9 @@ TEST(Dune, ForwardMatchesPython) {
         const std::string st = ref::stageKey(t);
         max_mu_diff = std::max(
             max_mu_diff, maxAbsDiff(out.mu_list[t], tf.at(pre + ".mu" + st)));
-        max_lam_diff = std::max(
-            max_lam_diff,
-            maxAbsDiff(out.lam_list[t], tf.at(pre + ".lam" + st)));
+        max_lam_diff =
+            std::max(max_lam_diff,
+                     maxAbsDiff(out.lam_list[t], tf.at(pre + ".lam" + st)));
         max_pt_diff = std::max(
             max_pt_diff,
             maxAbsDiff(out.sort_point_list[t], tf.at(pre + ".sp" + st)));
@@ -108,8 +107,9 @@ TEST(Dune, ForwardMatchesPython) {
     }
   }
 
-  std::printf("DUNE forward: max mu diff %.3e, lam diff %.3e, point diff %.3e\n",
-              max_mu_diff, max_lam_diff, max_pt_diff);
+  std::printf(
+      "DUNE forward: max mu diff %.3e, lam diff %.3e, point diff %.3e\n",
+      max_mu_diff, max_lam_diff, max_pt_diff);
   EXPECT_LT(max_mu_diff, 1e-4);
   EXPECT_LT(max_lam_diff, 1e-3);
   // identical sorting => identical point selection

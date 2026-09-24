@@ -119,7 +119,8 @@ class NeuPANNode : public rclcpp::Node {
         NeuPANPlanner::fromYaml(params_.config_file, params_.dune_checkpoint));
 
     // Relative names, so a namespace or remap moves the whole interface.
-    vel_pub_ = create_publisher<geometry_msgs::msg::Twist>("neupan_cmd_vel", 10);
+    vel_pub_ =
+        create_publisher<geometry_msgs::msg::Twist>("neupan_cmd_vel", 10);
     plan_pub_ = create_publisher<nav_msgs::msg::Path>("neupan_plan", 10);
     ref_state_pub_ =
         create_publisher<nav_msgs::msg::Path>("neupan_ref_state", 10);
@@ -132,7 +133,7 @@ class NeuPANNode : public rclcpp::Node {
         "nrmp_point_markers", 10);
     robot_marker_pub_ =
         create_publisher<visualization_msgs::msg::Marker>("robot_marker", 10);
-    // A decision layer may drive its chassis output off this, so publish every cycle.
+    // Published every cycle: a decision layer may drive its chassis off it.
     arrive_pub_ = create_publisher<std_msgs::msg::Bool>("neupan_arrive", 10);
     diag_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
         "neupan_diagnostics", 10);
@@ -226,9 +227,10 @@ class NeuPANNode : public rclcpp::Node {
       RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 1000,
                            "arrive at the target");
     if (info.stop)
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 500,
-                           "neupan stop, min distance %.3f below threshold %.3f",
-                           info.min_distance, planner_->collisionThreshold());
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 500,
+          "neupan stop, min distance %.3f below threshold %.3f",
+          info.min_distance, planner_->collisionThreshold());
     if (supervisor_.solverGaveUp())
       RCLCPP_WARN_THROTTLE(
           get_logger(), *get_clock(), 500,
@@ -351,7 +353,7 @@ class NeuPANNode : public rclcpp::Node {
   void waypointsCallback(const nav_msgs::msg::Path& msg) {
     if (!have_state_ || msg.poses.empty()) return;
 
-    // Republished identical waypoints must not cold-reset the planner each tick.
+    // Identical republished waypoints must not cold-reset the planner.
     const auto pts = pathMsgToPoints(msg);
     if (samePoints(pts, last_waypoints_)) return;
     last_waypoints_ = pts;
@@ -425,23 +427,22 @@ class NeuPANNode : public rclcpp::Node {
     using diagnostic_msgs::msg::DiagnosticStatus;
     using Level = neupan::SafetySupervisor::Level;
     const auto status = supervisor_.status(info);
-    const uint8_t level = status.level == Level::Error  ? DiagnosticStatus::ERROR
+    const uint8_t level = status.level == Level::Error ? DiagnosticStatus::ERROR
                           : status.level == Level::Warn ? DiagnosticStatus::WARN
                                                         : DiagnosticStatus::OK;
     const auto flag = [](bool b) { return b ? "true" : "false"; };
 
-    publishStatus(
-        level, status.message,
-        {{"solved", flag(info.solved)},
-         {"solver_status", std::to_string(info.solver_status)},
-         {"consecutive_unsolved",
-          std::to_string(supervisor_.consecutiveUnsolved())},
-         {"min_distance", std::to_string(info.min_distance)},
-         {"obstacle_points", std::to_string(obstacle_points_.cols())},
-         {"stalled", flag(supervisor_.stalled())},
-         {"cmd_v", std::to_string(cmd(0))},
-         {"cmd_w", std::to_string(cmd(1))}},
-        stamp);
+    publishStatus(level, status.message,
+                  {{"solved", flag(info.solved)},
+                   {"solver_status", std::to_string(info.solver_status)},
+                   {"consecutive_unsolved",
+                    std::to_string(supervisor_.consecutiveUnsolved())},
+                   {"min_distance", std::to_string(info.min_distance)},
+                   {"obstacle_points", std::to_string(obstacle_points_.cols())},
+                   {"stalled", flag(supervisor_.stalled())},
+                   {"cmd_v", std::to_string(cmd(0))},
+                   {"cmd_w", std::to_string(cmd(1))}},
+                  stamp);
   }
 
   void publishInitialPathIfChanged(const rclcpp::Time& stamp) {
@@ -528,9 +529,9 @@ class NeuPANNode : public rclcpp::Node {
     m.scale.x = cfg.length;
     m.scale.y = cfg.width;
     m.scale.z = params_.marker_z;
-    m.pose = planarPose(m.header, robot_state_(0), robot_state_(1),
-                        robot_state_(2))
-                 .pose;
+    m.pose =
+        planarPose(m.header, robot_state_(0), robot_state_(1), robot_state_(2))
+            .pose;
     robot_marker_pub_->publish(m);
   }
 
@@ -553,7 +554,8 @@ class NeuPANNode : public rclcpp::Node {
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr plan_pub_, ref_state_pub_,
       ref_path_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr
-      dune_markers_pub_, nrmp_markers_pub_;
+      dune_markers_pub_,
+      nrmp_markers_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr arrive_pub_;
   rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diag_pub_;
   rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr

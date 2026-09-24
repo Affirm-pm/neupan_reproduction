@@ -51,8 +51,7 @@ void genInequalFromVertex(const Mat2X& vertices, Mat& G, Vec& h) {
     // CW input: keep first vertex, reverse the rest (as upstream does).
     Mat2X r(2, v.cols());
     r.col(0) = v.col(0);
-    for (Eigen::Index i = 1; i < v.cols(); ++i)
-      r.col(i) = v.col(v.cols() - i);
+    for (Eigen::Index i = 1; i < v.cols(); ++i) r.col(i) = v.col(v.cols() - i);
     v = r;
   }
 

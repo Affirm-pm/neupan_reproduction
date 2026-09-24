@@ -99,16 +99,16 @@ DUNE::Output DUNE::forward(const std::vector<Mat2X>& point_flow,
     // distance_k = mu_k . (G p0_k - h)
     Vec distance(n);
     const Mat gp = (robot_->G * point_flow[i]).colwise() - robot_->h;
-    for (Eigen::Index k = 0; k < n; ++k)
-      distance(k) = mu.col(k).dot(gp.col(k));
+    for (Eigen::Index k = 0; k < n; ++k) distance(k) = mu.col(k).dot(gp.col(k));
 
     if (i == 0 && n > 0) out.min_distance = distance.minCoeff();
 
     std::vector<Eigen::Index> idx(n);
     std::iota(idx.begin(), idx.end(), 0);
-    std::stable_sort(idx.begin(), idx.end(), [&](Eigen::Index a, Eigen::Index b) {
-      return distance(a) < distance(b);
-    });
+    std::stable_sort(idx.begin(), idx.end(),
+                     [&](Eigen::Index a, Eigen::Index b) {
+                       return distance(a) < distance(b);
+                     });
 
     Mat mu_sorted(mu.rows(), n);
     Mat2X lam_sorted(2, n);

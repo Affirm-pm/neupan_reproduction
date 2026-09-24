@@ -25,7 +25,7 @@ using namespace neupan;
 namespace {
 const std::string kData = NEUPAN_TEST_DATA_DIR;
 const std::string kModel = std::string(NEUPAN_MODEL_DIR) + "/diff_default.bin";
-}
+}  // namespace
 
 // End-to-end replay against the Python reference: feed the recorded state
 // sequence, compare actions (per-frame inf-norm diff < 5% of the velocity
@@ -69,15 +69,13 @@ TEST(Replay, EndToEndMatchesPython) {
     // 5% per frame; up to 2 frames may fall in (5%, 10%]: at decision
     // boundaries the PAM stop criterion can run one iteration more or less
     // than the reference.
-    EXPECT_LT(diff, 0.10 * scale) << pre << " action_cpp=(" << action(0)
-                                  << "," << action(1) << ") action_py=("
-                                  << action_py(0) << "," << action_py(1)
-                                  << ")";
+    EXPECT_LT(diff, 0.10 * scale)
+        << pre << " action_cpp=(" << action(0) << "," << action(1)
+        << ") action_py=(" << action_py(0) << "," << action_py(1) << ")";
     if (diff >= 0.05 * scale) ++outliers;
     if (info.stop != stop_py || info.arrive != arrive_py) ++mismatched_flags;
 
-    EXPECT_NEAR(info.min_distance, tf.at(pre + ".min_dist")(0, 0), 0.05)
-        << pre;
+    EXPECT_NEAR(info.min_distance, tf.at(pre + ".min_dist")(0, 0), 0.05) << pre;
 
     // Strict open-loop comparison: sync the hidden nominal control sequence
     // to the Python reference so solver tolerance differences don't get

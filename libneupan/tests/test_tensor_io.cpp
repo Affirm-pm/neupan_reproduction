@@ -56,8 +56,9 @@ class Nptf {
   }
 
   std::string write(const std::string& name) const {
-    const auto path = std::filesystem::temp_directory_path() /
-                      ("neupan_test_" + std::to_string(::getpid()) + "_" + name);
+    const auto path =
+        std::filesystem::temp_directory_path() /
+        ("neupan_test_" + std::to_string(::getpid()) + "_" + name);
     std::ofstream(path, std::ios::binary) << bytes_;
     return path.string();
   }
@@ -69,12 +70,11 @@ class Nptf {
 }  // namespace
 
 TEST(TensorIo, ReadsRowMajorF32AndF64) {
-  const std::string path =
-      Nptf()
-          .header(2)
-          .record<float>("a", 0, 2, 3, {1, 2, 3, 4, 5, 6})
-          .record<double>("b", 1, 1, 2, {0.25, -7.5})
-          .write("ok.nptf");
+  const std::string path = Nptf()
+                               .header(2)
+                               .record<float>("a", 0, 2, 3, {1, 2, 3, 4, 5, 6})
+                               .record<double>("b", 1, 1, 2, {0.25, -7.5})
+                               .write("ok.nptf");
   const TensorFile tf = TensorFile::load(path);
 
   Mat a(2, 3);
@@ -117,11 +117,8 @@ TEST(Mlp, LoadsAConsistentStack) {
 
 TEST(Mlp, RejectsMismatchedLayerSizes) {
   // Layer 1 expects 5 inputs but layer 0 produces 4.
-  EXPECT_THROW(MLP::load(Nptf()
-                             .header(4)
-                             .linear(0, 4, 2)
-                             .linear(1, 3, 5)
-                             .write("mlp_chain.nptf")),
+  EXPECT_THROW(MLP::load(Nptf().header(4).linear(0, 4, 2).linear(1, 3, 5).write(
+                   "mlp_chain.nptf")),
                std::runtime_error);
   // Bias shorter than the weight's output size.
   EXPECT_THROW(

@@ -49,7 +49,7 @@ class AStarGlobalNode : public rclcpp::Node {
     allow_unknown_ = declare_parameter<bool>("allow_unknown", false);
     // Douglas-Peucker tolerance (m): larger -> fewer, coarser waypoints.
     simplify_tol_ = declare_parameter<double>("simplify_tolerance", 0.15);
-    // Decision layers republish the same goal every tick; without this each one replans.
+    // Decision layers republish the same goal every tick; don't replan each.
     goal_tolerance_ = declare_parameter<double>("goal_tolerance", 0.3);
 
     path_pub_ = create_publisher<nav_msgs::msg::Path>("initial_path", 10);
@@ -84,8 +84,8 @@ class AStarGlobalNode : public rclcpp::Node {
     ox_ = map.info.origin.position.x;
     oy_ = map.info.origin.position.y;
 
-    const int radius_cells = std::max(0, static_cast<int>(
-                                             std::round(robot_radius_ / res_)));
+    const int radius_cells =
+        std::max(0, static_cast<int>(std::round(robot_radius_ / res_)));
     blocked_.assign(static_cast<size_t>(w_) * h_, 0);
     std::vector<int> dist(static_cast<size_t>(w_) * h_, -1);
     std::queue<int> q;
@@ -147,8 +147,8 @@ class AStarGlobalNode : public rclcpp::Node {
     }
 
     int sx, sy, gx, gy;
-    if (!worldToCell(tf.transform.translation.x, tf.transform.translation.y,
-                     sx, sy) ||
+    if (!worldToCell(tf.transform.translation.x, tf.transform.translation.y, sx,
+                     sy) ||
         !worldToCell(goal.pose.position.x, goal.pose.position.y, gx, gy)) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
                            "start or goal outside the map");
@@ -162,8 +162,9 @@ class AStarGlobalNode : public rclcpp::Node {
 
     const std::vector<int> cells = astar(sy * w_ + sx, gy * w_ + gx);
     if (cells.empty()) {
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
-                           "A* found no path to goal, keeping the previous one");
+      RCLCPP_WARN_THROTTLE(
+          get_logger(), *get_clock(), 2000,
+          "A* found no path to goal, keeping the previous one");
       return;
     }
 
@@ -173,7 +174,7 @@ class AStarGlobalNode : public rclcpp::Node {
       pts.push_back({ox_ + (c % w_ + 0.5) * res_, oy_ + (c / w_ + 0.5) * res_});
     pts = simplify(pts, simplify_tol_);
 
-    // Cell centres stop short of the goal; restore it only if it was not snapped.
+    // Cell centres stop short of the goal; restore it unless it was snapped.
     if (!goal_snapped && !pts.empty())
       pts.back() = {goal.pose.position.x, goal.pose.position.y};
 
@@ -181,7 +182,8 @@ class AStarGlobalNode : public rclcpp::Node {
     last_goal_x_ = goal.pose.position.x;
     last_goal_y_ = goal.pose.position.y;
     have_path_ = true;
-    RCLCPP_INFO(get_logger(), "published global path: %zu cells -> %zu waypoints",
+    RCLCPP_INFO(get_logger(),
+                "published global path: %zu cells -> %zu waypoints",
                 cells.size(), pts.size());
   }
 

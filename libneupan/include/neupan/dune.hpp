@@ -29,10 +29,10 @@ class DUNE {
   DUNE(std::shared_ptr<const Robot> robot, const std::string& checkpoint_path);
 
   struct Output {
-    std::vector<Mat> mu_list;          // T+1 of (E, N), distance-sorted
-    std::vector<Mat2X> lam_list;       // T+1 of (2, N)
+    std::vector<Mat> mu_list;            // T+1 of (E, N), distance-sorted
+    std::vector<Mat2X> lam_list;         // T+1 of (2, N)
     std::vector<Mat2X> sort_point_list;  // T+1 of (2, N), global frame
-    double min_distance = 0.0;         // min over stage-0 points
+    double min_distance = 0.0;           // min over stage-0 points
   };
 
   // point_flow / obs_points: T+1 matrices of (2, N); R_list: T+1 rotations.

@@ -63,8 +63,8 @@ TEST(InitialPath, LineCurveIsDensifiedToTheInterval) {
 TEST(InitialPath, ExternalPathIsResampledToTheSameSpacing) {
   InitialPath ip(robot(), 1.0, spacing(0.4));
   // Sparse path as A* + Douglas-Peucker would publish it (2 m spacing).
-  ip.setInitialPath({PathPoint(0, 0, 0, 1), PathPoint(2, 0, 0, 1),
-                     PathPoint(4, 0, 0, 1)});
+  ip.setInitialPath(
+      {PathPoint(0, 0, 0, 1), PathPoint(2, 0, 0, 1), PathPoint(4, 0, 0, 1)});
   const auto& path = ip.initialPath();
   EXPECT_EQ(path.size(), 11u);
   EXPECT_NEAR(path.back().x(), 4.0, 1e-12);
@@ -115,7 +115,8 @@ TEST(InitialPath, ReferenceAdvancesAtRefSpeedAndStopsAtTheEnd) {
   ASSERT_FALSE(ip.checkArrive(Vec3(0, 0, 0)));
 
   // ref_speed * dt == interval: one path point per step.
-  const NomRef nr = ip.generateNomRefState(Vec3(0, 0, 0), Mat2X::Zero(2, kT), 1.0);
+  const NomRef nr =
+      ip.generateNomRefState(Vec3(0, 0, 0), Mat2X::Zero(2, kT), 1.0);
   ASSERT_EQ(nr.ref_s.cols(), kT + 1);
   ASSERT_EQ(nr.nom_s.cols(), kT + 1);
   for (int t = 0; t <= 5; ++t) EXPECT_NEAR(nr.ref_s(0, t), 0.1 * t, 1e-9);

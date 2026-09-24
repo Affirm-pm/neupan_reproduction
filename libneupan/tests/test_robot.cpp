@@ -37,9 +37,9 @@ TEST(Robot, InequalitiesContainExactlyTheFootprint) {
       polygon({Vec2(-1, -0.5), Vec2(1, -0.5), Vec2(1, 0.5), Vec2(-1, 0.5)}), G,
       h);
   ASSERT_EQ(G.rows(), 4);
-  EXPECT_TRUE(((G * Vec2(0, 0)) - h).maxCoeff() < 0);       // inside
-  EXPECT_TRUE(((G * Vec2(0.9, 0.4)) - h).maxCoeff() < 0);   // inside
-  EXPECT_TRUE(((G * Vec2(1.1, 0.0)) - h).maxCoeff() > 0);   // outside
+  EXPECT_TRUE(((G * Vec2(0, 0)) - h).maxCoeff() < 0);            // inside
+  EXPECT_TRUE(((G * Vec2(0.9, 0.4)) - h).maxCoeff() < 0);        // inside
+  EXPECT_TRUE(((G * Vec2(1.1, 0.0)) - h).maxCoeff() > 0);        // outside
   EXPECT_NEAR(((G * Vec2(1.0, 0.0)) - h).maxCoeff(), 0, 1e-12);  // edge
 }
 
@@ -60,11 +60,11 @@ TEST(Robot, RejectsDegenerateAndNonConvexFootprints) {
   EXPECT_THROW(genInequalFromVertex(polygon({Vec2(0, 0), Vec2(1, 0)}), G, h),
                std::invalid_argument);
   // Arrow head: the vertex at (1, 0.5) points inwards.
-  EXPECT_THROW(genInequalFromVertex(polygon({Vec2(0, 0), Vec2(2, 0),
-                                             Vec2(1, 0.5), Vec2(2, 1),
-                                             Vec2(0, 1)}),
-                                    G, h),
-               std::invalid_argument);
+  EXPECT_THROW(
+      genInequalFromVertex(polygon({Vec2(0, 0), Vec2(2, 0), Vec2(1, 0.5),
+                                    Vec2(2, 1), Vec2(0, 1)}),
+                           G, h),
+      std::invalid_argument);
 }
 
 TEST(Robot, DiffRectangleMatchesTheConfiguredSize) {

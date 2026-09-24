@@ -116,12 +116,12 @@ TEST(Config, FromYamlReadsTheOptionalOsqpBlock) {
 }
 
 TEST(Config, FromYamlRejectsUnportedFeatures) {
-  EXPECT_THROW(NeuPANPlanner::fromYaml(
-                   writeYaml("neupan_acker.yaml",
-                             "robot: {kinematics: acker}\n"),
-                   kModel),
-               std::runtime_error);
-  EXPECT_THROW(NeuPANPlanner::fromYaml(
-                   writeYaml("neupan_nockpt.yaml", kRobotYaml), ""),
-               std::runtime_error);
+  EXPECT_THROW(
+      NeuPANPlanner::fromYaml(
+          writeYaml("neupan_acker.yaml", "robot: {kinematics: acker}\n"),
+          kModel),
+      std::runtime_error);
+  EXPECT_THROW(
+      NeuPANPlanner::fromYaml(writeYaml("neupan_nockpt.yaml", kRobotYaml), ""),
+      std::runtime_error);
 }

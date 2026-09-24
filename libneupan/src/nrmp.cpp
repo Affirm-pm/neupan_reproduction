@@ -89,17 +89,16 @@ NRMP::Coefficients NRMP::buildFaFb(const std::vector<Mat>& mu_list,
 }
 
 void NRMP::checkShapes(const NomRef& nom, const Coefficients& co) const {
-  const bool ok =
-      nom.nom_s.cols() == T_ + 1 && nom.nom_u.cols() == T_ &&
-      nom.ref_s.cols() == T_ + 1 && nom.ref_us.size() == T_ &&
-      static_cast<int>(co.fa.size()) == T_ &&
-      static_cast<int>(co.fb.size()) == T_ &&
-      std::all_of(co.fa.begin(), co.fa.end(),
-                  [&](const Mat& fa) {
-                    return fa.rows() == M_ && fa.cols() == 2;
-                  }) &&
-      std::all_of(co.fb.begin(), co.fb.end(),
-                  [&](const Vec& fb) { return fb.size() == M_; });
+  const bool ok = nom.nom_s.cols() == T_ + 1 && nom.nom_u.cols() == T_ &&
+                  nom.ref_s.cols() == T_ + 1 && nom.ref_us.size() == T_ &&
+                  static_cast<int>(co.fa.size()) == T_ &&
+                  static_cast<int>(co.fb.size()) == T_ &&
+                  std::all_of(co.fa.begin(), co.fa.end(),
+                              [&](const Mat& fa) {
+                                return fa.rows() == M_ && fa.cols() == 2;
+                              }) &&
+                  std::all_of(co.fb.begin(), co.fb.end(),
+                              [&](const Vec& fb) { return fb.size() == M_; });
   if (!ok)
     throw std::invalid_argument(
         "nrmp: problem data does not match horizon T / max_num (build the "
@@ -276,10 +275,8 @@ NRMP::Result NRMP::solve(const NomRef& nom, const Coefficients& coeffs) {
   if (!initialized_) {
     initSolver();
   } else if (osqp_update_data_mat(solver_->solver().get(), nullptr, nullptr, 0,
-                                  A_.valuePtr(), nullptr,
-                                  A_.nonZeros()) != 0 ||
-             !solver_->updateGradient(q_) ||
-             !solver_->updateBounds(lb_, ub_)) {
+                                  A_.valuePtr(), nullptr, A_.nonZeros()) != 0 ||
+             !solver_->updateGradient(q_) || !solver_->updateBounds(lb_, ub_)) {
     throw std::runtime_error("nrmp: OSQP update failed");
   }
 

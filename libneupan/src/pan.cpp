@@ -27,9 +27,9 @@ Mat2X downsampleDecimation(const Mat2X& mat, int m) {
   if (m >= n) return mat;
   Mat2X out(2, m);
   for (int i = 0; i < m; ++i) {
-    const int idx = m == 1 ? 0
-                           : static_cast<int>(static_cast<double>(i) *
-                                              (n - 1) / (m - 1));
+    const int idx =
+        m == 1 ? 0
+               : static_cast<int>(static_cast<double>(i) * (n - 1) / (m - 1));
     out.col(i) = mat.col(idx);
   }
   return out;

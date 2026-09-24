@@ -19,7 +19,9 @@
 
 namespace neupan {
 
-MLP MLP::load(const std::string& path) { return fromTensors(TensorFile::load(path)); }
+MLP MLP::load(const std::string& path) {
+  return fromTensors(TensorFile::load(path));
+}
 
 MLP MLP::fromTensors(const TensorFile& tf) {
   MLP mlp;
@@ -91,7 +93,8 @@ void MLP::checkShapes() const {
     switch (l.type) {
       case LayerType::Linear:
         if (l.W.size() == 0 || l.b.size() != l.W.rows())
-          throw std::runtime_error(where + " needs a weight and a matching bias");
+          throw std::runtime_error(where +
+                                   " needs a weight and a matching bias");
         if (dim >= 0 && l.W.cols() != dim)
           throw std::runtime_error(where + " input size does not match");
         dim = l.W.rows();
