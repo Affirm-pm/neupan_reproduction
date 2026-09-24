@@ -28,6 +28,7 @@ class Test(Node):
         self.goal_x = 4.0
         self.max_x = 0.0
         self.sent = False
+        self.last_sent_t = -1.0
 
         self.bc = TransformBroadcaster(self)
         self.scan_pub = self.create_publisher(LaserScan, "/scan", qos_profile_sensor_data)
@@ -71,7 +72,10 @@ class Test(Node):
         self._bcast()
         self.max_x = max(self.max_x, self.x)
         self.t += self.dt
-        if not self.sent and self.t > 1.0:
+        # Resend until the robot moves, in case the node was not up yet.
+        moving = abs(self.v) > 1e-3 or abs(self.w) > 1e-3
+        if self.t > 1.0 and not moving and self.t - self.last_sent_t >= 1.0:
+            self.last_sent_t = self.t
             self._pub_path()
             self.sent = True
             self.get_logger().info("published sparse /initial_path [0, 2, 4]")
