@@ -90,7 +90,7 @@ class Test(Node):
                 f"RESULT final_x={self.x:.3f} max_x={self.max_x:.3f} "
                 f"overshoot={overshoot:+.3f} final_err={final_err:.3f} stopped={stopped}")
             self.get_logger().info("PASS" if ok else "FAIL: overshoot/err too large")
-            rclpy.shutdown(); sys.exit(0 if ok else 1)
+            sys.exit(0 if ok else 1)
 
     def _pub_scan(self):
         m = LaserScan()
@@ -106,7 +106,13 @@ class Test(Node):
 
 def main():
     rclpy.init()
-    rclpy.spin(Test())
+    try:
+        # Callbacks finish with sys.exit(); rclpy.shutdown() inside a callback
+        # deadlocks on Humble, so shut down here once spin() unwinds.
+        rclpy.spin(Test())
+    finally:
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

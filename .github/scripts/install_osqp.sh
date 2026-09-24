@@ -24,4 +24,8 @@ cmake -S "$WORK/osqp-eigen" -B "$WORK/osqp-eigen/build" \
 cmake --build "$WORK/osqp-eigen/build" -j"$(nproc)"
 $SUDO cmake --install "$WORK/osqp-eigen/build"
 
+# Refresh the loader cache, or installed binaries (e.g. neupan_node, which
+# has no RPATH to /usr/local/lib) fail with "libOsqpEigen.so: cannot open".
+$SUDO ldconfig
+
 rm -rf "$WORK"

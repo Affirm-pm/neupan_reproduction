@@ -82,17 +82,21 @@ class SmokeDriver(Node):
             self.get_logger().info(
                 f"PASS: received {self.cmd_count} /cmd_vel msgs; "
                 f"last v={self.last_cmd.linear.x:.3f} w={self.last_cmd.angular.z:.3f}")
-            rclpy.shutdown()
             sys.exit(0)
         else:
             self.get_logger().error("FAIL: no /cmd_vel received")
-            rclpy.shutdown()
             sys.exit(1)
 
 
 def main():
     rclpy.init()
-    rclpy.spin(SmokeDriver())
+    try:
+        # Callbacks finish with sys.exit(); rclpy.shutdown() inside a callback
+        # deadlocks on Humble, so shut down here once spin() unwinds.
+        rclpy.spin(SmokeDriver())
+    finally:
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

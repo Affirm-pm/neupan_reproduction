@@ -86,11 +86,11 @@ class ClosedLoop(Node):
 
         if self.goal_sent and math.hypot(self.gx - self.x, self.gy - self.y) < 0.2:
             self.get_logger().info(f"ARRIVED at t={self.t:.1f}")
-            rclpy.shutdown(); sys.exit(0)
+            sys.exit(0)
 
         if self.t > 25.0:
             self.get_logger().error("TIMEOUT (did not arrive)")
-            rclpy.shutdown(); sys.exit(1)
+            sys.exit(1)
 
     def _pub_scan(self):
         msg = LaserScan()
@@ -108,7 +108,13 @@ def main():
     gx = float(sys.argv[1]) if len(sys.argv) > 1 else 3.0
     gy = float(sys.argv[2]) if len(sys.argv) > 2 else 0.0
     rclpy.init()
-    rclpy.spin(ClosedLoop(gx, gy))
+    try:
+        # Callbacks finish with sys.exit(); rclpy.shutdown() inside a callback
+        # deadlocks on Humble, so shut down here once spin() unwinds.
+        rclpy.spin(ClosedLoop(gx, gy))
+    finally:
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

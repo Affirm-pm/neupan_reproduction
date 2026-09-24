@@ -92,7 +92,7 @@ class AStarTest(Node):
     def _finish(self):
         if not self.got_path:
             self.get_logger().error("FAIL: no /initial_path received")
-            rclpy.shutdown(); sys.exit(1)
+            sys.exit(1)
         xs = [p[0] for p in self.got_path]
         ys = [p[1] for p in self.got_path]
         max_y = max(ys)
@@ -106,12 +106,18 @@ class AStarTest(Node):
             f"path: {len(self.got_path)} wpts, start={self.got_path[0]}, "
             f"end={self.got_path[-1]}, max_y={max_y:.2f}, in_wall={in_wall}")
         self.get_logger().info("PASS" if ok else "FAIL: path did not detour cleanly")
-        rclpy.shutdown(); sys.exit(0 if ok else 1)
+        sys.exit(0 if ok else 1)
 
 
 def main():
     rclpy.init()
-    rclpy.spin(AStarTest())
+    try:
+        # Callbacks finish with sys.exit(); rclpy.shutdown() inside a callback
+        # deadlocks on Humble, so shut down here once spin() unwinds.
+        rclpy.spin(AStarTest())
+    finally:
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

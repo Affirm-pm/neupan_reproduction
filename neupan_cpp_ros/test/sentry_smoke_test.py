@@ -95,15 +95,21 @@ class SentrySmoke(Node):
             self.get_logger().info(
                 f"PASS: {self.cmd_count} /cmd_vel msgs; "
                 f"last v={self.last_cmd.linear.x:.3f} w={self.last_cmd.angular.z:.3f}")
-            rclpy.shutdown(); sys.exit(0)
+            sys.exit(0)
         self.get_logger().error(
             f"FAIL: count={self.cmd_count} finite={finite} moved={self.moved}")
-        rclpy.shutdown(); sys.exit(1)
+        sys.exit(1)
 
 
 def main():
     rclpy.init()
-    rclpy.spin(SentrySmoke())
+    try:
+        # Callbacks finish with sys.exit(); rclpy.shutdown() inside a callback
+        # deadlocks on Humble, so shut down here once spin() unwinds.
+        rclpy.spin(SentrySmoke())
+    finally:
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":
