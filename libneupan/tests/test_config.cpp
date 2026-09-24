@@ -13,10 +13,13 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include "neupan/initial_path.hpp"
 #include "neupan/math_utils.hpp"
@@ -25,6 +28,17 @@
 using namespace neupan;
 
 namespace {
+
+const std::string kModel = std::string(NEUPAN_MODEL_DIR) + "/diff_default.bin";
+
+std::string writeYaml(const std::string& name, const std::string& body) {
+  const auto path = std::filesystem::temp_directory_path() / name;
+  std::ofstream(path) << body;
+  return path.string();
+}
+
+// Footprint of diff_default.bin, so the checkpoint check passes.
+const char* kRobotYaml = "robot: {kinematics: diff, length: 1.6, width: 2.0}\n";
 
 using Mutation = std::function<void(NeuPANPlanner::Config&)>;
 
@@ -86,4 +100,28 @@ TEST(MathUtils, WrapToPi) {
   EXPECT_LE(std::abs(wrapToPi(123.456)), kPi);
   // The old subtract loop never returned for inf.
   EXPECT_TRUE(std::isnan(wrapToPi(std::numeric_limits<double>::infinity())));
+}
+
+TEST(Config, FromYamlReadsTheOptionalOsqpBlock) {
+  const auto path = writeYaml(
+      "neupan_osqp.yaml",
+      std::string(kRobotYaml) +
+          "osqp: {max_iter: 500, time_limit: 0.015, polish: false}\n");
+  const NeuPANPlanner planner = NeuPANPlanner::fromYaml(path, kModel);
+  const NRMPParams::Solver& s = planner.config().adjust.solver;
+  EXPECT_EQ(s.max_iter, 500);
+  EXPECT_DOUBLE_EQ(s.time_limit, 0.015);
+  EXPECT_FALSE(s.polish);
+  EXPECT_DOUBLE_EQ(s.eps_abs, NRMPParams::Solver{}.eps_abs);  // untouched
+}
+
+TEST(Config, FromYamlRejectsUnportedFeatures) {
+  EXPECT_THROW(NeuPANPlanner::fromYaml(
+                   writeYaml("neupan_acker.yaml",
+                             "robot: {kinematics: acker}\n"),
+                   kModel),
+               std::runtime_error);
+  EXPECT_THROW(NeuPANPlanner::fromYaml(
+                   writeYaml("neupan_nockpt.yaml", kRobotYaml), ""),
+               std::runtime_error);
 }

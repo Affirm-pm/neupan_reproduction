@@ -81,7 +81,10 @@ TEST(SafetySupervisor, FlagsAStallAndClearsItOnProgress) {
   SafetySupervisor sup(opts);
   const Vec2 idle(0.01, 0.0);
 
-  sup.filter(cycle(true), idle, 5.0);  // first cycle starts the clock
+  // The first cycle starts the clock; counting from time zero would flag a
+  // stall right away (the "start bug").
+  sup.filter(cycle(true), idle, 5.0);
+  EXPECT_FALSE(sup.stalled());
   sup.filter(cycle(true), idle, 5.9);
   EXPECT_FALSE(sup.stalled());
   sup.filter(cycle(true), idle, 6.1);
