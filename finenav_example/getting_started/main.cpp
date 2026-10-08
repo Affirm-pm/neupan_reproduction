@@ -31,16 +31,21 @@ int main(int argc, char** argv) {
 
     // 2. Assemble a ControlLayer from a WorldView bridge by NAME.
     //    createControlLayerByWorldView resolves the planner + map TYPES the bridge
-    //    declares back to their registered names ("dummy_planner" / "dummy_map"),
+    //    declares back to their registered names ("neupan_planner" / "dummy_map"),
     //    reuses (or creates) the MapServer, builds the IWorldView and attaches it.
     //    The end user never names a planner or a map — only the WorldView.
     //    The factory reports success rather than handing back a layer handle:
     //    the assembled stage is the algorithm developer's to drive, so the
     //    application only learns whether assembly worked.
-    if (!engine->createControlLayerByWorldView("dummy_world_view", "my_layer",
+    //
+    //    "neupan_world_view" comes from finenav_example's
+    //    create_custom_neupan_planner; swap it back to "dummy_world_view" to run
+    //    the original example.  Its parameters live under
+    //    hello_finenav/my_layer in neupan_sim.yaml.
+    if (!engine->createControlLayerByWorldView("neupan_world_view", "my_layer",
                                                core::PeriodicPolicy{10.0})) {
         RCLCPP_ERROR(node->get_logger(),
-            "Failed to assemble 'my_layer' from WorldView 'dummy_world_view'.");
+            "Failed to assemble 'my_layer' from WorldView 'neupan_world_view'.");
         rclcpp::shutdown();
         return 1;
     }

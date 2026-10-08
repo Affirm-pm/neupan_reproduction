@@ -1,0 +1,144 @@
+# ==============================================================================
+#  NeuPAN WorldView bridge — parameter definition
+# ==============================================================================
+#
+#  The top-level key MUST equal the first argument of FINENAV_REGISTER_WORLDVIEW
+#  (`neupan_world_view` below) — the framework builds this WorldView's
+#  ParamListener under that name, so the key, the registration name and the
+#  generated C++ namespace are one and the same string.
+#
+#  This bridge is what turns "the world" into "the obstacles NeuPAN can see".
+#  It holds its OWN subscription on the ControlLayer's private sub-node, which
+#  the framework hands to the WorldView constructor: a WorldView is built once
+#  per layer and lives as long as the layer, so holding a subscription cache is
+#  exactly what it is for (see world_view_concept.hpp).
+#
+#  Why it does not read a Map: FineNav's only registered map in this repository
+#  is the inert example::DummyMap.  The bridge is registered against it purely
+#  to satisfy FINENAV_REGISTER_WORLDVIEW's map-argument list, in the same shape
+#  as create_custom_world_view; it never dereferences it.  If you later add a
+#  real point-cloud or occupancy map plugin, take it here as a constructor
+#  argument and read it instead of subscribing.
+#
+#  ── Hot-reloadable vs read_only ────────────────────────────────────────────
+#
+#  Nothing here is read_only: every value below is either a scalar cached in
+#  configure() or a topic identity, and changing the topic identity simply
+#  re-creates the subscription.  Note that configure() runs AFTER the
+#  constructor, so the subscription is installed on the first configure() call
+#  rather than in the constructor.
+#
+# ==============================================================================
+
+neupan_world_view:
+
+  # ── Obstacle source ──────────────────────────────────────────────────────
+
+  points_topic:
+    type: string
+    default_value: "/scan"
+    description: "Topic the obstacle points are read from. Changing it, or points_type, re-creates the subscription."
+
+  points_type:
+    type: string
+    default_value: "laser_scan"
+    description: "Message kind on points_topic: 'laser_scan' (sensor_msgs/LaserScan) or 'point_cloud2' (sensor_msgs/PointCloud2). Changing it re-creates the subscription."
+
+  points_frame:
+    type: string
+    default_value: ""
+    description: "Frame the points are expressed in; empty means 'use the message header frame_id'. Points are transformed from here into finenav::common::frames().world_fixed before NeuPAN sees them."
+
+  # ── Filtering ────────────────────────────────────────────────────────────
+  #
+  #  These mirror the upstream neupan_cpp_ros node's scan_* parameters so the
+  #  two stacks can be tuned the same way.
+
+  scan_angle_min:
+    type: double
+    default_value: -3.14159265358979
+    description: "Beams outside (scan_angle_min, scan_angle_max) are dropped [rad]. LaserScan only."
+    validation:
+      bounds<>: [-3.14159265358979, 3.14159265358979]
+
+  scan_angle_max:
+    type: double
+    default_value: 3.14159265358979
+    description: "Upper angle limit of the accepted beam range [rad]. LaserScan only."
+    validation:
+      bounds<>: [-3.14159265358979, 3.14159265358979]
+
+  scan_range_min:
+    type: double
+    default_value: 0.0
+    description: "Ranges closer than this are dropped [m]. LaserScan only."
+    validation:
+      bounds<>: [0.0, 1000.0]
+
+  scan_range_max:
+    type: double
+    default_value: 5.0
+    description: "Ranges farther than this are dropped [m]. A larger value is not free: NeuPAN feeds every point to DUNE."
+    validation:
+      bounds<>: [0.0, 1000.0]
+
+  scan_downsample:
+    type: int
+    default_value: 1
+    description: "Keep every N-th beam (1 = keep all). LaserScan only."
+    validation:
+      gt<>: [0]
+
+  flip_angle:
+    type: bool
+    default_value: false
+    description: "Reverse the beam order (angle = angle_max - i * increment) for sensors that report beams backwards. LaserScan only."
+
+  # ── World-frame height band ──────────────────────────────────────────────
+  #
+  #  THE filter that turns a 3D cloud into the 2D obstacle set NeuPAN expects.
+  #  Applied in prepare(), AFTER the transform into
+  #  finenav::common::frames().world_fixed, so the band is expressed in the same
+  #  frame the ground plane lives in (z = 0) and is independent of how the
+  #  sensor happens to be mounted.
+  #
+  #  Why it is not optional on a 3D lidar: the simulator's robot carries a
+  #  gpu_lidar with a 360 x 64 pattern and a vertical field of view of
+  #  -0.23 .. +1.57 rad.  A downward-looking ray reaches the floor a few metres
+  #  ahead, so beyond that distance EVERY ray returns a ground point.  Collapsed
+  #  onto x/y those returns form a solid ring of phantom obstacles and NeuPAN
+  #  refuses to move.  The same problem is why this repository's fast_lio
+  #  pipeline runs octomap_server with occupancy_min_z = 0.15.
+  #
+  #  Both bounds are inclusive.  Set max_height very large to disable the upper
+  #  bound; the lower bound should always stay above the floor returns.
+
+  min_height:
+    type: double
+    default_value: 0.15
+    description: "Keep only points whose world-frame z is >= this [m]. Must sit above the floor returns; 0.15 clears a flat floor at z = 0."
+    validation:
+      bounds<>: [-1000.0, 1000.0]
+
+  max_height:
+    type: double
+    default_value: 2.0
+    description: "Keep only points whose world-frame z is <= this [m]. Excludes ceilings and overhangs; raise it on uneven terrain."
+    validation:
+      bounds<>: [-1000.0, 1000.0]
+
+  # ── Runtime safety ───────────────────────────────────────────────────────
+
+  points_timeout:
+    type: double
+    default_value: 0.5
+    description: "Seconds after which a silent sensor is treated as 'no obstacles known' [s], so a frozen scan cannot be mistaken for a clear path (upstream node: scan_timeout)."
+    validation:
+      bounds<>: [0.0, 1000.0]
+
+  max_points:
+    type: int
+    default_value: 0
+    description: "Cap on the points handed to NeuPAN per cycle; the nearest ones are kept. 0 = unlimited. Purely a performance guard — keep it at or above the planner's dune_max_num so it never changes what the algorithm sees."
+    validation:
+      bounds<>: [0, 1000000]

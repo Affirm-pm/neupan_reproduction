@@ -1,0 +1,68 @@
+# ==============================================================================
+#  NeuPAN plugin — simulation configuration (fine_simulator / lio_type:=static)
+# ==============================================================================
+#
+#  Used TOGETHER with getting_started/params/sim_localizer.yaml, which sets
+#  use_sim_time and configures the localizer + navigator:
+#
+#    ros2 run finenav_example hello_finenav --ros-args \
+#      --params-file FineNav-Engine/finenav_example/getting_started/params/sim_localizer.yaml \
+#      --params-file FineNav-Engine/finenav_example/create_custom_neupan_planner/neupan_sim.yaml
+#
+#  The node key is /<engine node>/<layer name>: the plugin parameters are
+#  declared on the ControlLayer's PRIVATE node, whose full name is
+#  /hello_finenav/my_layer (engine node name becomes its namespace, the layer
+#  name becomes its node name).  "my_layer" is the layer name main.cpp uses.
+# ==============================================================================
+
+hello_finenav:
+  my_layer:
+    ros__parameters:
+
+      neupan_planner:
+        # This simulator's robot is 0.6 x 0.4 x 0.3 m, but the shipped DUNE
+        # weights (diff_default.bin) were trained for 1.6 x 2.0 m and libneupan
+        # compares the two at load time, throwing on a mismatch.  So the planner
+        # is told it is 1.6 x 2.0: it runs, but keeps a much larger safety margin
+        # than the real robot needs.  To do it properly, export the weights for
+        # the real footprint with upstream's tools/export_dune_weights.py, point
+        # dune_checkpoint at the result, and set these two to 0.6 / 0.4.
+        robot_length: 1.6
+        robot_width: 2.0
+
+        # The default 4.0 m/s is far too fast for this robot in a small maze.
+        ref_speed: 0.6
+
+        # Stop distance for the hard-stop gate.  Default 0.1.
+        collision_threshold: 0.15
+
+      neupan_world_view:
+        # The simulator's point_cloud_converter_node publishes the obstacle
+        # cloud here.  With lio_type != fast_lio it already transforms the cloud
+        # into base_link and removes the robot's self-returns, which is exactly
+        # what this view wants — hence points_type point_cloud2 and an empty
+        # points_frame (use the message header).
+        #
+        # Do NOT point this at /livox/lidar: that is the raw cloud in the Gazebo
+        # sensor frame, before self-filtering.
+        points_topic: "/cloud_for_lio"
+        points_type: "point_cloud2"
+        points_frame: ""
+
+        # Range gate around the robot [m].  The lower bound hides the robot's
+        # own body; the upper bound keeps the point count (and DUNE's
+        # decimation) meaningful.
+        scan_range_min: 0.4
+        scan_range_max: 6.0
+
+        # The filter that makes a 3D lidar usable by a 2D planner: the robot's
+        # gpu_lidar spans -0.23 .. +1.57 rad vertically, so beyond ~1.7 m every
+        # ray hits the floor and would read as a ring of obstacles.  Keeping
+        # world-frame z in [0.15, 2.0] drops the floor and keeps the walls.
+        #
+        # Raise max_height on the uneven worlds (map_hill, map_vocano) and on
+        # anything with a ceiling you do NOT want treated as an obstacle.
+        min_height: 0.15
+        max_height: 2.0
+
+        points_timeout: 0.5

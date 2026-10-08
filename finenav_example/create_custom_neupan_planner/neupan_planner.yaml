@@ -1,0 +1,281 @@
+# ==============================================================================
+#  NeuPAN planner plugin — parameter definition
+# ==============================================================================
+#
+#  The top-level key MUST equal the first argument of FINENAV_REGISTER_PLANNER
+#  (`neupan_planner` below) — the framework builds this planner's ParamListener
+#  under that name, so the key, the registration name and the generated C++
+#  namespace are one and the same string.
+#
+#  NOTE ON NAMING: the namespace is `neupan_planner`, deliberately NOT `neupan`.
+#  The C++ port of the algorithm (libneupan) already occupies `namespace neupan`;
+#  a parameter namespace of the same name would be merged into it.
+#
+#  ── Hot-reloadable vs read_only ────────────────────────────────────────────
+#
+#  A parameter with no `read_only` flag is applied at startup AND on every
+#  `ros2 param set`.  A parameter marked `read_only: true` is applied once at
+#  startup, and `ros2 param set` on it is rejected by generate_parameter_library.
+#
+#  IMPORTANT: `neupan::NeuPANPlanner` is immutable once constructed — its
+#  receding horizon, robot geometry and NRMP weights are baked into the QP
+#  dimensions and into the DUNE model that was trained for a specific footprint.
+#  So a hot parameter that feeds `Config` still triggers a full planner rebuild
+#  in configure().  Only `ref_speed` and the plugin-side safety thresholds are
+#  applied in place, without a rebuild.
+#
+#  ── Relation to libneupan's own planner.yaml ───────────────────────────────
+#
+#  Every construction-time field of `neupan::NeuPANPlanner::Config` is exposed
+#  here as an ordinary ROS parameter, so the whole configuration is visible in
+#  `ros2 param list` and tunable with `ros2 param set`.  Because of that this
+#  plugin does NOT read libneupan's `planner.yaml` — the two would silently
+#  diverge.  See neupan_cpp/neupan_cpp_ros/config/planner.yaml for the upstream
+#  key names each parameter below corresponds to.
+#
+# ==============================================================================
+
+neupan_planner:
+
+  # ── Runtime-tunable (no rebuild) ─────────────────────────────────────────
+
+  ref_speed:
+    type: double
+    default_value: 4.0
+    description: "Reference speed the initial path is traversed at [m/s] (upstream: ref_speed). Applied in place via setReferenceSpeed()."
+    validation:
+      gt<>: [0.0]
+
+  solver_fail_grace:
+    type: int
+    default_value: 5
+    description: "Consecutive unsolved cycles tolerated before the plugin commands zero velocity (upstream node: solver_fail_grace). Plugin-side safety, not part of Config."
+    validation:
+      bounds<>: [0, 1000]
+
+  stall_speed:
+    type: double
+    default_value: 0.02
+    description: "Speed below which the robot counts as not moving [m/s], for the stall warning only. Plugin-side safety (upstream node: stall_speed)."
+    validation:
+      bounds<>: [0.0, 10.0]
+
+  stall_timeout:
+    type: double
+    default_value: 3.0
+    description: "Seconds without motion before a stall warning is logged [s]. Plugin-side safety (upstream node: stall_timeout)."
+    validation:
+      bounds<>: [0.0, 1000.0]
+
+  # ── Hot, but forces a planner rebuild ────────────────────────────────────
+
+  collision_threshold:
+    type: double
+    default_value: 0.1
+    description: "Hard-stop clearance [m]: min_distance below this makes forward() report stop. Must be > 0 (validate() rejects 0). Rebuild."
+    validation:
+      gt<>: [0.0]
+
+  iter_num:
+    type: int
+    default_value: 2
+    description: "PAN outer-loop iterations per control step (upstream: pan.iter_num). Rebuild."
+    validation:
+      gt<>: [0]
+
+  iter_threshold:
+    type: double
+    default_value: 0.1
+    description: "PAN outer-loop convergence threshold (upstream: pan.iter_threshold). Rebuild."
+    validation:
+      bounds<>: [0.0, 100.0]
+
+  dune_max_num:
+    type: int
+    default_value: 100
+    description: "Maximum obstacle points fed to DUNE per stage (upstream: pan.dune_max_num). Rebuild."
+    validation:
+      gt<>: [0]
+
+  nrmp_max_num:
+    type: int
+    default_value: 10
+    description: "Maximum dual variables / closest points kept by NRMP (upstream: pan.nrmp_max_num -> adjust.max_num). Rebuild."
+    validation:
+      gt<>: [0]
+
+  q_s:
+    type: double
+    default_value: 1.0
+    description: "State tracking weight; broadcast to all three entries of adjust.q_s (upstream: adjust.q_s, scalar form). Rebuild."
+    validation:
+      gt<>: [0.0]
+
+  p_u:
+    type: double
+    default_value: 1.0
+    description: "Control-effort weight (upstream: adjust.p_u). Rebuild."
+    validation:
+      gt<>: [0.0]
+
+  eta:
+    type: double
+    default_value: 15.0
+    description: "Clearance reward weight (upstream: adjust.eta). If eta > 0 then d_max must be > 0, otherwise validate() rejects the config. Rebuild."
+    validation:
+      bounds<>: [-1000.0, 1000.0]
+
+  d_max:
+    type: double
+    default_value: 1.0
+    description: "Upper bound of the desired clearance box [m] (upstream: adjust.d_max). Must be >= d_min. Rebuild."
+    validation:
+      bounds<>: [0.0, 100.0]
+
+  d_min:
+    type: double
+    default_value: 0.1
+    description: "Lower bound of the desired clearance box [m] (upstream: adjust.d_min). Must be >= 0 and <= d_max. Rebuild."
+    validation:
+      bounds<>: [0.0, 100.0]
+
+  ro_obs:
+    type: double
+    default_value: 400.0
+    description: "Obstacle contact penalty weight (upstream: adjust.ro_obs). Rebuild."
+    validation:
+      gt<>: [0.0]
+
+  bk:
+    type: double
+    default_value: 0.1
+    description: "NRMP regularization weight (upstream: adjust.bk). Rebuild."
+    validation:
+      bounds<>: [0.0, 100.0]
+
+  dune_checkpoint:
+    type: string
+    default_value: ""
+    description: "Path to the exported NPTF DUNE model (.bin). Empty falls back to the build-time default resolved from libneupan's models directory. Rebuild."
+    # No validation: an empty string is meaningful (means "use the default"),
+    # and the file's existence is checked in configure() where a clear
+    # actionable error can be logged instead of a parameter rejection.
+
+  # ── read_only: baked into the QP dimensions or into the DUNE model ───────
+  #
+  #  These cannot change safely while the planner is running: `receding` and
+  #  `step_time` fix the decision-variable layout of the OSQP problem, and
+  #  length/width must match the footprint the loaded DUNE weights were trained
+  #  for (libneupan compares them at load time and throws on mismatch).
+
+  receding:
+    type: int
+    default_value: 10
+    read_only: true
+    description: "MPC prediction horizon N, in steps (upstream: receding)."
+    validation:
+      gt<>: [0]
+
+  step_time:
+    type: double
+    default_value: 0.1
+    read_only: true
+    description: "MPC sampling interval [s] (upstream: step_time)."
+    validation:
+      gt<>: [0.0]
+
+  robot_length:
+    type: double
+    default_value: 1.6
+    read_only: true
+    description: "Robot footprint length [m] (upstream: robot.length). Must equal the value the loaded DUNE model was trained with."
+    validation:
+      gt<>: [0.0]
+
+  robot_width:
+    type: double
+    default_value: 2.0
+    read_only: true
+    description: "Robot footprint width [m] (upstream: robot.width). Must equal the value the loaded DUNE model was trained with."
+    validation:
+      gt<>: [0.0]
+
+  robot_wheelbase:
+    type: double
+    default_value: 0.0
+    read_only: true
+    description: "Wheelbase [m]; 0 for a differential-drive rectangle (upstream: robot.wheelbase)."
+    validation:
+      bounds<>: [0.0, 10.0]
+
+  max_speed_linear:
+    type: double
+    default_value: 8.0
+    read_only: true
+    description: "Maximum forward speed [m/s] (upstream: robot.max_speed[0])."
+    validation:
+      gt<>: [0.0]
+
+  max_speed_angular:
+    type: double
+    default_value: 1.0
+    read_only: true
+    description: "Maximum yaw rate [rad/s] (upstream: robot.max_speed[1])."
+    validation:
+      gt<>: [0.0]
+
+  max_acce_linear:
+    type: double
+    default_value: 8.0
+    read_only: true
+    description: "Maximum linear acceleration [m/s^2] (upstream: robot.max_acce[0])."
+    validation:
+      gt<>: [0.0]
+
+  max_acce_angular:
+    type: double
+    default_value: 3.0
+    read_only: true
+    description: "Maximum angular acceleration [rad/s^2] (upstream: robot.max_acce[1])."
+    validation:
+      gt<>: [0.0]
+
+  arrive_threshold:
+    type: double
+    default_value: 0.1
+    read_only: true
+    description: "Distance to the path end that counts as arrival [m] (upstream: ipath.arrive_threshold)."
+    validation:
+      gt<>: [0.0]
+
+  close_threshold:
+    type: double
+    default_value: 0.1
+    read_only: true
+    description: "Threshold for projecting the state back onto a replaced path [m] (upstream: ipath.close_threshold)."
+    validation:
+      gt<>: [0.0]
+
+  ind_range:
+    type: int
+    default_value: 10
+    read_only: true
+    description: "Search window around the current index when re-projecting onto a path (upstream: ipath.ind_range)."
+    validation:
+      gt<>: [0]
+
+  arrive_index_threshold:
+    type: int
+    default_value: 1
+    read_only: true
+    description: "Index distance to the path end that counts as arrival (upstream: ipath.arrive_index_threshold)."
+    validation:
+      gt<>: [0]
+
+  path_interval:
+    type: double
+    default_value: -1.0
+    read_only: true
+    description: "Resampling interval of the internal path [m]. Negative means 'derive it from step_time * ref_speed' (upstream: ipath.interval = -1)."
+    validation:
+      bounds<>: [-1000.0, 1000.0]

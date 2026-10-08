@@ -15,6 +15,9 @@ ament_auto_find_build_dependencies()
 add_subdirectory(create_custom_map)
 add_subdirectory(create_custom_planner)
 add_subdirectory(create_custom_world_view)
+# After create_custom_map: this plugin registers its WorldView against the
+# dummy_map target, so that target must already be defined.
+add_subdirectory(create_custom_neupan_planner)
 add_subdirectory(getting_started)
 
 ament_auto_package(USE_SCOPED_HEADER_INSTALL_DIR)
