@@ -41,8 +41,8 @@ int convexOrientation(const Mat2X& v) {
     }
   }
   return direction > 0.0 ? 1 : -1;
-}
-
+}//该函数用来判断小车多边形的顶点是否按顺时针或逆时针排列，并检查其是否为凸多边形,-1为顺时针，1为逆时针，
+ //抛出异常表示不是凸多边形
 }  // namespace
 
 void genInequalFromVertex(const Mat2X& vertices, Mat& G, Vec& h) {
@@ -67,7 +67,7 @@ void genInequalFromVertex(const Mat2X& vertices, Mat& G, Vec& h) {
     G(i, 1) = -diff.x();
     h(i) = G(i, 0) * pre.x() + G(i, 1) * pre.y();
   }
-}
+}//该函数将凸多边形的顶点转换为不等式约束形式Gx<=h，其中G是法向量矩阵，h是偏置向量。
 
 Robot::Robot(Kinematics kinematics, int receding, double step_time,
              Vec2 max_speed_in, Vec2 max_acce, const Mat2X& vertices_in)
@@ -78,7 +78,7 @@ Robot::Robot(Kinematics kinematics, int receding, double step_time,
       acce_bound(max_acce * step_time),
       vertices(vertices_in) {
   genInequalFromVertex(vertices, G, h);
-}
+}//该函数是Robot类的构造函数，初始化机器人参数，包括运动学类型、时间步长、速度和加速度约束，以及多边形顶点，并生成不等式约束G和h。
 
 Robot Robot::diffRectangle(int receding, double step_time, Vec2 max_speed,
                            Vec2 max_acce, double length, double width,
@@ -92,7 +92,7 @@ Robot Robot::diffRectangle(int receding, double step_time, Vec2 max_speed,
   v.col(3) << sx, sy + width;
   return Robot(Kinematics::Diff, receding, step_time, std::move(max_speed),
                std::move(max_acce), v);
-}
+}//该函数创建一个差动驱动机器人（Diff）的矩形足迹，给定长度、宽度和轮距，并返回一个Robot对象。
 
 Vec3 Robot::propagate(const Vec3& s, const Vec2& u) const {
   switch (kinematics) {
@@ -102,7 +102,7 @@ Vec3 Robot::propagate(const Vec3& s, const Vec2& u) const {
     }
   }
   throw std::logic_error("robot: unhandled kinematics");
-}
+}//该函数用于预测机器人在给定状态和控制输入下的下一个状态。
 
 void Robot::linearize(const Vec3& nom_s_t, const Vec2& nom_u_t, Mat33& A,
                       Mat32& B, Vec3& C) const {
@@ -120,6 +120,6 @@ void Robot::linearize(const Vec3& nom_s_t, const Vec2& nom_u_t, Mat33& A,
       C << phi * v * std::sin(phi) * dt, -phi * v * std::cos(phi) * dt, 0;
       break;
   }
-}
+}//该函数用于线性化机器人动力学模型，计算状态转移矩阵A、控制输入矩阵B和偏置向量C，以便在给定的名义状态和控制输入下进行线性化分析。
 
 }  // namespace neupan
