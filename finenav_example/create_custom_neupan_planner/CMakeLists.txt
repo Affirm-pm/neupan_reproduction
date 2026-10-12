@@ -104,6 +104,8 @@ install(DIRECTORY ${libneupan_MODELS_DIR}/
         DESTINATION share/${PROJECT_NAME}/models)
 
 # Simulation parameter overlay for this plugin (loaded alongside
-# getting_started/params/sim_localizer.yaml via a second --params-file).
-install(FILES neupan_sim.yaml
+# getting_started/params/sim_localizer.yaml via a second --params-file), plus
+# the matching RViz2 view: fixed frame `map`, and its "2D Goal Pose" tool
+# publishes on /goal_pose — the topic hello_finenav consumes for a goal.
+install(FILES neupan_sim.yaml neupan_sim.rviz
         DESTINATION share/${PROJECT_NAME})
