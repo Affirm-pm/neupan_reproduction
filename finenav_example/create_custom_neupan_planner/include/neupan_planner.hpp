@@ -17,6 +17,7 @@
 #include "finenav_core/plugin_planner.hpp"
 
 #include "finenav_example/neupan_planner_params.hpp"
+#include "finenav_visualizer/finenav_visualizer.hpp"
 
 namespace finenav::example {
 
@@ -99,12 +100,21 @@ public:
  * publishes FAULTED and the worker thread returns for good — so a transient
  * problem would kill the layer instead of just pausing the robot.
  *
+ * === Visualisation ===
+ * Implements setVisualizer(), so the framework injects a FineNavVisualizer and
+ * the planner draws on two world-fixed (map) marker topics — named after
+ * neupan_cpp_ros' topics so the two are recognisable side by side:
+ *   - /neupan_initial_path : the reference line the core is following, as a
+ *     line strip.  It only changes when a new path is installed, so it is sent
+ *     on InitialPath::revision() plus a 1 Hz heartbeat - the marker channel is
+ *     Volatile, so a viewer that starts later would otherwise never see it.
+ *   - /neupan_plan         : the MPC trajectory the core planned this cycle
+ *     (Info::opt_s, the next second).  Republished every cycle.
+ * Both carry world-frame points, hence the default Frame::World.
+ *
  * === Not implemented ===
- * - No visualisation: setVisualizer()/viz_ are absent on purpose, so that
- *   finenav_visualizer.hpp (~3.3 s of compile time plus a PCL dependency)
- *   stays out of this plugin.  Add them only if you actually draw.
- * - The MPC horizon the core returns (Info::opt_s) is not republished; only
- *   the first control is.  OutputProfile therefore enables `vel` alone.
+ * - OutputProfile still enables `vel` alone: the MPC horizon is drawn, but not
+ *   handed back to the framework as a trajectory.
  */
 class NeuPanPlanner {
 public:
@@ -141,6 +151,14 @@ public:
     // exactly, otherwise the injection is silently skipped.
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
 
+    /// Framework resource, injected the same way (injectVisualizer() in
+    /// finenav_core/detail/algo_register_details.hpp probes for this name and
+    /// signature).  FineNavVisualizer is a value-semantic handle to a shared
+    /// backend, so copying it in shares the framework's channels; the member is
+    /// default-constructed to an inert handle first, which is what lets plan()
+    /// draw unconditionally instead of testing for a backend.
+    void setVisualizer(const finenav::viz::FineNavVisualizer& viz) { viz_ = viz; }
+
     /// Called by the framework when a new navigation episode starts.
     /// Clears episode state only — the core planner object (and the DUNE model
     /// inside it) is never unloaded here.
@@ -172,6 +190,14 @@ private:
 
     // Fallback used only until setLogger() injects the layer's child logger.
     rclcpp::Logger logger_{rclcpp::get_logger("NeuPanPlanner")};
+
+    // Inert (no backend) until setVisualizer() is called; drawing into it is
+    // always safe and simply goes nowhere.
+    finenav::viz::FineNavVisualizer viz_;
+
+    // InitialPath::revision() already drawn, so a reference line that did not
+    // change is not republished every cycle.
+    int published_path_revision_{-1};
 };
 
 }  // namespace finenav::example

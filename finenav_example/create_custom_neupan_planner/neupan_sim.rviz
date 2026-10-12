@@ -133,6 +133,30 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /goal_pose
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: 'NeuPAN reference path (/neupan_initial_path)'
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /neupan_initial_path
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: 'NeuPAN plan (/neupan_plan)'
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /neupan_plan
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

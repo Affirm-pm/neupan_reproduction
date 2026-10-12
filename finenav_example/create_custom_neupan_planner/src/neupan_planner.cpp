@@ -18,6 +18,8 @@
 #include "neupan/neupan_planner.hpp"
 
 #include "finenav_core/algo_register_macros.hpp"
+#include "finenav_visualizer/color.hpp"
+#include "finenav_visualizer/marker_viz.hpp"
 
 namespace finenav::example {
 
@@ -170,6 +172,14 @@ struct NeuPanPlanner::Impl {
     /// Throttling for the recoverable-condition warnings.  System time, not
     /// ROS time: a warning must still be rate-limited before /clock exists.
     rclcpp::Clock clock{RCL_SYSTEM_TIME};
+
+    /// Revision of the reference path already drawn on /neupan_initial_path.
+    int published_path_revision{-1};
+
+    /// When that line was last sent.  The marker channels publish Volatile, so
+    /// the reference line is re-sent on a slow heartbeat for viewers that
+    /// connect after it was installed.
+    std::chrono::steady_clock::time_point last_path_publish{};
 };
 
 namespace {
@@ -252,6 +262,10 @@ void NeuPanPlanner::configure(const ConfigType& cfg) {
     impl_->have_goal = false;
     impl_->last_path.clear();
     impl_->consecutive_unsolved = 0;
+    // A rebuilt core starts a fresh InitialPath, so its revision() can repeat a
+    // value already drawn; forget what was published or the new reference line
+    // would never be sent.
+    impl_->published_path_revision = -1;
 
     if (checkpoint.empty()) {
         RCLCPP_ERROR(logger_,
@@ -483,7 +497,61 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
         cmd.angular.z = w;
     }
 
-    // ── 5. Stall diagnostics ───────────────────────────────────────────────
+    // ── 5. Visualisation ──────────────────────────────────────────────────
+    // World-fixed marker topics, named after neupan_cpp_ros' so the two are
+    // recognisable side by side.  viz_ is inert unless the framework injected a
+    // backend, so drawing unconditionally costs nothing when nobody watches.
+    //
+    // A MarkerViz message REPLACES the whole picture (it leads with DELETEALL),
+    // so a channel that stops being staged into is not redrawn.
+    //
+    // The channels publish Volatile (detail::TypedChannel uses a plain
+    // create_publisher(topic, 10) - see finenav_visualizer/detail/viz_channel.hpp),
+    // so a viewer that connects LATER than the last message never sees it.  The
+    // reference line is therefore re-sent on a slow heartbeat as well as
+    // whenever it changes: without it, starting RViz after the goal was
+    // accepted would show every other marker and not this one.
+    if (impl_->planner) {
+        const auto& ipath = impl_->planner->ipath();
+        const auto viz_now = std::chrono::steady_clock::now();
+        const bool path_changed =
+            ipath.revision() != impl_->published_path_revision;
+        const bool path_heartbeat =
+            (viz_now - impl_->last_path_publish) > std::chrono::seconds(1);
+
+        if (ipath.hasPath() && (path_changed || path_heartbeat)) {
+            const auto& points = ipath.initialPath();
+            std::vector<Eigen::Vector3d> line;
+            line.reserve(points.size());
+            for (const auto& p : points) line.emplace_back(p(0), p(1), 0.0);
+            // A single point is not a line: a goal the robot already stands on
+            // generates exactly that.
+            if (line.size() >= 2) {
+                auto& channel = viz_.markers("/neupan_initial_path");
+                channel.addLineStrip(
+                    line, 0.03, ::finenav::viz::Color{0.15f, 0.45f, 1.0f});
+                viz_.publish(channel);   // world-fixed data: default Frame
+                impl_->published_path_revision = ipath.revision();
+                impl_->last_path_publish = viz_now;
+            }
+        }
+
+        // The MPC trajectory moves every cycle, so it is drawn every cycle.
+        // Unsolved cycles leave opt_s at the previous nominal, which would draw
+        // a plan the solver did not stand behind - skip them.
+        if (info.solved && info.opt_s.cols() >= 2) {
+            std::vector<Eigen::Vector3d> plan;
+            plan.reserve(static_cast<std::size_t>(info.opt_s.cols()));
+            for (Eigen::Index i = 0; i < info.opt_s.cols(); ++i)
+                plan.emplace_back(info.opt_s(0, i), info.opt_s(1, i), 0.0);
+            auto& channel = viz_.markers("/neupan_plan");
+            channel.addLineStrip(
+                plan, 0.02, ::finenav::viz::Color{0.20f, 1.0f, 0.30f});
+            viz_.publish(channel);
+        }
+    }
+
+    // ── 6. Stall diagnostics ───────────────────────────────────────────────
     // NeuPAN only avoids locally: with a single-pose reference it beelines for
     // the goal, so a concave obstacle can leave it idling at the clearance with
     // neither stop nor arrive set.  Reporting that is the whole point of this
@@ -504,7 +572,7 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
         }
     }
 
-    // ── 6. Package the result ──────────────────────────────────────────────
+    // ── 7. Package the result ──────────────────────────────────────────────
     using Trajectory = finenav::core::Trajectory<OutputProfile>;
     Trajectory result;
     result.twists.push_back(cmd);

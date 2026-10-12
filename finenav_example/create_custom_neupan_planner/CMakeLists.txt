@@ -37,6 +37,10 @@ find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
+# For setVisualizer(): the plugin draws the reference path / plan as markers.
+# finenav_core already depends on it and exports it, but naming it here keeps
+# the include path and the library explicit rather than transitive.
+find_package(finenav_visualizer REQUIRED)
 
 generate_parameter_library(neupan_planner_params neupan_planner.yaml)
 generate_parameter_library(neupan_world_view_params neupan_world_view.yaml)
@@ -52,7 +56,7 @@ target_include_directories(neupan_planner PUBLIC include)
 target_link_libraries(neupan_planner
     neupan_planner_params
     neupan::neupan)
-ament_target_dependencies(neupan_planner finenav_core)
+ament_target_dependencies(neupan_planner finenav_core finenav_visualizer)
 
 # The DUNE checkpoint used when neupan_planner.dune_checkpoint is left empty.
 #
