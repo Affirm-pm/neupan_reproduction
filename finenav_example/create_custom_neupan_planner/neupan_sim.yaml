@@ -20,15 +20,18 @@ hello_finenav:
     ros__parameters:
 
       neupan_planner:
-        # This simulator's robot is 0.6 x 0.4 x 0.3 m, but the shipped DUNE
-        # weights (diff_default.bin) were trained for 1.6 x 2.0 m and libneupan
-        # compares the two at load time, throwing on a mismatch.  So the planner
-        # is told it is 1.6 x 2.0: it runs, but keeps a much larger safety margin
-        # than the real robot needs.  To do it properly, export the weights for
-        # the real footprint with upstream's tools/export_dune_weights.py, point
-        # dune_checkpoint at the result, and set these two to 0.6 / 0.4.
-        robot_length: 1.6
-        robot_width: 2.0
+        # This simulator's robot is 0.6 x 0.4 x 0.3 m
+        # (finenav_simulator/resource/robot/model.sdf.xmacro).  These two MUST
+        # equal the footprint the loaded DUNE model was trained with: libneupan
+        # compares them at load time and throws on a mismatch.
+        #
+        # The plugin's build-time default is now diff_0p6x0p4.bin — a DUNE
+        # trained for exactly this footprint (see the NEUPAN_DEFAULT_CHECKPOINT
+        # comment in CMakeLists.txt) — so model and values agree.  If you swap in
+        # another model, export it with upstream's tools/export_dune_weights.py,
+        # passing the same <length> <width>, and update these two to match.
+        robot_length: 0.6
+        robot_width: 0.4
 
         # The default 4.0 m/s is far too fast for this robot in a small maze.
         ref_speed: 0.6

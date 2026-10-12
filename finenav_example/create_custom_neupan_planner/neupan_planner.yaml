@@ -186,7 +186,7 @@ neupan_planner:
 
   robot_length:
     type: double
-    default_value: 1.6
+    default_value: 0.6
     read_only: true
     description: "Robot footprint length [m] (upstream: robot.length). Must equal the value the loaded DUNE model was trained with."
     validation:
@@ -194,7 +194,7 @@ neupan_planner:
 
   robot_width:
     type: double
-    default_value: 2.0
+    default_value: 0.4
     read_only: true
     description: "Robot footprint width [m] (upstream: robot.width). Must equal the value the loaded DUNE model was trained with."
     validation:
