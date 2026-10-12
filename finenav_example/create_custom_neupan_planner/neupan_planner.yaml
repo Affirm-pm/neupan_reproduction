@@ -56,14 +56,14 @@ neupan_planner:
   stall_speed:
     type: double
     default_value: 0.02
-    description: "Speed below which the robot counts as not moving [m/s], for the stall warning only. Plugin-side safety (upstream node: stall_speed)."
+    description: "Commanded speed below which the solver counts as idle [m/s], for the idle warning only. Not a stuck check: the robot can be leaning on an obstacle with a command above this. Plugin-side safety (upstream node: stall_speed)."
     validation:
       bounds<>: [0.0, 10.0]
 
   stall_timeout:
     type: double
     default_value: 3.0
-    description: "Seconds without motion before a stall warning is logged [s]. Plugin-side safety (upstream node: stall_timeout)."
+    description: "Seconds without motion before a stall is reported [s]. Also the trigger for the automatic stuck recovery: after this long with no net progress (measured on the pose, not the command) the plugin re-installs the reference from the current pose, up to 5 times per blockage. Plugin-side safety (upstream node: stall_timeout)."
     validation:
       bounds<>: [0.0, 1000.0]
 

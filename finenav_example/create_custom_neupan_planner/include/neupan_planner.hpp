@@ -100,6 +100,27 @@ public:
  * publishes FAULTED and the worker thread returns for good — so a transient
  * problem would kill the layer instead of just pausing the robot.
  *
+ * === Stuck recovery ===
+ * NeuPAN follows the reference it is given and never routes around anything, so
+ * a single-pose (goal) reference blocked by a concave obstacle leaves the robot
+ * leaning at the clearance — neither stopped nor arrived — for as long as the
+ * goal stands.  plan() therefore watches the POSE (not the command, which stays
+ * non-zero while the robot leans on something) and, after `stall_timeout`
+ * seconds without 0.15 m of net progress, re-installs the reference from where
+ * the robot actually is: a three-pose detour toward the less obstructed side
+ * when the straight line looks blocked, otherwise the straight line again.  The
+ * core is reset with it, so the warm-started nominal cannot drag the optimizer
+ * back into the minimum it just escaped.
+ *
+ * That is a local repair of a local failure mode: it un-sticks the optimizer, it
+ * does not plan a route.  The budget is 5 recoveries per blockage, after which
+ * plan() says so and leaves the robot to the safety gate.  The real remedy is a
+ * global planner, and this plugin already accepts one — a reference of >= 2
+ * poses is taken as a PATH (setInitialPath / replaceInitialPath) — which is why
+ * path references are deliberately NOT recovered: re-projecting onto the
+ * framework's path is the correct behaviour there, and inventing a detour would
+ * fight the global plan rather than help it.
+ *
  * === Visualisation ===
  * Implements setVisualizer(), so the framework injects a FineNavVisualizer and
  * the planner draws on two world-fixed (map) marker topics — named after

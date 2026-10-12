@@ -142,6 +142,84 @@ std::string resolveCheckpoint(const std::string& configured) {
 #endif
 }
 
+// ── Stuck-recovery geometry ──────────────────────────────────────────────────
+//
+// NeuPAN follows the reference it is handed and never routes around anything:
+// with the single-pose reference the framework sends, that is a straight line
+// from where the goal was accepted to the goal.  When that line is blocked by a
+// concave obstacle the local optimizer settles into a minimum - it leans on the
+// obstacle with a small command and neither stops nor arrives, which is the
+// "stuck for a long time" a caller sees.
+//
+// recoveryWaypoint() is the crudest thing that breaks that tie: it picks a
+// point off to whichever side of the line carries less obstacle, so the core is
+// handed a three-pose reference (current -> detour -> goal) instead of a line
+// straight into the obstacle.  It shifts the local minimum; it is NOT a global
+// planner and cannot decide to go around a wall the corridor hides.
+
+/// Where the detour waypoint goes: this far along the line, and this far to the
+/// side on the FIRST attempt.  recoveryWaypoint scales the side by the attempt
+/// number, so repeated recoveries widen the search instead of repeating it.
+constexpr double kRecoveryAhead = 1.5;
+constexpr double kRecoverySide = 1.0;
+/// The line counts as blocked when an obstacle point sits this close to it
+/// within the lookahead - the robot's half-width (0.2 m) plus margin.
+constexpr double kRecoveryCorridor = 0.6;
+/// Obstacle points farther than this are ignored: they cannot be what blocks the
+/// next 1.5 m, and the far field is noise for this purpose.
+constexpr double kRecoveryRange = 5.0;
+
+/// Fills @p waypoint with the detour point, or returns false when the straight
+/// line already looks clear - there is then nothing to do but re-install it.
+///
+/// @p side_scale widens the detour on each successive attempt: a robot that came
+/// back stuck after a 1 m step aside does not need the same 1 m again, and a wall
+/// that spans the corridor is only cleared from further out.  It is the attempt
+/// number, so the search widens monotonically.
+bool recoveryWaypoint(const ::neupan::Vec3& state, const ::neupan::Vec3& goal,
+                      const ::neupan::Mat2X& points, double side_scale,
+                      ::neupan::Vec3& waypoint) {
+    const ::neupan::Vec2 here(state.x(), state.y());
+    const ::neupan::Vec2 diff = goal.head<2>() - here;
+    const double distance = diff.norm();
+    // Only a goal that is already at the robot leaves nothing to detour around.
+    if (distance < 0.5) return false;
+
+    const ::neupan::Vec2 dir = diff / distance;
+
+    // Never place either component past the goal: the reference would ask the
+    // robot to drive beyond it and come back.
+    const double ahead = std::min(kRecoveryAhead, 0.6 * distance);
+    const double side = std::min(kRecoverySide * side_scale, 0.9 * distance);
+    const double lookahead =
+        std::min(distance, kRecoveryAhead + kRecoveryCorridor);
+
+    double left_weight = 0.0;
+    double right_weight = 0.0;
+    bool blocked = false;
+    for (Eigen::Index i = 0; i < points.cols(); ++i) {
+        const ::neupan::Vec2 rel = points.col(i) - here;
+        const double along = rel.dot(dir);
+        if (along < 0.0 || along > kRecoveryRange) continue;
+        // Cross product with the unit direction: positive is to the left.
+        const double lateral = dir.x() * rel.y() - dir.y() * rel.x();
+        const double weight = 1.0 / (0.5 + along);   // nearer hurts more
+        if (lateral >= 0.0) left_weight += weight;
+        else                right_weight += weight;
+        if (along <= lookahead && std::abs(lateral) < kRecoveryCorridor)
+            blocked = true;
+    }
+    if (!blocked) return false;
+
+    // Steer to the lighter side; a tie - obstacles on both sides, which a local
+    // planner cannot resolve anyway - goes left.
+    const double sign = (right_weight < left_weight) ? -1.0 : 1.0;
+    const ::neupan::Vec2 lateral(-dir.y(), dir.x());
+    const ::neupan::Vec2 detour = here + ahead * dir + (sign * side) * lateral;
+    waypoint = ::neupan::Vec3(detour.x(), detour.y(), goal.z());
+    return true;
+}
+
 }  // namespace
 
 /// Everything that needs libneupan (and therefore Eigen) to be a complete type.
@@ -180,6 +258,21 @@ struct NeuPanPlanner::Impl {
     /// the reference line is re-sent on a slow heartbeat for viewers that
     /// connect after it was installed.
     std::chrono::steady_clock::time_point last_path_publish{};
+
+    // ── Stuck recovery ─────────────────────────────────────────────────────
+    // The anchor is the pose progress was last seen at.  "Stuck" has to be
+    // measured here rather than on the command: NeuPAN keeps a small non-zero
+    // command while it leans on an obstacle, so a command-based timer calls
+    // that "moving" indefinitely.
+    bool   stuck_anchor_valid{false};
+    double stuck_anchor_x{0.0};
+    double stuck_anchor_y{0.0};
+    std::chrono::steady_clock::time_point stuck_anchor_t{};
+
+    /// Recoveries spent on this episode and when the last one fired, so a robot
+    /// that stays stuck cannot be re-planned in a tight loop.
+    int recoveries{0};
+    std::chrono::steady_clock::time_point last_recovery{};
 };
 
 namespace {
@@ -356,6 +449,8 @@ void NeuPanPlanner::reset() {
     impl_->last_path.clear();
     impl_->consecutive_unsolved = 0;
     impl_->progress_started = false;
+    impl_->stuck_anchor_valid = false;
+    impl_->recoveries = 0;
 
     RCLCPP_DEBUG(logger_, "reset(): episode state cleared.");
 }
@@ -431,6 +526,10 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             impl_->last_goal_x = gx;
             impl_->last_goal_y = gy;
             impl_->last_goal_yaw = gyaw;
+            // A new goal is a new attempt: the automatic replan must get its
+            // full budget of recoveries back.
+            impl_->stuck_anchor_valid = false;
+            impl_->recoveries = 0;
             RCLCPP_INFO(logger_, "NeuPAN goal set to (%.2f, %.2f, yaw %.2f).", gx, gy, gyaw);
         }
     }
@@ -551,24 +650,108 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
         }
     }
 
-    // ── 6. Stall diagnostics ───────────────────────────────────────────────
-    // NeuPAN only avoids locally: with a single-pose reference it beelines for
-    // the goal, so a concave obstacle can leave it idling at the clearance with
-    // neither stop nor arrive set.  Reporting that is the whole point of this
-    // counter — the remedy is a global replan, which this layer cannot do.
-    const bool moving = std::abs(cmd.linear.x) > stall_speed_ ||
-                        std::abs(cmd.angular.z) > stall_speed_;
+    // ── 6. Stall / stuck detection and recovery ────────────────────────────
+    // NeuPAN only avoids locally: with the single-pose reference the framework
+    // sends it beelines for the goal, so a concave obstacle can leave it leaning
+    // at the clearance with neither stop nor arrive set.  Two different things
+    // are worth telling apart:
+    //
+    //   * the COMMAND is idle — the solver has nothing to say.  Cheap to
+    //     notice and worth a warning, but NOT the same as being stuck: NeuPAN
+    //     keeps a small non-zero command while it leans on an obstacle, so a
+    //     command-based timer calls that "moving" indefinitely.
+    //   * the POSE stops moving — the robot is not getting anywhere, whatever
+    //     the command claims.  That is the condition worth acting on.
+    //
+    // The real remedy is a global replan, which this layer cannot do; the
+    // recovery below is the crudest local substitute (see recoveryWaypoint).
+    // Only the single-pose (goal) reference is recovered: with a multi-pose
+    // path reference the plugin re-projects onto the framework's path, and
+    // inventing a detour there would fight the global plan instead of helping.
+    const bool command_active = std::abs(cmd.linear.x) > stall_speed_ ||
+                                std::abs(cmd.angular.z) > stall_speed_;
     const auto now = std::chrono::steady_clock::now();
-    if (moving || info.arrive || !impl_->progress_started) {
+    if (command_active || info.arrive || !impl_->progress_started) {
         impl_->last_progress = now;
         impl_->progress_started = true;
     } else {
-        const double stalled_s =
+        const double idle_s =
             std::chrono::duration<double>(now - impl_->last_progress).count();
-        if (stalled_s > stall_timeout_) {
+        if (idle_s > stall_timeout_) {
             RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 2000,
-                "Stalled for %.1f s without arriving; the path is probably blocked and "
-                "needs a global replan.", stalled_s);
+                "Idle for %.1f s: the solver is producing no command, so the "
+                "reference is probably unreachable from here.", idle_s);
+        }
+    }
+
+    // Stuck = no net progress for stall_timeout_ seconds, however loud the
+    // command is.
+    constexpr double kStuckProgress = 0.30;  // m that must be covered
+    constexpr int    kMaxRecoveries = 5;     // per blockage, then give up loudly
+    // Give a fresh reference time to act before judging it again: a recovery
+    // immediately followed by another one only churns the reference and turns a
+    // local minimum into a wander.
+    constexpr double kRecoveryGrace = 2.0;   // x stall_timeout_
+
+    const double px = ctx.robot_state.pose.position.x;
+    const double py = ctx.robot_state.pose.position.y;
+    if (!impl_->stuck_anchor_valid) {
+        impl_->stuck_anchor_valid = true;
+        impl_->stuck_anchor_x = px;
+        impl_->stuck_anchor_y = py;
+        impl_->stuck_anchor_t = now;
+    } else if (std::hypot(px - impl_->stuck_anchor_x,
+                          py - impl_->stuck_anchor_y) > kStuckProgress) {
+        // Real progress: re-anchor and forgive the recoveries spent so far - the
+        // budget belongs to a blockage, not to an episode.
+        impl_->stuck_anchor_x = px;
+        impl_->stuck_anchor_y = py;
+        impl_->stuck_anchor_t = now;
+        impl_->recoveries = 0;
+    }
+
+    const double still_s =
+        std::chrono::duration<double>(now - impl_->stuck_anchor_t).count();
+    const double since_recovery_s =
+        std::chrono::duration<double>(now - impl_->last_recovery).count();
+
+    if (!info.arrive && !hold && impl_->have_goal && impl_->planner &&
+        still_s > stall_timeout_ &&
+        since_recovery_s > kRecoveryGrace * stall_timeout_) {
+        if (impl_->recoveries >= kMaxRecoveries) {
+            RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 5000,
+                "Stuck for %.1f s after %d recovery attempts; leaving it to the "
+                "safety gate. The reference is blocked and needs a global replan.",
+                still_s, impl_->recoveries);
+        } else {
+            ++impl_->recoveries;
+            impl_->last_recovery = now;
+            impl_->stuck_anchor_x = px;
+            impl_->stuck_anchor_y = py;
+            impl_->stuck_anchor_t = now;
+
+            const ::neupan::Vec3 target(impl_->last_goal_x, impl_->last_goal_y,
+                                        impl_->last_goal_yaw);
+            ::neupan::Vec3 detour;
+            if (recoveryWaypoint(state, target, impl_->points_buf,
+                                 static_cast<double>(impl_->recoveries), detour)) {
+                impl_->planner->setWaypoints({state, detour, target});
+                RCLCPP_WARN(logger_,
+                    "Stuck for %.1f s; routing the reference via (%.2f, %.2f) "
+                    "(recovery %d/%d).",
+                    still_s, detour.x(), detour.y(), impl_->recoveries,
+                    kMaxRecoveries);
+            } else {
+                impl_->planner->updateInitialPathFromGoal(state, target);
+                RCLCPP_WARN(logger_,
+                    "Stuck for %.1f s with the line already clear; re-installing it "
+                    "from the current pose (recovery %d/%d).",
+                    still_s, impl_->recoveries, kMaxRecoveries);
+            }
+            // Drop the warm-started nominal too, or the optimizer walks straight
+            // back into the minimum the new reference just escaped.
+            impl_->planner->reset();
+            impl_->published_path_revision = -1;  // force the markers to redraw
         }
     }
 

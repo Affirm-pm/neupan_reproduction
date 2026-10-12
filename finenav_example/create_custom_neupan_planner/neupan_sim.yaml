@@ -60,11 +60,21 @@ hello_finenav:
         bk: 0.0
 
         # Hard-stop gate: stop when the planned clearance drops below this [m].
-        # 0.05 matches the sentry baseline.  Keep it SMALL: the gate commands
-        # zero velocity and never steers away, so a large value (the 0.15 used
-        # while the footprint was faked) can leave the robot trapped against a
-        # wall with no way out.
-        collision_threshold: 0.05
+        #
+        # It MUST stay below d_min above, and that is not a stylistic point.  The
+        # optimizer is allowed - and rewarded - to bring the planned clearance
+        # down to d_min, and the DUNE estimate min_distance comes from lands a few
+        # millimetres either side of it.  With the gate equal to d_min the planner
+        # therefore trips its OWN emergency stop the moment it reaches the
+        # clearance it was told to keep; and because the gate commands zero
+        # velocity and never steers away, the robot is then frozen beside the
+        # obstacle for good.  Measured with gate 0.05 / d_min 0.05: "closest
+        # obstacle 0.048 m is below collision_threshold 0.050 m" on repeat, pose
+        # frozen to 1e-3 m for minutes, and no recovery could free it.
+        #
+        # 0.02 leaves room for that estimation error and still catches a real
+        # violation.  Do not raise it towards d_min.
+        collision_threshold: 0.02
 
       neupan_world_view:
         # The simulator's point_cloud_converter_node publishes the obstacle
