@@ -36,8 +36,35 @@ hello_finenav:
         # The default 4.0 m/s is far too fast for this robot in a small maze.
         ref_speed: 0.6
 
-        # Stop distance for the hard-stop gate.  Default 0.1.
-        collision_threshold: 0.15
+        # ── Clearance / avoidance weights (upstream's `adjust` block) ──────
+        #
+        # These four must be tuned together.  The parameter-library defaults
+        # (d_max 1.0, ro_obs 400) are sized for a large robot in open space;
+        # on this 0.6 x 0.4 m robot inside a 0.4 m-thick maze they make the QP
+        # oscillate: the clearance reward (eta * d, capped by d_max) keeps
+        # asking for 1 m of free space the maze cannot provide, while ro_obs
+        # 400 punishes every constraint violation enormously — so the solver
+        # flips between "follow the reference" and "escape the wall" on every
+        # control cycle.  Measured with the defaults: the linear-velocity
+        # command changed sign on ~40 % of cycles (min -0.69 m/s), net speed
+        # ~0.02 m/s — the robot visibly stutters forward/backward.
+        #
+        # The values below are the ones neupan_cpp ships and validates for the
+        # 0.5 x 0.5 m sentry robot (neupan_cpp_ros/config/sentry_diff.yaml, and
+        # libneupan/tools/ab_configs/upstream_margins.yaml); they are the right
+        # scale for a robot this size.  Measured with them: 0 sign changes,
+        # steady ~0.6 m/s forward, goal reached.
+        d_max: 0.3
+        d_min: 0.05
+        ro_obs: 10.0
+        bk: 0.0
+
+        # Hard-stop gate: stop when the planned clearance drops below this [m].
+        # 0.05 matches the sentry baseline.  Keep it SMALL: the gate commands
+        # zero velocity and never steers away, so a large value (the 0.15 used
+        # while the footprint was faked) can leave the robot trapped against a
+        # wall with no way out.
+        collision_threshold: 0.05
 
       neupan_world_view:
         # The simulator's point_cloud_converter_node publishes the obstacle
