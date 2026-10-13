@@ -9,6 +9,7 @@
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
   <depend>finenav_engine_cpp</depend>
+  <depend>libneupan</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
