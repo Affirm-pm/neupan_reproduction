@@ -1,0 +1,84 @@
+// Copyright (c) 2026.
+// IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+// All rights reserved.
+
+#pragma once
+
+#include <optional>
+
+#include <geometry_msgs/msg/twist.hpp>
+
+// The planner role's entry point — it re-exports the concept, the geometry
+// vocabulary and (via planner_concept.hpp) Trajectory / IOProfile, so the
+// three separate includes this file used to carry are now one.
+#include "finenav_core/plugin_planner.hpp"
+
+#include "finenav_example/dummy_planner_params.hpp"
+#include "finenav_visualizer/finenav_visualizer.hpp"
+
+namespace finenav::example {
+
+class DummyWorldView {
+public:
+    virtual bool isWalkable(const finenav::common::Position3D&) const = 0;
+    virtual ~DummyWorldView() = default;
+};
+
+/**
+ * @brief DummyPlanner — a minimal example planner demonstrating the parameter pattern.
+ *
+ * === Parameter hot-reload ===
+ *
+ * DummyPlanner's parameters (linear_speed, angular_speed) are hot-reloadable
+ * because their YAML does NOT have `read_only: true`.  The framework calls
+ * configure() in two scenarios:
+ *   1. Startup:  the framework loads initial values (YAML defaults or
+ *               --params-file overrides).
+ *   2. Runtime:  `ros2 param set` triggers the ParamListener callback, which
+ *               calls configure() with the full new parameter set.
+ *
+ * The same configure() handles both — check the .cpp for details.
+ *
+ * If any parameter marked read_only: true, configure() will only be called at
+ * startup and ros2 param set will be rejected by generate_parameter_library.
+ */
+class DummyPlanner {
+public:
+    using ConfigType    = dummy_planner::Params;
+    using IWorldView      = DummyWorldView;
+
+    static constexpr finenav::core::IOProfile InputProfile{true, false, false, false};
+    static constexpr finenav::core::IOProfile OutputProfile{false, true, false, false};
+
+    DummyPlanner();
+
+    /**
+     * @brief Apply parameter configuration.
+     * @details
+     * Called by the framework at startup AND on every ros2 param update.
+     * If you do not want a parameter to support hot update, simply add `read_only: true` to its YAML entry.
+     * @param cfg  Full parameter struct (generated from YAML).
+     */
+    void configure(const ConfigType& cfg);
+
+    // ── Framework injectors ─────────────────────────────────────────
+    // Declare these to receive the logger and visualizer automatically.
+    // The framework detects them via if constexpr — no extra registration needed.
+    void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
+    void setVisualizer(const finenav::viz::FineNavVisualizer& viz) { viz_ = viz; }
+
+    void reset();
+
+    using Context = finenav::core::PlanningContext<DummyPlanner>;
+    using Result  = std::optional<finenav::core::OutputTrajectoryT<DummyPlanner>>;
+
+    Result plan(const Context& ctx,const IWorldView& map_view);
+
+private:
+    double linear_speed_  = 0.5;
+    double angular_speed_ = 1.0;
+    rclcpp::Logger                logger_{rclcpp::get_logger("DummyPlanner")};
+    finenav::viz::FineNavVisualizer viz_;
+};
+
+}  // namespace finenav::example

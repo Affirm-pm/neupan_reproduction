@@ -1,0 +1,13 @@
+#goal definition
+geometry_msgs/Pose[] poses
+string behavior_tree
+---
+#result definition
+geometry_msgs/Vector3 position_error
+geometry_msgs/Vector3 angle_error
+builtin_interfaces/Duration total_time
+---
+#feedback definition
+geometry_msgs/PoseStamped current_pose
+builtin_interfaces/Duration navigation_time
+geometry_msgs/Twist current_speed

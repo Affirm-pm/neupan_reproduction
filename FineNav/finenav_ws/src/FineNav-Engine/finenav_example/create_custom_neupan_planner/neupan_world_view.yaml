@@ -1,0 +1,31 @@
+neupan_world_view:
+  pose_topic:
+    type: string
+    default_value: /localization_pose
+    read_only: true
+    description: pose topic
+  data_timeout:
+    type: double
+    default_value: 0.5
+    read_only: true
+    description: data timeout
+  min_height:
+    type: double
+    default_value: 0.05
+    read_only: true
+    description: min height
+  max_height:
+    type: double
+    default_value: 0.5
+    read_only: true
+    description: max height
+  max_range:
+    type: double
+    default_value: 6.0
+    read_only: true
+    description: max range
+  voxel_size:
+    type: double
+    default_value: 0.04
+    read_only: true
+    description: voxel size

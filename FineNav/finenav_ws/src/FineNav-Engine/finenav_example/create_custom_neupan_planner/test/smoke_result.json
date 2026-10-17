@@ -1,0 +1,20 @@
+{
+  "no_cloud_stop": "pass",
+  "open_space_motion": "pass",
+  "near_obstacle_stop": "pass",
+  "obstacle_removed_resume": "pass",
+  "stale_cloud_stop": "pass",
+  "cloud_resumed": "pass",
+  "stale_pose_stop": "pass",
+  "pose_resumed": "pass",
+  "wrong_cloud_frame_stop": "pass",
+  "closed_loop_goal_and_yaw": "pass",
+  "final_pose": [
+    1.000317260649174,
+    0.001835728962690544,
+    0.9203083830752696
+  ],
+  "xy_error_m": 0.0018629426035106824,
+  "yaw_error_rad": 0.07969161692473037,
+  "engine_shutdown_returncode": -6
+}

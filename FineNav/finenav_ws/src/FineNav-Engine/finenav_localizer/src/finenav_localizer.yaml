@@ -1,0 +1,65 @@
+finenav_localizer:
+
+  # ── Pose channel — absolute pose, EMA-smoothed ─────────────────────────
+
+  pose_topic: {
+    type: string,
+    default_value: "",
+    description: "PoseWithCovarianceStamped topic (absolute pose; empty = disabled)"
+  }
+  pose_smoothing_time: {
+    type: double,
+    default_value: 0.0,
+    description: "Pose convergence time [s]. 0.0 = instant / jump to target, 0.5 = converge within ~500 ms",
+    validation: { bounds<>: [0.0, 10.0] }
+  }
+  initial_pose_topic: {
+    type: string,
+    default_value: "/initialpose",
+    description: "One-shot topic to set initial pose (feeds Pose channel once, then unsubscribes)"
+  }
+
+  # ── Twist channel — body-frame velocity: integrates pose + sets velocity ─
+
+  twist_topic: {
+    type: string,
+    default_value: "",
+    description: "TwistWithCovarianceStamped topic (integrates position + sets velocity; empty = disabled)"
+  }
+
+  # ── Odometry — composite input ─────────────────────────────────────────
+  #
+  #  odom.pose is always used for RelPose frame-to-frame integration.
+  #
+  #  odom_use_twist: whether to use odom.twist to set velocity
+  #    true  — directly set state velocity from odom.twist
+  #    false — ignore odom.twist (default; may be all zeros)
+
+  odom_topic: {
+    type: string,
+    default_value: "",
+    description: "Odometry topic (empty = disabled)"
+  }
+  odom_use_twist: {
+    type: bool,
+    default_value: false,
+    description: "Whether to use odometry twist data to set state velocity"
+  }
+
+  # ── Output ─────────────────────────────────────────────────────────────
+
+  force_2d_mode: {
+    type: bool,
+    default_value: false,
+    description: "Constrain z, roll, and pitch to zero in output state"
+  }
+  publish_tf: {
+    type: bool,
+    default_value: false,
+    description: "Broadcast map->base_link TF transform"
+  }
+  publish_odom: {
+    type: bool,
+    default_value: false,
+    description: "Publish the estimated state as nav_msgs/Odometry on '~/nav_state'"
+  }

@@ -1,0 +1,13 @@
+<root BTCPP_format="4">
+  <BehaviorTree ID="NeuPANNavigate">
+    <Sequence>
+      <PublishNavigationGoal/>
+      <ReactiveFallback>
+        <IsGoalReached robot_pose="{robot_pose}" robot_twist="{robot_twist}"
+          goal_poses="{goal_poses}" xy_tolerance="0.08" yaw_tolerance="0.08" speed_tolerance="0.05"/>
+        <ExecuteControlPipelineBranch branch="navigate"/>
+      </ReactiveFallback>
+      <StopChassisMotion/>
+    </Sequence>
+  </BehaviorTree>
+</root>

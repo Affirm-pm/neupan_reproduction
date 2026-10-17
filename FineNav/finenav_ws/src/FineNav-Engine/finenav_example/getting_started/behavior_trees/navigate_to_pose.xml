@@ -1,0 +1,37 @@
+<!--
+  Getting Started — Behavior Tree for DummyPlanner example.
+
+  Navigate to a goal pose using the dummy planner.
+  When the goal is reached, stops the planner and succeeds.
+
+  NOTE: rewritten for the branch-table navigator interface:
+  the old <ComputePlan layer=... planner_id=.../> node no longer exists.
+  Goals are injected with <PublishNavigationGoal/> (reads blackboard
+  "goal_poses"); main.cpp declares the branch with
+  engine->registerControlBranch("navigate", {"my_layer"}), and that named branch is
+  activated here with <ExecuteControlPipelineBranch branch="navigate"/>.
+  -->
+<root BTCPP_format="4">
+
+    <BehaviorTree ID="GettingStartedNavigate">
+        <Sequence>
+            <PublishNavigationGoal/>
+            <RetryUntilSuccessful num_attempts="-1">
+                <Sequence name="TrackThenStop">
+                    <ReactiveFallback name="NavigateOrSucceed">
+                        <IsGoalReached  robot_pose="{robot_pose}"
+                                        robot_twist="{robot_twist}"
+                                        goal_poses="{goal_poses}"
+                                        xy_tolerance="0.25"
+                                        yaw_tolerance="0.1"
+                                        speed_tolerance="0.1"/>
+                        <ExecuteControlPipelineBranch branch="navigate"/>
+                    </ReactiveFallback>
+                    <!-- Goal reached: publish zero velocity and succeed -->
+                    <StopChassisMotion/>
+                </Sequence>
+            </RetryUntilSuccessful>
+        </Sequence>
+    </BehaviorTree>
+
+</root>

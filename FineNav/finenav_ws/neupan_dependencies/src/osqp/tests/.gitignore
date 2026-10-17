@@ -1,0 +1,7 @@
+# Data Files
+# -------------------------------------------------------------------
+**/*data.h
+**/*data.cpp
+
+# Preserve the test header shipped in this vendored source snapshot.
+!large_qp/large_qp_data.h

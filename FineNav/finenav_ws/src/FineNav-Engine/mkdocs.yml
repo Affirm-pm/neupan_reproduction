@@ -1,0 +1,74 @@
+site_name: FineNav-Engine
+site_description: Choose navigation components, write a WorldView, and run FineNav-Engine
+repo_url: https://github.com/FineNav/FineNav-Engine
+repo_name: FineNav/FineNav-Engine
+docs_dir: docs
+site_dir: .site-docs
+use_directory_urls: true
+theme:
+  name: material
+  language: en
+  palette:
+    primary: teal
+    accent: red
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - content.code.copy
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      languages:
+        - locale: en
+          name: English
+          default: true
+        - locale: zh
+          name: 中文
+          site_name: FineNav-Engine 文档
+          nav_translations:
+            Overview: 项目总览
+            Quickstart: 快速开始
+            Using FineNav: 使用 FineNav
+            Choose Map and Planner: 选择 Map 和 Planner
+            Write a WorldView: 编写 WorldView
+            Configure Your Application: 配置应用
+            FineNav Plugins: FineNav 插件
+            Maps: 地图组件
+            Planners: 规划组件
+            Advanced: 进阶使用
+            Custom Planner: 自定义 Planner
+            Custom Map: 自定义 Map
+validation:
+  nav:
+    omitted_files: info
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+nav:
+  - Overview: index.md
+  - Quickstart: guide/quickstart.md
+  - Using FineNav:
+      - Choose Map and Planner: guide/choose-algorithms.md
+      - Write a WorldView: guide/worldview.md
+      - Configure Your Application: guide/cpp-application.md
+  - FineNav Plugins:
+      - guide/plugins/index.md
+      - Maps: guide/plugins/maps.md
+      - Planners: guide/plugins/planners.md
+  - Advanced:
+      - Custom Planner: guide/custom-planner.md
+      - Custom Map: guide/custom-map.md

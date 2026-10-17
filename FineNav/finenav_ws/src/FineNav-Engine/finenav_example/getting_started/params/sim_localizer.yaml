@@ -1,0 +1,46 @@
+# ==============================================================================
+#  FineNav-Engine Getting Started — Simulation Configuration
+# ==============================================================================
+#  This file configures both the FineNavLocalizer (odometry input) and the
+#  BtNavigator (behavior tree registration) for the getting-started example.
+#
+#  Usage:
+#    ros2 run finenav_example hello_finenav \
+#      --ros-args --params-file /path/to/sim_localizer.yaml
+# ==============================================================================
+
+/**:
+  ros__parameters:
+    use_sim_time: true
+
+hello_finenav:
+  # ── Navigator (BT engine) ─────────────────────────────────────────────────
+  finenav_navigator:
+    ros__parameters:
+      # Additional BT path for the getting-started example.
+      # (Built-in trees are always loaded — no need to list them here.)
+      behavior_trees:
+        - "finenav_example/getting_started/behavior_trees"
+
+  # ── Localizer ─────────────────────────────────────────────────────────────
+  finenav_localizer:
+    ros__parameters:
+
+      # 绝对位姿通道 PoseWithCovarianceStamped（本例不使用）
+      pose_topic: ""                    # 空 = 禁用
+      pose_smoothing_time: 0.0          # 0.0 = 收到即跳到目标
+      initial_pose_topic: "/initialpose"  # 一次性初始位姿话题
+
+      # 速度通道 TwistWithCovarianceStamped（本例不使用）
+      twist_topic: ""
+
+      # ── 里程计通道（仿真 ground truth）─────────────────────────────────────
+      #   odom.pose 做帧间差分(RelPose)积分；odom.twist 是否设速度由 odom_use_twist 决定。
+      odom_topic: "/odom"
+      odom_use_twist: true              # /odom 自带速度
+
+      # ── 输出 ──────────────────────────────────────────────────────────────
+      force_2d_mode: true               # z/roll/pitch 输出前清零
+      publish_tf: false                 # 广播 map→base_link（本示例不需要）
+      publish_odom: true                # 在 ~/nav_state 发布 nav_msgs/Odometry
+

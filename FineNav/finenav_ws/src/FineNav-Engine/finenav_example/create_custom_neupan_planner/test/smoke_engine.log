@@ -1,0 +1,39 @@
+[INFO] [1792175338.301466836] [hello_finenav.finenav_navigator]: Action server started.
+[INFO] [1792175338.301648342] [BehaviorTreeEngine]: Loading plugins from 1 sources...
+[INFO] [1792175338.303631914] [BehaviorTreeEngine]:   Scanned '/home/wzyy/FineNav/finenav_ws/install/finenav_navigator/lib/finenav_navigator': Loaded 15 plugins.
+[INFO] [1792175338.303736882] [BehaviorTreeEngine]:   Scanned '/home/wzyy/FineNav/finenav_ws/install/finenav_example/share/finenav_example/getting_started/behavior_trees': Loaded 1 trees.
+[INFO] [1792175338.303779498] [BehaviorTreeEngine]:   Scanned '/home/wzyy/FineNav/finenav_ws/install/finenav_example/share/finenav_example/create_custom_neupan_planner/behavior_trees': Loaded 1 trees.
+[INFO] [1792175338.303932497] [hello_finenav.finenav_navigator]: Initialized and spinning.
+[INFO] [1792175338.307423444] [hello_finenav]: loadAlgoPlugins: scanned '/home/wzyy/FineNav/finenav_ws/install/finenav_example/lib' — loaded 6 plugin .so(s).
+[WARN] [1792175338.308891915] [hello_finenav.finenav_localizer]: FineNavLocalizer: no absolute pose source configured or no pose data received — position will drift without absolute reference.
+[INFO] [1792175338.309083755] [hello_finenav]: MapRuntime: subscribed to '/aligned_cloud' for observation source 'neupan_cloud'.
+[INFO] [1792175338.309102612] [hello_finenav]: MapServer 'neupan_cloud_map': update timer started at 10.0 Hz.
+[INFO] [1792175338.309133934] [hello_finenav]: createMapServer('neupan_cloud_map', 'neupan_cloud_map'): map server created.
+[INFO] [1792175338.311465060] [hello_finenav.my_layer.neupan_planner]: NeuPAN C++ ready: footprint 0.400 x 0.400 m, height 0.500 m
+[INFO] [1792175338.311482883] [hello_finenav.my_layer]: Loading planner 'neupan_planner' (layer 'my_layer').
+[INFO] [1792175338.312302646] [hello_finenav]: createControlLayerByPlanner('neupan_planner', 'my_layer'): layer created.
+[INFO] [1792175338.312529859] [hello_finenav]: createControlLayerByWorldView('neupan_world_view', 'my_layer'): assembled layer over planner 'neupan_planner'.
+[INFO] [1792175338.312763913] [hello_finenav]: FineNav-Engine ready.
+[WARN] [1792175338.442519561] [hello_finenav.finenav_localizer]: FineNavLocalizer: pose stamp %.3f s is outside the retained state history — falling back to latest odometry.
+[INFO] [1792175340.303293603] [hello_finenav]: Navigation goal sent: (1.00, 0.00, 0.00)
+[INFO] [1792175340.303536228] [hello_finenav.finenav_navigator]: New goal received, starting execution.
+[INFO] [1792175340.303780293] [hello_finenav.finenav_navigator]: Executing action...
+[INFO] [1792175340.303928190] [hello_finenav.finenav_navigator]: Starting navigation to (1.00, 0.00)
+[INFO] [1792175340.305164746] [hello_finenav.my_layer.neupan_planner]: NeuPAN C++ ready: footprint 0.400 x 0.400 m, height 0.500 m
+[WARN] [1792175340.305188595] [hello_finenav.my_layer]: NeuPAN holds zero velocity: missing/stale cloud, or cloud frame is not the world frame
+[WARN] [1792175343.479053218] [hello_finenav.finenav_localizer]: FineNavLocalizer: pose stamp %.3f s is outside the retained state history — falling back to latest odometry.
+[WARN] [1792175347.904872635] [hello_finenav.my_layer]: NeuPAN holds zero velocity: missing/stale cloud, or cloud frame is not the world frame
+[WARN] [1792175348.517237208] [hello_finenav.finenav_localizer]: FineNavLocalizer: pose stamp %.3f s is outside the retained state history — falling back to latest odometry.
+[WARN] [1792175351.009182307] [hello_finenav]: ObservationSource 'neupan_cloud': no robot state available at stamp 1792175350.932 s — message dropped.
+[WARN] [1792175351.404891309] [hello_finenav.my_layer]: NeuPAN holds zero velocity: missing, stale or invalid localization_pose
+[WARN] [1792175353.531182711] [hello_finenav.finenav_localizer]: FineNavLocalizer: pose stamp %.3f s is outside the retained state history — falling back to latest odometry.
+[WARN] [1792175354.604878620] [hello_finenav.my_layer]: NeuPAN holds zero velocity: missing/stale cloud, or cloud frame is not the world frame
+[WARN] [1792175358.550301549] [hello_finenav.finenav_localizer]: FineNavLocalizer: pose stamp %.3f s is outside the retained state history — falling back to latest odometry.
+[INFO] [1792175362.204051502] [hello_finenav.finenav_navigator]: Navigation succeeded.
+[WARN] [1792175363.559165376] [hello_finenav.finenav_localizer]: FineNavLocalizer: pose stamp %.3f s is outside the retained state history — falling back to latest odometry.
+[WARN] [1792175368.575578972] [hello_finenav.finenav_localizer]: FineNavLocalizer: pose stamp %.3f s is outside the retained state history — falling back to latest odometry.
+[WARN] [1792175372.309366510] [hello_finenav]: ObservationSource 'neupan_cloud': no robot state available at stamp 1792175372.308 s — message dropped.
+[WARN] [1792175373.580488647] [hello_finenav.finenav_localizer]: FineNavLocalizer: pose stamp %.3f s is outside the retained state history — falling back to latest odometry.
+[INFO] [1792175373.987345567] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'
+  what():  goal_handle attempted invalid transition from state SUCCEEDED with event ABORT, at ./src/rcl_action/goal_handle.c:95

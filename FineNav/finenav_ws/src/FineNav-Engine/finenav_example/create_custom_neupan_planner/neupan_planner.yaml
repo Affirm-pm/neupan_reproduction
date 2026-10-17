@@ -1,0 +1,31 @@
+neupan_planner:
+  config_file:
+    type: string
+    default_value: ''
+    read_only: true
+    description: config file
+  model_file:
+    type: string
+    default_value: ''
+    read_only: true
+    description: model file
+  goal_xy_tolerance:
+    type: double
+    default_value: 0.08
+    read_only: true
+    description: goal xy tolerance
+  goal_yaw_tolerance:
+    type: double
+    default_value: 0.08
+    read_only: true
+    description: goal yaw tolerance
+  robot_height:
+    type: double
+    default_value: 0.5
+    read_only: true
+    description: robot height
+  collision_margin:
+    type: double
+    default_value: 0.05
+    read_only: true
+    description: collision margin

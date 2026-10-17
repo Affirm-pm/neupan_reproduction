@@ -1,0 +1,11 @@
+/localizer_eval_node/finenav_localizer:
+  ros__parameters:
+
+    pose_topic: "/localization_pose"
+    pose_smoothing_time: 0.0
+    twist_topic: ""
+    odom_topic: "/Odometry"
+    odom_use_twist: true
+
+    force_2d_mode: false
+    publish_odom: true                  # for record_eval

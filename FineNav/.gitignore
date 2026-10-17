@@ -1,0 +1,35 @@
+# Generated ROS / CMake outputs (at any workspace depth)
+build/
+build_test/
+install/
+log/
+logs/
+build_logs/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Testing/
+
+# Local archives and tooling state
+/dist/
+/symlink_install_manifest.txt
+.agents/
+.aws/
+.codex/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*~
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Keep models (*.bin, *.pth, *.nptf), source assets, licenses and
+# documented validation fixtures tracked; they are not build outputs.

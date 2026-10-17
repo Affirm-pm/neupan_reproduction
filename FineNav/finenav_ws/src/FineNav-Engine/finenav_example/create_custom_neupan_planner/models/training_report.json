@@ -1,0 +1,17 @@
+{
+  "length": 0.4,
+  "width": 0.4,
+  "height": 0.5,
+  "wheelbase": 0.0,
+  "seed": 42,
+  "steps": 16000,
+  "validation_samples": 50000,
+  "distance_mae_m": 0.0011303421342745423,
+  "distance_p99_m": 0.007953688502311707,
+  "near_distance_mae_m": 0.00016614844207651913,
+  "near_distance_p99_m": 0.0008189440704882145,
+  "near_distance_max_m": 0.0015783478738740087,
+  "label_method": "exact rectangle projection; upstream dual objective",
+  "upstream_architecture_sha256": "fd7f7b7a33bd610e5f453a9d38613fc7ca944e1ab1a8aa6fd116175a1776b11c",
+  "model_sha256": "7b0755a95cfafb99a4b199cdc6f40b58477276509aa625ea785737f12104ceb4"
+}

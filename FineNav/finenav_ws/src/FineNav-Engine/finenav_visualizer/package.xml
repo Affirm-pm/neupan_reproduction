@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="3">
+    <name>finenav_visualizer</name>
+    <version>0.1.0</version>
+    <description>Lightweight Rviz visualization tools for FineNav-Engine (Marker + PointCloud2)</description>
+    <maintainer email="wangjinghui@sjtu.edu.cn">Jinghui Wang</maintainer>
+    <license>MPL 2.0</license>
+
+    <buildtool_depend>ament_cmake_auto</buildtool_depend>
+
+    <depend>rclcpp</depend>
+    <depend>visualization_msgs</depend>
+    <depend>std_msgs</depend>
+    <depend>sensor_msgs</depend>
+    <depend>eigen</depend>
+    <depend>eigen3_cmake_module</depend>
+    <depend>pcl_conversions</depend>
+    <depend>libpcl-all-dev</depend>
+
+    <!-- Both are public dependencies of this package's HEADERS, not just of its
+         .cpp files: viz_channel.hpp names finenav_common's Frame, and includes
+         finenav_util's logging macros, which are fmt-based. -->
+    <depend>finenav_common</depend>
+    <depend>finenav_util</depend>
+    <depend>fmt</depend>
+
+    <test_depend>ament_cmake_gtest</test_depend>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

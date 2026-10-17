@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>finenav_example</name>
+  <version>0.1.0</version>
+  <description>Minimal compile-check for finenav_core MapServer instantiation.</description>
+  <maintainer email="wangjinghui@sjtu.edu.cn">Jinghui Wang</maintainer>
+  <license>MPL-2.0</license>
+  <!-- NeuPAN extension; existing framework/example files retain their licenses. -->
+  <license>GPL-3.0-or-later</license>
+
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+
+  <depend>finenav_engine_cpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>generate_parameter_library</depend>
+  <depend>eigen</depend>
+  <depend>yaml-cpp</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

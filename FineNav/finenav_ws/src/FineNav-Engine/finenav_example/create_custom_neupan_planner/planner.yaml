@@ -1,0 +1,30 @@
+receding: 20
+step_time: 0.1
+ref_speed: 0.25
+collision_threshold: 0.05
+robot:
+  kinematics: diff
+  length: 0.4
+  width: 0.4
+  max_speed: [0.3, 0.6]
+  max_acce: [0.5, 1.0]
+ipath:
+  curve_style: line
+  arrive_threshold: 0.04
+  close_threshold: 0.01
+  ind_range: 20
+pan:
+  iter_num: 2
+  dune_max_num: 200
+  nrmp_max_num: 20
+adjust:
+  q_s: [5.0, 5.0, 0.1]
+  p_u: 0.1
+  eta: 2.0
+  d_min: 0.16
+  d_max: 0.3
+  ro_obs: 2000.0
+  bk: 0.1
+osqp:
+  max_iter: 10000
+  time_limit: 0.025
