@@ -72,13 +72,11 @@ TEST(Dune, RobotGhMatchesUpstream) {
 TEST(Dune, WheelInclusiveModelMatchesConfiguredFootprint) {
   const std::string model = std::string(NEUPAN_MODEL_DIR) + "/diff_0p7x0p6.bin";
   const auto wheel_inclusive = std::make_shared<const Robot>(
-      Robot::diffRectangle(10, 0.1, Vec2(0.6, 1.0), Vec2(1.0, 1.0),
-                           0.7, 0.6));
+      Robot::diffRectangle(10, 0.1, Vec2(0.6, 1.0), Vec2(1.0, 1.0), 0.7, 0.6));
   EXPECT_NO_THROW(DUNE(wheel_inclusive, model));
 
   const auto body_only = std::make_shared<const Robot>(
-      Robot::diffRectangle(10, 0.1, Vec2(0.6, 1.0), Vec2(1.0, 1.0),
-                           0.6, 0.4));
+      Robot::diffRectangle(10, 0.1, Vec2(0.6, 1.0), Vec2(1.0, 1.0), 0.6, 0.4));
   EXPECT_THROW(DUNE(body_only, model), std::runtime_error);
 }
 
