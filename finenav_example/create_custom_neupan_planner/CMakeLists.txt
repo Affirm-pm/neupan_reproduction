@@ -60,8 +60,9 @@ ament_target_dependencies(neupan_planner finenav_core finenav_visualizer)
 
 # The DUNE checkpoint used when neupan_planner.dune_checkpoint is left empty.
 #
-# diff_0p6x0p4.bin is a DUNE trained for THIS example's robot: the simulator's
-# 0.6 x 0.4 x 0.3 m base (finenav_simulator/resource/robot/model.sdf.xmacro).
+# diff_0p7x0p6.bin is a DUNE trained for THIS example's robot: the simulator's
+# 0.7 x 0.6 m XY bounds including its wheels
+# (finenav_simulator/resource/robot/model.sdf.xmacro).
 # libneupan compares the weights' recorded footprint against robot_length /
 # robot_width at load time and throws on a mismatch, so the default model and
 # the default footprint in neupan_planner.yaml describe the same robot.  (The
@@ -72,7 +73,7 @@ ament_target_dependencies(neupan_planner finenav_core finenav_visualizer)
 # configure().  An explicit parameter always wins, so relocating the models does
 # not require a rebuild.
 target_compile_definitions(neupan_planner PRIVATE
-    NEUPAN_DEFAULT_CHECKPOINT="${libneupan_MODELS_DIR}/diff_0p6x0p4.bin")
+    NEUPAN_DEFAULT_CHECKPOINT="${libneupan_MODELS_DIR}/diff_0p7x0p6.bin")
 
 # ── The WorldView bridge ─────────────────────────────────────────────────────
 #

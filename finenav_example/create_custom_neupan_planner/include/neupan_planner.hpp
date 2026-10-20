@@ -106,7 +106,7 @@ public:
  * leaning at the clearance — neither stopped nor arrived — for as long as the
  * goal stands.  plan() therefore watches the POSE (not the command, which stays
  * non-zero while the robot leans on something) and, after `stall_timeout`
- * seconds without 0.15 m of net progress, re-installs the reference from where
+ * seconds without 0.30 m of net progress, re-installs the reference from where
  * the robot actually is: a three-pose detour toward the less obstructed side
  * when the straight line looks blocked, otherwise the straight line again.  The
  * core is reset with it, so the warm-started nominal cannot drag the optimizer
@@ -215,10 +215,6 @@ private:
     // Inert (no backend) until setVisualizer() is called; drawing into it is
     // always safe and simply goes nowhere.
     finenav::viz::FineNavVisualizer viz_;
-
-    // InitialPath::revision() already drawn, so a reference line that did not
-    // change is not republished every cycle.
-    int published_path_revision_{-1};
 };
 
 }  // namespace finenav::example

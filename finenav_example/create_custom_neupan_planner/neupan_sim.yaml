@@ -20,18 +20,19 @@ hello_finenav:
     ros__parameters:
 
       neupan_planner:
-        # This simulator's robot is 0.6 x 0.4 x 0.3 m
-        # (finenav_simulator/resource/robot/model.sdf.xmacro).  These two MUST
+        # The simulator body's XY size is 0.6 x 0.4 m, but its four wheels
+        # extend the outer XY bounds to 0.7 x 0.6 m
+        # (finenav_simulator/resource/robot/model.sdf.xmacro). These two MUST
         # equal the footprint the loaded DUNE model was trained with: libneupan
         # compares them at load time and throws on a mismatch.
         #
-        # The plugin's build-time default is now diff_0p6x0p4.bin — a DUNE
+        # The plugin's build-time default is diff_0p7x0p6.bin — a DUNE
         # trained for exactly this footprint (see the NEUPAN_DEFAULT_CHECKPOINT
         # comment in CMakeLists.txt) — so model and values agree.  If you swap in
         # another model, export it with upstream's tools/export_dune_weights.py,
         # passing the same <length> <width>, and update these two to match.
-        robot_length: 0.6
-        robot_width: 0.4
+        robot_length: 0.7
+        robot_width: 0.6
 
         # The default 4.0 m/s is far too fast for this robot in a small maze.
         ref_speed: 0.6
@@ -40,7 +41,7 @@ hello_finenav:
         #
         # These four must be tuned together.  The parameter-library defaults
         # (d_max 1.0, ro_obs 400) are sized for a large robot in open space;
-        # on this 0.6 x 0.4 m robot inside a 0.4 m-thick maze they make the QP
+        # on this 0.7 x 0.6 m footprint inside a 0.4 m-thick maze they make the QP
         # oscillate: the clearance reward (eta * d, capped by d_max) keeps
         # asking for 1 m of free space the maze cannot provide, while ro_obs
         # 400 punishes every constraint violation enormously — so the solver
