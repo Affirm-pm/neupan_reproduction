@@ -1,0 +1,16 @@
+data_size: 100000, data_range: [-10, -10, 10, 10], batch_size: 256, epoch: 1500, valid_freq: 250, save_freq: 250, lr: 5e-5, lr_decay: 0.5, decay_freq: 1500, robot_G: tensor([[ 0.0000, -0.7000],
+        [ 0.6000, -0.0000],
+        [ 0.0000,  0.7000],
+        [-0.6000, -0.0000]]), robot_h: tensor([[0.2100],
+        [0.2100],
+        [0.2100],
+        [0.2100]])
+
+Epoch 0/1500 learning rate 5e-05 
+---------------------------------
+Losses:
+  Mu Loss:          5.36e-02   | Validate Mu Loss:            4.36e-02
+  Distance Loss:    8.90e-01   | Validate Distance Loss:      2.51e-02
+  Fa Loss:          1.37e-02   | Validate Fa Loss:            1.89e-03
+  Fb Loss:          8.58e-01   | Validate Fb Loss:            9.16e-02
+
