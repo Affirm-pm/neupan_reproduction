@@ -20,7 +20,9 @@ def evaluate(model, points, length, width):
         np.maximum(np.abs(points) - [length / 2, width / 2], 0), axis=1
     )
     error = np.abs(predicted - exact)
-    return np.mean(error), np.percentile(error, 95), np.max(error)
+    worst = np.argmax(error)
+    return (np.mean(error), np.percentile(error, 95), np.max(error),
+            points[worst], predicted[worst], exact[worst])
 
 
 if __name__ == "__main__":
@@ -53,5 +55,9 @@ if __name__ == "__main__":
     for name, points in (("scan [-6,6] m", scan),
                          ("near [-1,1] m", near),
                          ("within 0.2 m of sides", edge)):
-        mean, p95, worst = evaluate(model, points, args.length, args.width)
-        print(f"{name}: MAE={mean:.6f} m, p95={p95:.6f} m, max={worst:.6f} m")
+        mean, p95, worst, location, predicted, exact = evaluate(
+            model, points, args.length, args.width
+        )
+        print(f"{name}: MAE={mean:.6f} m, p95={p95:.6f} m, max={worst:.6f} m "
+              f"at ({location[0]:.3f}, {location[1]:.3f}); "
+              f"predicted={predicted:.6f} m, true={exact:.6f} m")
