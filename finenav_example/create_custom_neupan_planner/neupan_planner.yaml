@@ -53,6 +53,20 @@ neupan_planner:
     validation:
       bounds<>: [0, 1000]
 
+  approach_speed_gain:
+    type: double
+    default_value: 0.4
+    description: "Single-goal reference speed cap = gain times goal distance [1/s]. Slows translation near the goal so the robot can finish turning. Applied before optimization."
+    validation:
+      gt<>: [0.0]
+
+  approach_min_speed:
+    type: double
+    default_value: 0.05
+    description: "Lower bound of the single-goal approach speed cap [m/s], still bounded by ref_speed. Terminal yaw alignment commands zero linear velocity."
+    validation:
+      gt<>: [0.0]
+
   stall_speed:
     type: double
     default_value: 0.02
@@ -63,9 +77,46 @@ neupan_planner:
   stall_timeout:
     type: double
     default_value: 3.0
-    description: "Seconds without motion before a stall is reported [s]. Also the trigger for the automatic stuck recovery: after this long with no net progress (measured on the pose, not the command) the plugin re-installs the reference from the current pose, up to 5 times per blockage. Plugin-side safety (upstream node: stall_timeout)."
+    description: "Idle-warning and stationary-recovery timeout [s]. Also recovers after twice this duration without improving the best goal distance by 0.10 m. Only that goal progress refills the 5-attempt recovery budget; exhaustion holds zero until a new goal/path. Terminal yaw alignment is excluded."
     validation:
       bounds<>: [0.0, 1000.0]
+
+  # Terminal pose alignment (runtime-tunable, no core rebuild).
+
+  goal_xy_tolerance:
+    type: double
+    default_value: 0.15
+    description: "Position error [m] for entering terminal yaw alignment; use a value below the navigator's xy_tolerance. Leaves alignment above 1.5 times this value."
+    validation:
+      gt<>: [0.0]
+
+  goal_yaw_tolerance:
+    type: double
+    default_value: 0.05
+    description: "Terminal yaw error [rad] below which angular command is zero; use a value below the navigator's yaw_tolerance."
+    validation:
+      gt<>: [0.0]
+
+  goal_yaw_gain:
+    type: double
+    default_value: 1.5
+    description: "Proportional gain [1/s] for terminal yaw alignment."
+    validation:
+      gt<>: [0.0]
+
+  goal_yaw_max_speed:
+    type: double
+    default_value: 0.6
+    description: "Maximum terminal rotation speed [rad/s], also bounded by max_speed_angular."
+    validation:
+      gt<>: [0.0]
+
+  goal_yaw_min_speed:
+    type: double
+    default_value: 0.12
+    description: "Minimum requested terminal yaw rate [rad/s] outside yaw tolerance; acceleration limits still apply. Capped by goal_yaw_max_speed."
+    validation:
+      bounds<>: [0.0, 10.0]
 
   # ── Hot, but forces a planner rebuild ────────────────────────────────────
 

@@ -36,6 +36,16 @@ hello_finenav:
 
         # The default 4.0 m/s is far too fast for this robot in a small maze.
         ref_speed: 0.6
+        approach_speed_gain: 0.4
+        approach_min_speed: 0.05
+
+        # Finish yaw after reaching the terminal position. These tolerances
+        # stay below the navigator's 0.25 m / 0.1 rad success tolerances.
+        goal_xy_tolerance: 0.15
+        goal_yaw_tolerance: 0.05
+        goal_yaw_gain: 1.5
+        goal_yaw_max_speed: 0.6
+        goal_yaw_min_speed: 0.12
 
         # ── Clearance / avoidance weights (upstream's `adjust` block) ──────
         #

@@ -75,6 +75,17 @@ ament_target_dependencies(neupan_planner finenav_core finenav_visualizer)
 target_compile_definitions(neupan_planner PRIVATE
     NEUPAN_DEFAULT_CHECKPOINT="${libneupan_MODELS_DIR}/diff_0p7x0p6.bin")
 
+if(BUILD_TESTING)
+    # Optional development tests; keep this example's package manifest untouched.
+    find_package(ament_cmake_gtest QUIET)
+    if(ament_cmake_gtest_FOUND)
+        ament_add_gtest(test_goal_alignment test/test_goal_alignment.cpp)
+        target_include_directories(test_goal_alignment PRIVATE include)
+        ament_add_gtest(test_goal_progress test/test_goal_progress.cpp)
+        target_include_directories(test_goal_progress PRIVATE include)
+    endif()
+endif()
+
 # ── The WorldView bridge ─────────────────────────────────────────────────────
 #
 # dummy_map is linked because the bridge is registered against example::DummyMap

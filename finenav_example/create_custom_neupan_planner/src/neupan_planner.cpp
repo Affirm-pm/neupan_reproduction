@@ -3,6 +3,8 @@
 // All rights reserved.
 
 #include "neupan_planner.hpp"
+#include "goal_alignment.hpp"
+#include "goal_progress.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -163,7 +165,7 @@ std::string resolveCheckpoint(const std::string& configured) {
 constexpr double kRecoveryAhead = 1.5;
 constexpr double kRecoverySide = 1.0;
 /// The line counts as blocked when an obstacle point sits this close to it
-/// within the lookahead - the robot's half-width (0.2 m) plus margin.
+/// within the lookahead - the wheel-inclusive half-width (0.3 m) plus margin.
 constexpr double kRecoveryCorridor = 0.6;
 /// Obstacle points farther than this are ignored: they cannot be what blocks the
 /// next 1.5 m, and the far field is noise for this purpose.
@@ -182,7 +184,7 @@ bool recoveryWaypoint(const ::neupan::Vec3& state, const ::neupan::Vec3& goal,
     const ::neupan::Vec2 here(state.x(), state.y());
     const ::neupan::Vec2 diff = goal.head<2>() - here;
     const double distance = diff.norm();
-    // Only a goal that is already at the robot leaves nothing to detour around.
+    // Near the goal, leave room for terminal alignment rather than a large detour.
     if (distance < 0.5) return false;
 
     const ::neupan::Vec2 dir = diff / distance;
@@ -267,12 +269,17 @@ struct NeuPanPlanner::Impl {
     bool   stuck_anchor_valid{false};
     double stuck_anchor_x{0.0};
     double stuck_anchor_y{0.0};
+    double stuck_heading_error{0.0};
     std::chrono::steady_clock::time_point stuck_anchor_t{};
 
     /// Recoveries spent on this episode and when the last one fired, so a robot
     /// that stays stuck cannot be re-planned in a tight loop.
     int recoveries{0};
+    bool recovery_exhausted{false};
+    GoalProgress goal_progress;
+    std::chrono::steady_clock::time_point last_goal_progress{};
     std::chrono::steady_clock::time_point last_recovery{};
+    GoalAlignment goal_alignment;
 };
 
 namespace {
@@ -303,9 +310,13 @@ NeuPanPlanner::~NeuPanPlanner() = default;
 void NeuPanPlanner::configure(const ConfigType& cfg) {
     // ── Values that never require touching the core planner ────────────────
     ref_speed_         = cfg.ref_speed;
+    approach_speed_gain_ = cfg.approach_speed_gain;
+    approach_min_speed_ = cfg.approach_min_speed;
     solver_fail_grace_ = static_cast<int>(cfg.solver_fail_grace);
     stall_speed_       = cfg.stall_speed;
     stall_timeout_     = cfg.stall_timeout;
+    impl_->goal_alignment.options = {cfg.goal_xy_tolerance, cfg.goal_yaw_tolerance,
+        cfg.goal_yaw_gain, cfg.goal_yaw_max_speed, cfg.goal_yaw_min_speed};
 
     // ── Structural snapshot ────────────────────────────────────────────────
     StructuralKey key;
@@ -353,6 +364,11 @@ void NeuPanPlanner::configure(const ConfigType& cfg) {
     impl_->resolved_checkpoint = checkpoint;
     impl_->have_path = false;
     impl_->have_goal = false;
+    impl_->goal_progress.reset();
+    impl_->recovery_exhausted = false;
+    impl_->stuck_anchor_valid = false;
+    impl_->recoveries = 0;
+    impl_->goal_alignment.reset();
     impl_->last_path.clear();
     impl_->consecutive_unsolved = 0;
     // A rebuilt core starts a fresh InitialPath, so its revision() can repeat a
@@ -451,6 +467,9 @@ void NeuPanPlanner::reset() {
     impl_->progress_started = false;
     impl_->stuck_anchor_valid = false;
     impl_->recoveries = 0;
+    impl_->goal_progress.reset();
+    impl_->recovery_exhausted = false;
+    impl_->goal_alignment.reset();
 
     RCLCPP_DEBUG(logger_, "reset(): episode state cleared.");
 }
@@ -485,19 +504,29 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
         if (!impl_->have_path) {
             impl_->planner->setInitialPath(path);
             impl_->planner->reset();
+            impl_->goal_alignment.reset();
             impl_->last_path = std::move(path);
             impl_->have_path = true;
             impl_->have_goal = false;
             impl_->consecutive_unsolved = 0;
+            impl_->goal_progress.reset();
+            impl_->recovery_exhausted = false;
+            impl_->stuck_anchor_valid = false;
+            impl_->recoveries = 0;
             RCLCPP_INFO(logger_, "NeuPAN initial path installed (%zu poses).", poses.size());
         } else if (!samePath(path, impl_->last_path)) {
             // replaceInitialPath re-projects the robot onto the new path, so a
             // replanned reference continues the episode instead of cold-starting
             // it.  setInitialPath + reset() would discard the warm start.
             impl_->planner->replaceInitialPath(path, state);
+            impl_->goal_alignment.reset();
             impl_->last_path = std::move(path);
             impl_->have_goal = false;
             impl_->consecutive_unsolved = 0;
+            impl_->goal_progress.reset();
+            impl_->recovery_exhausted = false;
+            impl_->stuck_anchor_valid = false;
+            impl_->recoveries = 0;
             RCLCPP_INFO(logger_, "NeuPAN initial path replaced (%zu poses).", poses.size());
         }
     } else {
@@ -517,6 +546,7 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             std::abs(gyaw - impl_->last_goal_yaw) > 1e-9;
 
         if (goal_changed) {
+            impl_->goal_alignment.reset();
             impl_->planner->updateInitialPathFromGoal(state, ::neupan::Vec3(gx, gy, gyaw));
             impl_->planner->reset();
             impl_->have_goal = true;
@@ -530,6 +560,8 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             // full budget of recoveries back.
             impl_->stuck_anchor_valid = false;
             impl_->recoveries = 0;
+            impl_->goal_progress.reset();
+            impl_->recovery_exhausted = false;
             RCLCPP_INFO(logger_, "NeuPAN goal set to (%.2f, %.2f, yaw %.2f).", gx, gy, gyaw);
         }
     }
@@ -552,7 +584,74 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
         impl_->points_buf(1, col) = obstacles[i].y;
     }
 
+    // Finish the original goal's yaw before calling the core: its arrival is
+    // position-only and returns zero without running DUNE/NRMP. This phase must
+    // also skip the XY-only stuck recovery, which would reset a valid rotation.
+    const auto& terminal_goal = poses.back();
+    const double goal_distance = std::hypot(state.x() - terminal_goal.position.x,
+                                           state.y() - terminal_goal.position.y);
+    if (impl_->recovery_exhausted) {
+        RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 5000,
+            "Local recovery exhausted; holding zero velocity until a new goal or path is supplied.");
+        return zeroTrajectory();
+    }
+    const bool was_aligning = impl_->goal_alignment.active;
+    if (impl_->goal_alignment.update(goal_distance)) {
+        impl_->stuck_anchor_valid = false;
+        impl_->progress_started = false;
+        const double error = std::atan2(
+            std::sin(yawFromQuat(terminal_goal.orientation) - state.z()),
+            std::cos(yawFromQuat(terminal_goal.orientation) - state.z()));
+        const double measured_w = ctx.robot_state.twist.angular.z;
+        double w = impl_->goal_alignment.angularVelocity(error, measured_w,
+            impl_->key.max_speed_angular, impl_->key.max_acce_angular,
+            impl_->key.step_time);
+        const auto clearance_at = [&](double rate) {
+            return GoalAlignment::rotationClearance(obstacles, state.x(), state.y(),
+                state.z(), rate, impl_->key.robot_length, impl_->key.robot_width,
+                impl_->key.robot_wheelbase, impl_->key.max_acce_angular,
+                impl_->key.step_time);
+        };
+        // Cover both directions when the command reverses a still-turning body.
+        const double clearance = std::isfinite(measured_w)
+            ? std::min(clearance_at(w), clearance_at(measured_w)) : 0.0;
+        if (clearance < impl_->key.collision_threshold) {
+            w = 0.0;
+            RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 2000,
+                "Goal rotation paused: swept clearance %.3f m is below %.3f m.",
+                clearance, impl_->key.collision_threshold);
+        } else {
+            RCLCPP_INFO_THROTTLE(logger_, impl_->clock, 1000,
+                "Goal alignment: distance %.3f m, yaw error %.3f rad, command %.3f rad/s.",
+                goal_distance, error, w);
+        }
+        using Trajectory = finenav::core::Trajectory<OutputProfile>;
+        Trajectory result;
+        geometry_msgs::msg::Twist rotation;
+        rotation.angular.z = w;
+        result.twists.push_back(rotation);
+        return result;
+    }
+    if (was_aligning) {
+        // If translation drift leaves the terminal region, un-latch path arrival
+        // and track position again before attempting another rotation.
+        if (poses.size() >= 2)
+            impl_->planner->replaceInitialPath(toPathPoints(poses), state);
+        else
+            impl_->planner->updateInitialPathFromGoal(state,
+                ::neupan::Vec3(terminal_goal.position.x, terminal_goal.position.y,
+                              yawFromQuat(terminal_goal.orientation)));
+        impl_->planner->reset();
+        impl_->stuck_anchor_valid = false;
+    }
+
     // ── 3. Solve ───────────────────────────────────────────────────────────
+    // Single-goal references have no upstream speed profile. Taper their speed
+    // near the goal to avoid repeatedly driving past it while still turning.
+    impl_->planner->setReferenceSpeed(impl_->have_goal
+        ? approachReferenceSpeed(ref_speed_, goal_distance,
+                                 approach_speed_gain_, approach_min_speed_)
+        : ref_speed_);
     CorePlanner::Info info;
     const ::neupan::Vec2 action = impl_->planner->forward(state, impl_->points_buf, info);
 
@@ -684,9 +783,10 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
         }
     }
 
-    // Stuck = no net progress for stall_timeout_ seconds, however loud the
-    // command is.
+    // Recover if stationary, or moving without improving the best goal distance
+    // for twice the timeout. The latter catches repeated loops around a goal.
     constexpr double kStuckProgress = 0.30;  // m that must be covered
+    constexpr double kStuckHeadingProgress = 0.15;  // rad toward reference heading
     constexpr int    kMaxRecoveries = 5;     // per blockage, then give up loudly
     // Give a fresh reference time to act before judging it again: a recovery
     // immediately followed by another one only churns the reference and turns a
@@ -695,40 +795,64 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
 
     const double px = ctx.robot_state.pose.position.x;
     const double py = ctx.robot_state.pose.position.y;
+    const double reference_yaw = info.ref_s.cols() > 0
+        ? info.ref_s(2, 0) : std::atan2(terminal_goal.position.y - py,
+                                       terminal_goal.position.x - px);
+    const double heading_error = std::abs(std::atan2(std::sin(reference_yaw - state.z()),
+                                                    std::cos(reference_yaw - state.z())));
+    if (impl_->goal_progress.update(goal_distance)) {
+        impl_->last_goal_progress = now;
+        impl_->recoveries = 0;
+    }
     if (!impl_->stuck_anchor_valid) {
         impl_->stuck_anchor_valid = true;
         impl_->stuck_anchor_x = px;
         impl_->stuck_anchor_y = py;
         impl_->stuck_anchor_t = now;
+        impl_->stuck_heading_error = heading_error;
     } else if (std::hypot(px - impl_->stuck_anchor_x,
                           py - impl_->stuck_anchor_y) > kStuckProgress) {
-        // Real progress: re-anchor and forgive the recoveries spent so far - the
-        // budget belongs to a blockage, not to an episode.
+        // Translation refreshes the stationary timer, but only a new best goal
+        // distance refills the recovery budget: circling is not goal progress.
         impl_->stuck_anchor_x = px;
         impl_->stuck_anchor_y = py;
         impl_->stuck_anchor_t = now;
-        impl_->recoveries = 0;
+        impl_->stuck_heading_error = heading_error;
+    } else if (impl_->stuck_heading_error - heading_error > kStuckHeadingProgress) {
+        // A turn toward the reference is useful progress even with fixed XY.
+        // Only decreasing heading error counts; circling cannot refresh this
+        // timer indefinitely, and angular progress does not refill the budget.
+        impl_->stuck_heading_error = heading_error;
+        impl_->stuck_anchor_t = now;
     }
 
     const double still_s =
         std::chrono::duration<double>(now - impl_->stuck_anchor_t).count();
     const double since_recovery_s =
         std::chrono::duration<double>(now - impl_->last_recovery).count();
+    const double without_goal_progress_s =
+        std::chrono::duration<double>(now - impl_->last_goal_progress).count();
 
     if (!info.arrive && !hold && impl_->have_goal && impl_->planner &&
-        still_s > stall_timeout_ &&
+        (still_s > stall_timeout_ || without_goal_progress_s > 2.0 * stall_timeout_) &&
         since_recovery_s > kRecoveryGrace * stall_timeout_) {
         if (impl_->recoveries >= kMaxRecoveries) {
             RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 5000,
-                "Stuck for %.1f s after %d recovery attempts; leaving it to the "
-                "safety gate. The reference is blocked and needs a global replan.",
-                still_s, impl_->recoveries);
+                "No goal progress for %.1f s after %d recovery attempts; "
+                "commanding zero velocity. A new goal or global replan is required.",
+                without_goal_progress_s, impl_->recoveries);
+            impl_->recovery_exhausted = true;
+            cmd = geometry_msgs::msg::Twist{};
         } else {
             ++impl_->recoveries;
             impl_->last_recovery = now;
+            // Give this attempt time to turn or follow a detour, without
+            // forgetting the best distance reached before the recovery.
+            impl_->last_goal_progress = now;
             impl_->stuck_anchor_x = px;
             impl_->stuck_anchor_y = py;
             impl_->stuck_anchor_t = now;
+            impl_->stuck_heading_error = heading_error;
 
             const ::neupan::Vec3 target(impl_->last_goal_x, impl_->last_goal_y,
                                         impl_->last_goal_yaw);
@@ -737,16 +861,18 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
                                  static_cast<double>(impl_->recoveries), detour)) {
                 impl_->planner->setWaypoints({state, detour, target});
                 RCLCPP_WARN(logger_,
-                    "Stuck for %.1f s; routing the reference via (%.2f, %.2f) "
+                    "No useful progress (position idle %.1f s, goal progress %.1f s); "
+                    "routing the reference via (%.2f, %.2f) "
                     "(recovery %d/%d).",
-                    still_s, detour.x(), detour.y(), impl_->recoveries,
+                    still_s, without_goal_progress_s, detour.x(), detour.y(), impl_->recoveries,
                     kMaxRecoveries);
             } else {
                 impl_->planner->updateInitialPathFromGoal(state, target);
                 RCLCPP_WARN(logger_,
-                    "Stuck for %.1f s with the line already clear; re-installing it "
-                    "from the current pose (recovery %d/%d).",
-                    still_s, impl_->recoveries, kMaxRecoveries);
+                    "No useful progress (position idle %.1f s, goal progress %.1f s); "
+                    "no detour waypoint generated (goal distance %.2f m). "
+                    "Rebuilding the reference from the current pose (recovery %d/%d).",
+                    still_s, without_goal_progress_s, goal_distance, impl_->recoveries, kMaxRecoveries);
             }
             // Drop the warm-started nominal too, or the optimizer walks straight
             // back into the minimum the new reference just escaped.

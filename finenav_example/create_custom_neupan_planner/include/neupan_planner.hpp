@@ -92,6 +92,16 @@ public:
  *                replaceInitialPath() on every later change, which re-projects
  *                the robot onto the new path instead of cold-starting.
  *
+ * === Terminal pose ===
+ * Near the original reference's final position, a separate closed-loop yaw
+ * controller finishes its quaternion orientation. NeuPAN's path generator uses
+ * tangent headings and its arrival check only considers position. Terminal
+ * rotation checks the rectangular footprint over the next command and braking
+ * arc, and bypasses XY-only stuck recovery. Position drift beyond the alignment
+ * hysteresis region resumes path tracking and clears the core's arrival latch.
+ * Single-goal tracking also tapers reference speed with remaining distance, so
+ * the optimizer has time to turn before passing a nearby target.
+ *
  * === Failure policy ===
  * plan() returns a ZERO-VELOCITY trajectory, never std::nullopt, for every
  * recoverable condition (model not loaded, empty reference, core reported stop
@@ -106,15 +116,19 @@ public:
  * leaning at the clearance — neither stopped nor arrived — for as long as the
  * goal stands.  plan() therefore watches the POSE (not the command, which stays
  * non-zero while the robot leans on something) and, after `stall_timeout`
- * seconds without 0.30 m of net progress, re-installs the reference from where
+ * seconds without 0.30 m of net displacement or a 0.15 rad improvement in the
+ * reference heading error, re-installs the reference from where
  * the robot actually is: a three-pose detour toward the less obstructed side
  * when the straight line looks blocked, otherwise the straight line again.  The
  * core is reset with it, so the warm-started nominal cannot drag the optimizer
- * back into the minimum it just escaped.
+ * back into the minimum it just escaped. Moving without reducing the best goal
+ * distance by 0.10 m for twice the timeout also triggers recovery, catching
+ * circles even when translation keeps refreshing the stationary timer.
  *
  * That is a local repair of a local failure mode: it un-sticks the optimizer, it
- * does not plan a route.  The budget is 5 recoveries per blockage, after which
- * plan() says so and leaves the robot to the safety gate.  The real remedy is a
+ * does not plan a route. Only a new best goal distance refills the budget of 5
+ * recoveries. Once exhausted, the plugin holds zero velocity until a new goal
+ * or path is supplied. The real remedy for a blocked reference is a
  * global planner, and this plugin already accepts one — a reference of >= 2
  * poses is taken as a PATH (setInitialPath / replaceInitialPath) — which is why
  * path references are deliberately NOT recovered: re-projecting onto the
@@ -205,6 +219,8 @@ private:
     // used are kept: neupan_planner::Params carries an rclcpp::Time stamp, so
     // a whole-struct copy would be both misleading and pointless.
     double ref_speed_{4.0};
+    double approach_speed_gain_{0.4};
+    double approach_min_speed_{0.05};
     int    solver_fail_grace_{5};
     double stall_speed_{0.02};
     double stall_timeout_{3.0};
