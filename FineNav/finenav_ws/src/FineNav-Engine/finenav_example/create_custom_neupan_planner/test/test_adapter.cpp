@@ -19,7 +19,7 @@ protected:
     void SetUp() override {
         neupan_planner::Params p;
         p.config_file=std::string(NEUPAN_ASSET_DIR)+"/planner.yaml";
-        p.model_file=std::string(NEUPAN_ASSET_DIR)+"/models/diff_0p4.bin";
+        p.model_file=std::string(NEUPAN_ASSET_DIR)+"/models/diff_0p7_0p6.bin";
         planner.configure(p);
         state.pose.orientation.w=1;
         geometry_msgs::msg::Pose goal;
@@ -53,13 +53,13 @@ TEST_F(AdapterTest, InvalidInputStops) {
     auto c=command(); EXPECT_EQ(c.linear.x,0); EXPECT_EQ(c.angular.z,0);
 }
 TEST_F(AdapterTest, SweptRotationUsesRectangle) {
-    neupan::Mat2X points(2,1); points.col(0)<<0.33,0;
+    neupan::Mat2X points(2,1); points.col(0)<<0.48,0;
     EXPECT_TRUE(planner.collisionFree({0,0,0},{0,0},points));
     EXPECT_FALSE(planner.collisionFree({0,0,0},{0,0.6},points));
 }
 TEST(ModelGeometry, RejectsWrongFootprint) {
     auto p=neupan::NeuPANPlanner::fromYaml(std::string(NEUPAN_ASSET_DIR)+"/planner.yaml",
-                                         std::string(NEUPAN_ASSET_DIR)+"/models/diff_0p4.bin");
+                                         std::string(NEUPAN_ASSET_DIR)+"/models/diff_0p7_0p6.bin");
     auto cfg=p.config(); cfg.length=0.5;
     EXPECT_THROW(neupan::NeuPANPlanner other(cfg),std::exception);
 }
@@ -67,7 +67,7 @@ TEST_F(AdapterTest, ClosedLoopAvoidsOffsetObstacle) {
     view.cloud.resize(2,16);
     for (int i=0;i<16;++i) {
         const double angle=2*M_PI*i/16;
-        view.cloud.col(i)<<0.9+0.07*std::cos(angle),0.32+0.07*std::sin(angle);
+        view.cloud.col(i)<<0.9+0.07*std::cos(angle),0.43+0.07*std::sin(angle);
     }
     double heading=0, max_detour=0;
     for (int step=0;step<500;++step) {
@@ -110,8 +110,18 @@ TEST_F(AdapterTest, FirstCommandHonorsMeasuredAcceleration) {
     EXPECT_LE(std::abs(c.angular.z),0.100001);
 }
 TEST(ModelExport, CppMatchesPyTorchForTrainedRectangle) {
-    const auto model=neupan::MLP::load(std::string(NEUPAN_ASSET_DIR)+"/models/diff_0p4.bin");
+    const auto model=neupan::MLP::load(std::string(NEUPAN_ASSET_DIR)+"/models/diff_0p7_0p6.bin");
     const auto reference=neupan::TensorFile::load(std::string(NEUPAN_ASSET_DIR)+"/models/validation.nptf");
+    auto result=model.forward(reference.at("points").cast<float>());
+    EXPECT_LT((result.cast<double>()-reference.at("mu")).cwiseAbs().maxCoeff(),1e-4);
+}
+TEST(ModelExport, OriginalSimulatorGeometryAndPyTorchMatch) {
+    const auto base=std::string(NEUPAN_ASSET_DIR)+"/";
+    const auto planner=neupan::NeuPANPlanner::fromYaml(base+"planner.yaml", base+"models/diff_0p7_0p6.bin");
+    EXPECT_DOUBLE_EQ(planner.config().length,0.7);
+    EXPECT_DOUBLE_EQ(planner.config().width,0.6);
+    const auto model=neupan::MLP::load(base+"models/diff_0p7_0p6.bin");
+    const auto reference=neupan::TensorFile::load(base+"models/validation.nptf");
     auto result=model.forward(reference.at("points").cast<float>());
     EXPECT_LT((result.cast<double>()-reference.at("mu")).cwiseAbs().maxCoeff(),1e-4);
 }

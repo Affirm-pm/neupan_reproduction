@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "goal": [
+    4.0,
+    2.0,
+    0.5
+  ],
+  "world": "flat_small_scale_maze.world",
+  "blocked": false,
+  "action_status": 4,
+  "final_pose": [
+    4.051031087690436,
+    2.0049467032596997,
+    0.42400091217102803
+  ],
+  "xy_error_m": 0.05127028168450533,
+  "yaw_error_rad": 0.07599908782897197,
+  "counts": {
+    "odom": 882,
+    "raw_cloud": 101,
+    "aligned_cloud": 97,
+    "wall_overlaps": 0
+  }
+}

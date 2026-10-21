@@ -1,0 +1,64 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Fixed Frame: map
+    Background Color: 40; 40; 40
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 1
+      Plane Cell Count: 20
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Gazebo lidar in map
+      Enabled: true
+      Topic:
+        Value: /aligned_cloud
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+        Depth: 5
+      Size (m): 0.03
+      Style: Points
+      Color Transformer: FlatColor
+      Color: 255; 220; 80
+    - Class: rviz_default_plugins/RobotModel
+      Name: Original FineNav robot
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        Depth: 1
+    - Class: rviz_default_plugins/Path
+      Name: Ground truth path
+      Enabled: true
+      Topic:
+        Value: /path
+        Depth: 5
+      Color: 60; 220; 255
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/SetGoal
+      Topic: /goal_pose
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 10
+      Pitch: 0.65
+      Yaw: 0.8
+      Focal Point:
+        X: 2
+        Y: 2
+        Z: 0.4
+      Target Frame: map
+      Near Clip Distance: 0.01
+Window Geometry:
+  Width: 1100
+  Height: 800

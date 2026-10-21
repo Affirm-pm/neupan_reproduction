@@ -44,9 +44,9 @@ ros2 run finenav_example hello_finenav --ros-args \
 
 ## 尺寸、模型和参数
 
-暂定车体长宽高 **0.4 × 0.4 × 0.5 m**，平面矩形以运动参考点为中心，wheelbase=0。DUNE 训练使用 0.4 × 0.4 m 的二维投影；高度用于点云过滤，不是二维网络的输入。
+项目车型明确使用原 `finenav_simulator/resource/robot/model.sdf.xmacro`：车体长宽 0.6 × 0.4 m，含轮子的导航平面包络为 **0.7 × 0.6 m**，以地面 `base_link` 为参考，wheelbase=0。DUNE 学习该包络；0.6 m 是高度筛选/包络配置，不是网络输入，也不是对精确总高的测量。
 
-`models/rectangle.pth` 是训练权重；`models/diff_0p4.bin` 是 C++ NPTF 模型，包含 G/h 足迹元数据。加载时 libneupan 校验模型和规划器尺寸一致，尺寸不匹配直接拒绝启动。`training_report.json` 记录训练配置、验证误差和模型哈希。
+`models/rectangle.pth` 是训练权重；`models/diff_0p7_0p6.bin` 是 C++ NPTF 模型，包含 G/h 足迹元数据。加载时 libneupan 校验模型和规划器尺寸一致，尺寸不匹配直接拒绝启动。`training_report.json` 记录训练配置、验证误差和模型哈希。
 
 训练使用原 NeuPAN `ObsPointNet` 架构，并针对矩形用解析投影计算原 DUNE 对偶问题的最优标签；不改变运行时的 DUNE/NRMP 算法。样本兼顾近车体区域和 ±6 m 范围，固定随机种子，训练 16000 次。5 万个留出点上，近场（离矩形 <0.3 m）距离误差 MAE 约 0.166 mm、P99 约 0.819 mm。这是模型几何误差，不是实车定位或避障精度。
 
@@ -55,7 +55,7 @@ ros2 run finenav_example hello_finenav --ros-args \
 ```bash
 python3 \
   src/FineNav-Engine/finenav_example/create_custom_neupan_planner/tools/train_rectangle.py \
-  --length 0.4 --width 0.4 --steps 16000
+  --length 0.7 --width 0.6 --height 0.6 --steps 16000
 ```
 
 训练脚本默认使用包内保留版权声明的原 `ObsPointNet` 架构副本和包内 C++ 导出工具，不再要求外部 `~/NeuPAN` 或 `~/neupan_cpp_ws`。如需指定其他原版源码，可用 `--upstream /path/to/NeuPAN`、`--cpp /path/to/libneupan`。
@@ -63,7 +63,7 @@ python3 \
 得到真实参数后：
 
 1. 更新 `planner.yaml` 的 robot.length/width/wheelbase、动力学上限及必要的优化权重，并用相同几何重训。当前训练脚本适用于中心对称矩形、wheelbase=0；偏置参考点或非矩形应使用原 NeuPAN 训练流程及匹配的 G/h 导出。
-2. 更新 WorldView 的高度过滤范围，以及 `neupan_planner.robot_height`（用于参数记录/日志）。默认高度范围是定位原始 base 位姿之上 0.05–0.5 m，假定 base 原点位于地面高度；真实传感器安装与 base 原点高度必须据实调整。不会自动删除车体内部点，以免把真实侵入障碍误删。
+2. 更新 WorldView 的高度过滤范围，以及 `neupan_planner.robot_height`（用于参数记录/日志）。默认高度范围是定位原始 base 位姿之上 0.05–0.6 m，假定 base 原点位于地面高度；真实传感器安装与 base 原点高度必须据实调整。不会自动删除车体内部点，以免把真实侵入障碍误删。
 3. 重新编译安装，再做实车验证。长度/宽度变化必须同步模型；只改 YAML 不会绕过尺寸检查。
 
 参数可在第二个启动配置中追加，例如：
@@ -74,7 +74,7 @@ python3 \
     neupan_planner:
       config_file: /absolute/path/planner.yaml
       model_file: /absolute/path/model.bin
-      robot_height: 0.5
+      robot_height: 0.6
       goal_xy_tolerance: 0.08
       goal_yaw_tolerance: 0.08
       collision_margin: 0.05
@@ -82,7 +82,7 @@ python3 \
       pose_topic: /localization_pose
       data_timeout: 0.5
       min_height: 0.05
-      max_height: 0.5
+      max_height: 0.6
       max_range: 6.0
       voxel_size: 0.04
 ```
@@ -104,10 +104,14 @@ ROS 验证脚本默认使用独立 `ROS_DOMAIN_ID=187` 和本机通信，只启�
 ### 当前边界与已知问题
 
 - 这是 NeuPAN 局部规划器接入，没有增加 A* 等全局搜索。单个目标用直线初始化；正面障碍、对称局部极小、U 型障碍或无通路时可能停住，不能保证自动绕出所有场景。测试保留了正面障碍陷入局部极小时停车且不碰撞的用例。可通过现有多点参考轨迹/上游全局规划接口引导。
-- 本地移植使用静态点假设，不预测动态障碍速度。0.5 m 高度与平面模型不覆盖三维通行能力。
+- 本地移植使用静态点假设，不预测动态障碍速度。0.6 m 高度配置与平面模型不覆盖三维通行能力。
 - 无真实小车测试；安装外参、base 原点、车体自反射、实际加减速、定位频率和控制时延仍需实车核对。
 - 引擎现有 `finenav_util/ros/simple_action_server.hpp` 的 `~SimpleActionServer()` 对 `current_handle_` 无条件调用 `abort()`。导航已经成功后 Ctrl+C，会触发 `SUCCEEDED → ABORT` 非法状态转换并异常退出。该问题可在模拟链路复现，与 NeuPAN 求解无关；遵守不改框架的要求，本接入没有修改它。测试报告单独记录退出码，不把正常导航通过等同于正常退出。
 
 ## 来源
 
 算法来源：[hanruihua/NeuPAN](https://github.com/hanruihua/NeuPAN)，Ruihua Han；C++ 核心现随整包放在 `FineNav/neupan_cpp_ws/src/neupan_cpp/libneupan`。模型结构来自原 Python 代码，二进制格式来自 C++ 项目的导出工具。本扩展与模型训练工具按 GPL-3.0-or-later 提供，原作者与第三方许可证保留；框架原文件保持其自身许可。
+
+## 复用原有 Gazebo 仿真
+
+原 `finenav_simulator` 的迷宫、机器人和多线激光可通过本示例的 [Gazebo 适配入口](gazebo/README.md) 使用 NeuPAN。仿真与其他启动入口共用本目录的 `planner.yaml` 和 `models/diff_0p7_0p6.bin`，不再维护另一套暂定小车模型。RViz 默认使用三维 Orbit 视角；NeuPAN 仍进行平面规划。

@@ -55,6 +55,8 @@ def generate_launch_description():
                 world_sdf_path,
                 TextSubstitution(text=" --gui-config "),
                 ign_config_path,
+                TextSubstitution(text=" "),
+                LaunchConfiguration("gazebo_extra_args"),
             ],
         }.items(),
     )
@@ -68,6 +70,7 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
+    ld.add_action(DeclareLaunchArgument("gazebo_extra_args", default_value=""))
     ld.add_action(declare_world_sdf_path)
     ld.add_action(declare_ign_config_path)
     ld.add_action(append_enviroment_worlds)

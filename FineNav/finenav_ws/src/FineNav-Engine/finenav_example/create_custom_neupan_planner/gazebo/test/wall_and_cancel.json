@@ -1,0 +1,27 @@
+{
+  "passed": false,
+  "goal": [
+    4.0,
+    4.0,
+    1.5708
+  ],
+  "world": "flat_small_scale_maze.world",
+  "blocked": true,
+  "action_status": 6,
+  "final_pose": [
+    4.009776004890897,
+    3.2618828778302293,
+    1.6278908805176913
+  ],
+  "xy_error_m": 0.7381818585631937,
+  "yaw_error_rad": 0.05709088051769129,
+  "motion_and_clearance_checks_passed": true,
+  "cancel_contract_passed": false,
+  "error": "Engine cancellation did not return STATUS_CANCELED (5)",
+  "counts": {
+    "odom": 987,
+    "raw_cloud": 95,
+    "aligned_cloud": 72,
+    "wall_overlaps": 0
+  }
+}

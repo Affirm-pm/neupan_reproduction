@@ -31,9 +31,13 @@ def convert_geometry(in_node, out_doc, out_parent_node):
         if child.nodeType == xml.dom.Node.ELEMENT_NODE:
             if child.tagName == 'mesh':
                 uri_node = get_child_node_by_tag(child, 'uri')
-                uri = 'file://'+parse_model_uri(uri_node.firstChild.data)
+                source_uri = uri_node.firstChild.data.strip()
+                uri = source_uri if source_uri.startswith('file://') else 'file://'+parse_model_uri(source_uri)
                 new_mesh_node = create_child_node(out_doc, new_node, 'mesh')
                 new_mesh_node.setAttribute('filename', uri)
+                scale_node = get_child_node_by_tag(child, 'scale')
+                if scale_node is not None and scale_node.firstChild is not None:
+                    new_mesh_node.setAttribute('scale', scale_node.firstChild.data.strip())
                 return True
             elif child.tagName == 'box':
                 size_node = get_child_node_by_tag(child, 'size')

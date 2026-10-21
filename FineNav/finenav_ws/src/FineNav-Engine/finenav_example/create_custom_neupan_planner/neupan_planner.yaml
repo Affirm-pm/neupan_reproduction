@@ -21,7 +21,7 @@ neupan_planner:
     description: goal yaw tolerance
   robot_height:
     type: double
-    default_value: 0.5
+    default_value: 0.6
     read_only: true
     description: robot height
   collision_margin:

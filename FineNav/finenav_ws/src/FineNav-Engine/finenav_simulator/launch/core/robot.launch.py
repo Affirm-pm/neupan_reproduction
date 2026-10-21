@@ -7,6 +7,7 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch.substitutions import PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 pkg_share_dir = get_package_share_directory("finenav_simulator")
 scripts_dir = os.path.join(pkg_share_dir, "scripts")
@@ -122,7 +123,7 @@ def _launch_setup(context):
             "max_path_points": 2000,
             "publish_tf": PythonExpression(["'False' if '", LaunchConfiguration("lio_type"), "' == 'fast_lio' else 'True'"]),
             "path_odom_frame": "odom",
-            "path_base_frame": "base_link",
+            "path_base_frame": LaunchConfiguration("ground_truth_base_frame"),
             "teleop_input_topic": "/keyboard/keypress",
             "teleop_output_topic": "/cmd_vel",
             "initial_linear_speed": 0.5,
@@ -133,7 +134,7 @@ def _launch_setup(context):
             "max_linear_speed": 2.0,
             "min_angular_speed": 0.0,
             "max_angular_speed": 3.0,
-            "enable_keyboard_teleop": True,
+            "enable_keyboard_teleop": ParameterValue(LaunchConfiguration("enable_keyboard_teleop"), value_type=bool),
             "enable_path_publisher": True,
             "enable_identity_map_to_odom": PythonExpression([
                 "'False' if '", LaunchConfiguration("lio_type"), "' == 'fast_lio' else 'True'"
@@ -152,6 +153,8 @@ def _launch_setup(context):
 
 def generate_launch_description():
     ld = LaunchDescription()
+    ld.add_action(DeclareLaunchArgument("ground_truth_base_frame", default_value="base_link"))
+    ld.add_action(DeclareLaunchArgument("enable_keyboard_teleop", default_value="true"))
     ld.add_action(
         DeclareLaunchArgument(
             "lio_type",

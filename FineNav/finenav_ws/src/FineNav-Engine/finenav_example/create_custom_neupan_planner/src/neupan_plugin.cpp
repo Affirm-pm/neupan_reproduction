@@ -125,7 +125,7 @@ void NeuPANPlanner::configure(const ConfigType& cfg) {
     const auto assets = ament_index_cpp::get_package_share_directory("finenav_example") + "/create_custom_neupan_planner/";
     auto next = std::make_unique<neupan::NeuPANPlanner>(neupan::NeuPANPlanner::fromYaml(
         cfg.config_file.empty() ? assets+"planner.yaml" : cfg.config_file,
-        cfg.model_file.empty() ? assets+"models/diff_0p4.bin" : cfg.model_file));
+        cfg.model_file.empty() ? assets+"models/diff_0p7_0p6.bin" : cfg.model_file));
     if (!(cfg.goal_xy_tolerance > 0) || !(cfg.goal_yaw_tolerance > 0) ||
         !(cfg.collision_margin > 0) || !(cfg.robot_height > 0))
         throw std::invalid_argument("Invalid NeuPAN goal tolerances or robot geometry");

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="12" failures="0" disabled="0" errors="0" time="2.722" timestamp="2026-10-21T16:27:25" name="AllTests">
+  <testsuite name="AdapterTest" tests="9" failures="0" disabled="0" errors="0" time="2.721" timestamp="2026-10-21T16:27:25">
+    <testcase name="MissingSensorStops" status="run" result="completed" time="0.001" timestamp="2026-10-21T16:27:25" classname="finenav_example.AdapterTest" />
+    <testcase name="OpenSpaceMovesWithinLimits" status="run" result="completed" time="0.018" timestamp="2026-10-21T16:27:25" classname="finenav_example.AdapterTest" />
+    <testcase name="FootprintCollisionStops" status="run" result="completed" time="0.023" timestamp="2026-10-21T16:27:25" classname="finenav_example.AdapterTest" />
+    <testcase name="GoalYawAndWrap" status="run" result="completed" time="0" timestamp="2026-10-21T16:27:25" classname="finenav_example.AdapterTest" />
+    <testcase name="InvalidInputStops" status="run" result="completed" time="0" timestamp="2026-10-21T16:27:25" classname="finenav_example.AdapterTest" />
+    <testcase name="SweptRotationUsesRectangle" status="run" result="completed" time="0" timestamp="2026-10-21T16:27:25" classname="finenav_example.AdapterTest" />
+    <testcase name="ClosedLoopAvoidsOffsetObstacle" status="run" result="completed" time="2.275" timestamp="2026-10-21T16:27:25" classname="finenav_example.AdapterTest" />
+    <testcase name="DirectBlockageMayStopAtLocalMinimumButNeverCollides" status="run" result="completed" time="0.392" timestamp="2026-10-21T16:27:28" classname="finenav_example.AdapterTest" />
+    <testcase name="FirstCommandHonorsMeasuredAcceleration" status="run" result="completed" time="0.012" timestamp="2026-10-21T16:27:28" classname="finenav_example.AdapterTest" />
+  </testsuite>
+  <testsuite name="ModelGeometry" tests="1" failures="0" disabled="0" errors="0" time="0" timestamp="2026-10-21T16:27:28">
+    <testcase name="RejectsWrongFootprint" status="run" result="completed" time="0" timestamp="2026-10-21T16:27:28" classname="finenav_example.ModelGeometry" />
+  </testsuite>
+  <testsuite name="ModelExport" tests="2" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-10-21T16:27:28">
+    <testcase name="CppMatchesPyTorchForTrainedRectangle" status="run" result="completed" time="0" timestamp="2026-10-21T16:27:28" classname="finenav_example.ModelExport" />
+    <testcase name="OriginalSimulatorGeometryAndPyTorchMatch" status="run" result="completed" time="0.001" timestamp="2026-10-21T16:27:28" classname="finenav_example.ModelExport" />
+  </testsuite>
+</testsuites>

@@ -16,7 +16,7 @@ neupan_world_view:
     description: min height
   max_height:
     type: double
-    default_value: 0.5
+    default_value: 0.6
     read_only: true
     description: max height
   max_range:

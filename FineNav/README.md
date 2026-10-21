@@ -9,8 +9,9 @@ FineNav/
 ├── finenav_ws/
 │   ├── src/FineNav-Engine/
 │   │   └── finenav_example/create_custom_neupan_planner/
-│   │       ├── models/       # 已训练的 0.4 × 0.4 m 足迹模型
+│   │       ├── models/       # 原仿真车 0.7 × 0.6 m 包络模型
 │   │       ├── tools/        # 构建、模拟验证和重训工具
+│   │       ├── gazebo/       # 复用原 finenav_simulator 的 NeuPAN 适配
 │   │       └── neupan_sim.yaml
 │   └── neupan_dependencies/
 │       ├── src/             # OSQP、osqp-eigen、QDLDL 源码
@@ -97,11 +98,26 @@ ros2 run finenav_example hello_finenav --ros-args \
 
 运行无需 Python NeuPAN 或 PyTorch。模型、配置、行为树都在整包内。可选重训工具也包含所需的原 ObsPointNet 架构副本及 C++ 导出工具；仅重训时额外需要 NumPy 和 PyTorch，或用 `--upstream` 指定其他 NeuPAN Python 源码。
 
+## 使用原有 Gazebo 仿真
+
+复用 `FineNav-Engine/finenav_simulator` 原有机器人、三维激光、迷宫与桥接链路，在 `finenav_example/create_custom_neupan_planner/gazebo` 中提供 NeuPAN 的定位、点云与启动适配。没有另建仿真包、机器人或世界。
+
+从本 FineNav 根目录执行：
+
+```bash
+bash tools/build_gazebo.sh
+bash tools/run_gazebo.sh
+```
+
+默认打开原迷宫 Gazebo 与 RViz 三维 Orbit 视角，并自动开始仿真。在 RViz 中通过 **2D Goal Pose** 发送目标，例如从出生点 `(2,2)` 前往 `(4,2)`。详细依赖、无窗口模式和验证命令见 [原仿真适配说明](finenav_ws/src/FineNav-Engine/finenav_example/create_custom_neupan_planner/gazebo/README.md)。
+
+项目统一使用原仿真小车：车体 0.6 × 0.4 m，含轮子的平面包络约 0.7 × 0.6 m；所有 NeuPAN 入口共用该包络的训练模型。仿真采用 Gazebo 真值定位，不依赖 FAST-LIO；当前 NeuPAN 局部导航尚不保证自主走出整个迷宫。
+
 ## 文档与验证边界
 
-整包已在另一临时路径解压，从零构建通过（9 个包），11 项 C++ 测试全部通过。动态库检查确认无缺失库，也未引用原工作区或 Conda 路径。
+早期整包曾在另一临时路径解压并从零构建通过（9 个包）；统一原仿真车型后，当前 12 项 C++ 测试全部通过。动态库检查确认无缺失库，也未引用原工作区或 Conda 路径。
 
 - [插件说明、参数及重训](finenav_ws/src/FineNav-Engine/finenav_example/create_custom_neupan_planner/README.md)
 - [算法集成验证及既有框架问题](finenav_ws/src/FineNav-Engine/finenav_example/create_custom_neupan_planner/VALIDATION.md)
 
-本次目录调整不改变算法、驱动、定位或框架源码。暂定车体尺寸为 0.4 × 0.4 × 0.5 m。实车尺寸、安装外参和制动能力仍需现场核对；导航成功后 Ctrl+C 的既有 Action Server 异常退出问题仍按不修改框架的约束保留。
+本次适配不修改导航引擎框架、实车驱动和实车定位源码。项目车型以原 `finenav_simulator/resource/robot/model.sdf.xmacro` 为准，导航包络为 0.7 × 0.6 m，高度筛选上限为 0.6 m。实车尺寸、安装外参和制动能力仍需现场核对；导航成功后 Ctrl+C 的既有 Action Server 异常退出问题仍按不修改框架的约束保留。

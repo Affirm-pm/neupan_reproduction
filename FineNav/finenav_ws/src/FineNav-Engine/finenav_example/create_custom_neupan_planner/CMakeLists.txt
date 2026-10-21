@@ -28,8 +28,12 @@ ament_target_dependencies(finenav_neupan_plugin finenav_core sensor_msgs ament_i
 target_link_libraries(finenav_neupan_plugin neupan neupan_planner_params neupan_cloud_map_params neupan_world_view_params)
 install(TARGETS finenav_neupan_plugin LIBRARY DESTINATION lib)
 install(DIRECTORY models behavior_trees tools DESTINATION share/${PROJECT_NAME}/create_custom_neupan_planner)
+install(DIRECTORY gazebo DESTINATION share/${PROJECT_NAME}/create_custom_neupan_planner
+  PATTERN "__pycache__" EXCLUDE)
+install(PROGRAMS gazebo/neupan_gazebo_adapter.py DESTINATION lib/${PROJECT_NAME})
 install(FILES planner.yaml neupan_sim.yaml README.md VALIDATION.md LICENSE DESTINATION share/${PROJECT_NAME}/create_custom_neupan_planner)
 install(FILES test/adapter_result.xml test/smoke_result.json test/smoke_engine.log
+  test/current_robot_adapter_result.xml
   DESTINATION share/${PROJECT_NAME}/create_custom_neupan_planner/test)
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)

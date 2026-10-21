@@ -27,8 +27,10 @@ def main():
     p.add_argument('--upstream', type=Path, help='Optional upstream NeuPAN checkout; defaults to the bundled ObsPointNet')
     p.add_argument('--cpp', type=Path, help='libneupan source; defaults to the bundled neupan_cpp_ws')
     p.add_argument('--output', type=Path, default=Path(__file__).resolve().parents[1]/'models')
-    p.add_argument('--length', type=float, default=0.4)
-    p.add_argument('--width', type=float, default=0.4)
+    p.add_argument('--length', type=float, default=0.7)
+    p.add_argument('--width', type=float, default=0.6)
+    p.add_argument('--height', type=float, default=0.6, help='Metadata only; DUNE learns the planar footprint')
+    p.add_argument('--model-name', default='diff_0p7_0p6.bin')
     p.add_argument('--steps', type=int, default=16000)
     a = p.parse_args()
     if a.cpp is None:
@@ -84,7 +86,7 @@ def main():
         out=model(x)
         error=((out*(x@G.T-h)).sum(1)-distance).abs()
         near=error[distance<0.3]
-        report={'length':a.length,'width':a.width,'height':0.5,'wheelbase':0.0,
+        report={'length':a.length,'width':a.width,'height':a.height,'wheelbase':0.0,
                 'seed':42,'steps':a.steps,'validation_samples':len(x),
                 'distance_mae_m':error.mean().item(), 'distance_p99_m':torch.quantile(error,0.99).item(),
                 'near_distance_mae_m':near.mean().item(),'near_distance_p99_m':torch.quantile(near,0.99).item(),
@@ -103,7 +105,7 @@ def main():
         elif isinstance(layer,torch.nn.ReLU): records.append((prefix+'.relu',np.zeros((0,0),np.float32)))
         else: raise TypeError(type(layer))
     records.extend([('meta.G',G0),('meta.h',h0)])
-    output=a.output/'diff_0p4.bin'
+    output=a.output/a.model_name
     write_nptf(output,records)
     write_nptf(a.output/'validation.nptf', [('points', x[:256].numpy().T),
                                             ('mu', out[:256].numpy().T)])
