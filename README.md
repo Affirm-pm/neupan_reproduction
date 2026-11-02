@@ -19,6 +19,7 @@ colcon build --packages-up-to finenav_example
 ## Run(sim)
 
 ```bash
+cd ~/neupan_reproduction_ws
 source /home/affirm/finenav_ws/install/setup.bash
 ros2 launch finenav_example hello_finenav.launch.py
 ```
