@@ -51,9 +51,9 @@ PAN::PointFlow PAN::generatePointFlow(const Mat3X& nom_s,
   const Mat2X obs = downsampleDecimation(points, opts_.dune_max_num);
 
   PointFlow pf;
-  pf.point_flow.reserve(robot_->T + 1);//障碍点在车体系下的坐标
-  pf.obs_points.reserve(robot_->T + 1);//障碍点在全局系下的坐标
-  pf.R.reserve(robot_->T + 1);//车体坐标系到全局坐标系的旋转矩阵
+  pf.point_flow.reserve(robot_->T + 1);  // 障碍点在车体系下的坐标
+  pf.obs_points.reserve(robot_->T + 1);  // 障碍点在全局系下的坐标
+  pf.R.reserve(robot_->T + 1);  // 车体坐标系到全局坐标系的旋转矩阵
 
   for (int i = 0; i <= robot_->T; ++i) {
     const Vec2 trans = nom_s.col(i).head<2>();
