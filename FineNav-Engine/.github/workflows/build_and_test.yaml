@@ -1,0 +1,41 @@
+name: "Build and Test"
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: rostooling/setup-ros-docker:ubuntu-jammy-ros-humble-ros-base-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+      # 仓库是 private：action-ros-ci 会按 origin 重新 clone 一次仓库，那个 clone 拿不到
+      # Actions token → 把 token 注入容器全局 git 配置，让之后所有 git 操作（含 vcs import）自动带认证。
+      - name: Let git reuse the Actions token (private repo)
+        run: |
+          git config --global --add http.https://github.com/.extraheader \
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "${{ secrets.GITHUB_TOKEN }}" | base64 -w0)"
+      - name: Build and test
+        uses: ros-tooling/action-ros-ci@0.4.8
+        with:
+          target-ros2-distro: humble
+          package-name: >- # ignore finenav_simulator
+            finenav_common finenav_core finenav_util finenav_visualizer finenav_interfaces  
+            finenav_localizer finenav_navigator finenav_engine_cpp finenav_example
+#      - name: Codecov # 没配置好，查看文档https://github.com/marketplace/actions/ros-2-ci-action#generate-and-process-code-coverage-data
+#        uses: codecov/codecov-action@v5
+#        with:
+#          token: ${{ secrets.CODECOV_TOKEN }}
+#          files: ros_ws/lcov/total_coverage.info,ros_ws/coveragepy/.coverage
+#          flags: unittests
+#          name: codecov-umbrella
+#          fail_ci_if_error: false
+
+
+

@@ -1,0 +1,39 @@
+// Copyright (c) 2026.
+// IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+// All rights reserved.
+
+#include "finenav_navigator/chassis_command/chassis_cmd_vel_stamped.hpp"
+
+#include <geometry_msgs/msg/twist_stamped.hpp>
+
+#include "finenav_common/frames.hpp"
+
+namespace finenav::navigator {
+
+ChassisCmdVelStamped::ChassisCmdVelStamped(rclcpp::Node::SharedPtr node,
+                                           const std::string& topic)
+    : node_(std::move(node)) {
+    pub_ = node_->create_publisher<geometry_msgs::msg::TwistStamped>(topic, 10);
+}
+
+bool ChassisCmdVelStamped::validate(const finenav_interfaces::msg::Trajectory& traj) const {
+    return !traj.twists.empty() &&
+           (traj.valid_fields & finenav_interfaces::msg::Trajectory::TRAJ_VEL);
+}
+
+void ChassisCmdVelStamped::publish(const finenav_interfaces::msg::Trajectory& traj) {
+    geometry_msgs::msg::TwistStamped msg;
+    msg.twist = traj.twists[0];
+    msg.header.stamp = node_->now(); // TODO：change to the timestamp of planning start?
+    msg.header.frame_id = common::frames().robot;
+    pub_->publish(msg);
+}
+
+void ChassisCmdVelStamped::stop() {
+    geometry_msgs::msg::TwistStamped zero;
+    zero.header.stamp = node_->now();
+    zero.header.frame_id = common::frames().robot;
+    pub_->publish(zero);
+}
+
+}  // namespace finenav::navigator

@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>finenav_cmake</name>
+  <version>0.5.1</version>
+  <description>CMake build helpers for FineNav algorithm plugin registration
+    in the ament resource index and parameter generation.</description>
+
+  <maintainer email="wangjinghui@sjtu.edu.cn">Jinghui Wang</maintainer>
+  <license>MPL-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <!-- Re-exported to plugin packages: find_package(finenav_cmake) also brings in
+       generate_parameter_library(), the codegen a plugin uses for its ConfigType
+       struct. build_export_depend makes that visible to consumers' builds. -->
+  <build_depend>generate_parameter_library</build_depend>
+  <build_export_depend>generate_parameter_library</build_export_depend>
+
+  <!-- Consumed, not just built with: the extras file that find_package(finenav_cmake)
+       pulls in calls find_package(ament_cmake_core) and ament_register_extension(),
+       so consumers need ament_cmake_core as a buildtool too. -->
+  <buildtool_export_depend>ament_cmake_core</buildtool_export_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

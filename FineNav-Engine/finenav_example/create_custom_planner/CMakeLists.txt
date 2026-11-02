@@ -1,0 +1,21 @@
+generate_parameter_library(dummy_line_planner_params dummy_line_planner.yaml)
+generate_parameter_library(dummy_follow_planner_params dummy_follow_planner.yaml)
+
+add_library(dummy_line_planner SHARED src/dummy_line_planner.cpp)
+target_include_directories(dummy_line_planner PUBLIC include)
+ament_target_dependencies(dummy_line_planner finenav_core)
+target_link_libraries(dummy_line_planner dummy_line_planner_params)
+
+add_library(dummy_follow_planner SHARED src/dummy_follow_planner.cpp)
+target_include_directories(dummy_follow_planner PUBLIC include)
+ament_target_dependencies(dummy_follow_planner finenav_core)
+target_link_libraries(dummy_follow_planner dummy_follow_planner_params)
+
+install(TARGETS dummy_line_planner dummy_follow_planner
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin)
+install(DIRECTORY include/ DESTINATION include)
+
+finenav_register_algo_plugin(dummy_line_planner)
+finenav_register_algo_plugin(dummy_follow_planner)

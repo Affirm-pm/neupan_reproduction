@@ -1,0 +1,34 @@
+<root BTCPP_format="4">
+
+    <BehaviorTree ID="GettingStartedNavigate">
+        <Sequence>
+            <PublishNavigationGoal/>
+
+            <RecoveryNode number_of_retries="3">
+                <SubTree ID="DriveToGoal"/>
+
+                <!-- Control branch FAULTED: recovery -->
+                <Sequence name="Recover">
+                    <GetFaultedControlLayer control_layer="{faulted_layer}"/>
+                    <StopChassisMotion/>
+                    <RestartFromControlLayer control_layer="{faulted_layer}"/>
+                </Sequence>
+            </RecoveryNode>
+        </Sequence>
+    </BehaviorTree>
+
+
+    <BehaviorTree ID="DriveToGoal">
+        <Sequence>
+            <ReactiveFallback name="NavigateOrSucceed">
+                <IsGoalReached  xy_tolerance="0.25"
+                                yaw_tolerance="0.1"
+                                speed_tolerance="0.1"/>
+                <ExecuteControlBranch branch="navigate"/>
+            </ReactiveFallback>
+            <!-- Goal reached: publish stop chassis. -->
+            <StopChassisMotion/>
+        </Sequence>
+    </BehaviorTree>
+
+</root>

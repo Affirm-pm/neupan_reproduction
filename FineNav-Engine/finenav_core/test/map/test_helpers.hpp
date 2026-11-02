@@ -1,0 +1,62 @@
+// Copyright (c) 2026.
+// IWIN-FINS Lab, Shanghai Jiao Tong University, Shanghai, China.
+// All rights reserved.
+//
+// Shared test infrastructure for finenav_core/map unit tests.
+
+#pragma once
+
+#include <memory>
+#include <optional>
+
+#include <rclcpp/rclcpp.hpp>
+
+#include "finenav_core/map/map_concept.hpp"
+#include "finenav_core/robot_state/robot_state.hpp"
+
+// ── Minimal self-managing Map for testing ───────────────────────────────────
+
+struct SmokeCell { double value = 0.0; };
+
+struct SmokeMap {
+    using ConfigType = int;
+    using DataType   = SmokeCell;
+
+    void configure(const int&) {}
+
+    bool isInside(const finenav::common::Position3D& p) const {
+        return contains(bounds_, p);
+    }
+    finenav::common::Region3D getWindowBounds() const { return bounds_; }
+    finenav::common::Position3D getWindowCenter() const { return center(bounds_); }
+
+    void shiftWindowTo(const finenav::common::Position3D& center) {
+        auto half = sizes(bounds_) * 0.5;
+        bounds_ = finenav::common::Region3D{center - half, center + half};
+    }
+
+    // selfManage — minimal no-op for tests that don't need data sources
+    void selfManage(finenav::core::MapRuntime&) {}
+
+private:
+    finenav::common::Region3D bounds_{
+        finenav::common::Position3D{-50, -50, -5},
+        finenav::common::Position3D{ 50,  50,  5}};
+};
+
+static_assert(finenav::core::Map<SmokeMap>);
+static_assert(finenav::core::ShiftableMap<SmokeMap>);
+
+// ── Mock state provider ────────────────────────────────────────────────────
+
+struct MockStateProvider : finenav::core::RobotStateProvider {
+    finenav::core::RobotState state{};
+
+    std::optional<finenav::core::RobotState> getRobotState() const override {
+        return state;
+    }
+    std::optional<finenav::core::RobotState> getRobotState(
+        const rclcpp::Time&) const override {
+        return state;
+    }
+};

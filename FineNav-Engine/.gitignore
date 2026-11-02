@@ -1,0 +1,17 @@
+# Clion
+cmake-build-debug/
+.idea/*
+!.idea/copyright/
+!.idea/codeStyles/
+
+# ROS2
+build/
+install/
+log/
+
+# MkDocs
+.venv-docs/
+.site-docs/
+scripts/__pycache__/
+
+.site-docs-detailed/

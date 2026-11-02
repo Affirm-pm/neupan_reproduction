@@ -1,0 +1,19 @@
+dummy_follow_planner:
+  linear_speed:
+    type: double
+    default_value: 0.5
+    description: "Forward speed (m/s)"
+    validation:
+      gt<>: [0.0]
+  angular_speed:
+    type: double
+    default_value: 1.0
+    description: "Angular control gain"
+    validation:
+      gt<>: [0.0]
+  lookahead_distance:
+    type: double
+    default_value: 1.0
+    description: "Distance to follow ahead along the path (m)"
+    validation:
+      gt<>: [0.0]

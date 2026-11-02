@@ -1,0 +1,4 @@
+dummy_line_world_view:
+  map:
+    type: none
+    description: "World data is provided by DummyMap"

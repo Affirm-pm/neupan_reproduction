@@ -1,0 +1,30 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/affirm/gyj_ros_ws/install/learning_interface/include/**",
+        "/opt/ros/humble/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/FineNav-Engine/finenav_common/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/FineNav-Engine/finenav_core/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/FineNav-Engine/finenav_engine_cpp/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/FineNav-Engine/finenav_localizer/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/FineNav-Engine/finenav_navigator/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/FineNav-Engine/finenav_simulator/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/FineNav-Engine/finenav_util/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/FineNav-Engine/finenav_visualizer/include/**",
+        "/home/affirm/neupan_reproduction/neupan_reproduction/neupan_cpp/libneupan/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ros2",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++17"
+    }
+  ],
+  "version": 4
+}

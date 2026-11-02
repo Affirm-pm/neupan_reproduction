@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="3">
+    <name>finenav_engine</name>
+    <version>0.5.1</version>
+    <description>Metapackage for the FineNav-Engine C++ runtime.</description>
+
+    <maintainer email="wangjinghui@sjtu.edu.cn">Jinghui Wang</maintainer>
+    <license>MPL 2.0</license>
+
+    <buildtool_depend>ament_cmake</buildtool_depend>
+
+    <exec_depend>finenav_engine_cpp</exec_depend>
+
+    <export>
+        <build_type>ament_cmake</build_type>
+    </export>
+</package>

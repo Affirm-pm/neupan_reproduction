@@ -1,0 +1,76 @@
+site_name: FineNav-Engine
+site_description: Choose navigation components, write a WorldView, and run FineNav-Engine
+repo_url: https://github.com/FineNav/FineNav-Engine
+repo_name: FineNav/FineNav-Engine
+docs_dir: docs
+site_dir: .site-docs
+use_directory_urls: true
+theme:
+  name: material
+  language: en
+  palette:
+    primary: teal
+    accent: red
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - content.code.copy
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      languages:
+        - locale: en
+          name: English
+          default: true
+        - locale: zh
+          name: 中文
+          site_name: FineNav-Engine 文档
+          nav_translations:
+            Overview: 项目总览
+            Why FineNav-Engine?: 为什么选择 FineNav-Engine？
+            Installation: 如何安装
+            Getting Started: 入门教程
+            1. Run the example: 1. 运行示例
+            2. Choose Map and Planner: 2. 选择 Map 和 Planner
+            3. Write a WorldView: 3. 编写 WorldView
+            4. Assemble a control pipeline: 4. 组装控制 Pipeline
+            5. Configure a Behavior Tree: 5. 按需求配置行为树
+            Custom Planner: 自定义 Planner
+            Custom Map: 自定义 Map
+            FineNav (ICRA 2026): FineNav (ICRA 2026)
+validation:
+  nav:
+    omitted_files: info
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+nav:
+  - Overview: index.md
+  - Why FineNav-Engine?: guide/why-finenav.md
+  - Installation: guide/installation.md
+  - Getting Started:
+      - 1. Run the example: guide/quickstart.md
+      - 2. Choose Map and Planner: guide/choose-algorithms.md
+      - 3. Write a WorldView: guide/worldview.md
+      - 4. Assemble a control pipeline: guide/cpp-application.md
+      - 5. Configure a Behavior Tree: guide/behavior-tree.md
+  - finenav_planner:
+      - guide/plugins/planners.md
+      - Custom Planner: guide/custom-planner.md
+  - finenav_map:
+      - guide/plugins/maps.md
+      - Custom Map: guide/custom-map.md

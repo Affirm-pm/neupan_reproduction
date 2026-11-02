@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>finenav_example</name>
+  <version>0.5.1</version>
+  <description>Getting-started FineNav-Engine application and example map, planner, and world-view plugins.</description>
+  <maintainer email="wangjinghui@sjtu.edu.cn">Jinghui Wang</maintainer>
+  <license>MPL-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>finenav_engine_cpp</depend>
+  <depend>finenav_core</depend>
+  <depend>finenav_visualizer</depend>
+  <depend>libneupan</depend>
+  <depend>eigen</depend>
+  <depend>generate_parameter_library</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+
+  <build_depend>finenav_cmake</build_depend>
+
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>finenav_simulator</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
