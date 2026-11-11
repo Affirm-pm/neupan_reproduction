@@ -5,6 +5,8 @@
 #include "neupan_planner.hpp"
 #include "goal_alignment.hpp"
 #include "goal_progress.hpp"
+#include "planner_safety.hpp"
+#include <dlfcn.h>
 
 #include <algorithm>
 #include <chrono>
@@ -129,19 +131,15 @@ bool samePath(const std::vector<::neupan::InitialPath::PathPoint>& a,
     return true;
 }
 
-/// Where the DUNE weights live.
-///
-/// The ROS parameter always wins.  Only when it is empty do we fall back to the
-/// path baked in at build time from libneupan's installed models directory
-/// (${libneupan_MODELS_DIR}), so a default build runs without any configuration
-/// but a machine that moved the models can point at them without rebuilding.
+// Resolve beside the installed shared library, independent of build machine
+// paths and AMENT_PREFIX_PATH. An explicit parameter still wins.
 std::string resolveCheckpoint(const std::string& configured) {
     if (!configured.empty()) return configured;
-#ifdef NEUPAN_DEFAULT_CHECKPOINT
-    return NEUPAN_DEFAULT_CHECKPOINT;
-#else
-    return {};
-#endif
+    Dl_info info{};
+    if (!dladdr(reinterpret_cast<const void*>(&resolveCheckpoint), &info) || !info.dli_fname)
+        return {};
+    return (std::filesystem::absolute(info.dli_fname).parent_path().parent_path() /
+            "share/finenav_example/models/diff_0p7x0p6.bin").string();
 }
 
 // ── Stuck-recovery geometry ──────────────────────────────────────────────────
@@ -280,6 +278,9 @@ struct NeuPanPlanner::Impl {
     std::chrono::steady_clock::time_point last_goal_progress{};
     std::chrono::steady_clock::time_point last_recovery{};
     GoalAlignment goal_alignment;
+    FailureWatch failure_watch;
+    FailureWatch yaw_watch;
+    double best_yaw_error{std::numeric_limits<double>::infinity()};
 };
 
 namespace {
@@ -315,6 +316,7 @@ void NeuPanPlanner::configure(const ConfigType& cfg) {
     solver_fail_grace_ = static_cast<int>(cfg.solver_fail_grace);
     stall_speed_       = cfg.stall_speed;
     stall_timeout_     = cfg.stall_timeout;
+    failure_timeout_   = cfg.failure_timeout;
     impl_->goal_alignment.options = {cfg.goal_xy_tolerance, cfg.goal_yaw_tolerance,
         cfg.goal_yaw_gain, cfg.goal_yaw_max_speed, cfg.goal_yaw_min_speed};
 
@@ -369,6 +371,9 @@ void NeuPanPlanner::configure(const ConfigType& cfg) {
     impl_->stuck_anchor_valid = false;
     impl_->recoveries = 0;
     impl_->goal_alignment.reset();
+    impl_->failure_watch.reset();
+    impl_->yaw_watch.reset();
+    impl_->best_yaw_error = std::numeric_limits<double>::infinity();
     impl_->last_path.clear();
     impl_->consecutive_unsolved = 0;
     // A rebuilt core starts a fresh InitialPath, so its revision() can repeat a
@@ -378,8 +383,8 @@ void NeuPanPlanner::configure(const ConfigType& cfg) {
 
     if (checkpoint.empty()) {
         RCLCPP_ERROR(logger_,
-            "neupan_planner.dune_checkpoint is empty and no build-time default was "
-            "configured. Running in the safe state (zero velocity) until it is set: "
+            "neupan_planner.dune_checkpoint is empty and the plugin location could "
+            "not be resolved. Running in the safe state (zero velocity) until it is set: "
             "ros2 param set <node> neupan_planner.dune_checkpoint <path/to/model.bin>");
         return;
     }
@@ -470,6 +475,9 @@ void NeuPanPlanner::reset() {
     impl_->goal_progress.reset();
     impl_->recovery_exhausted = false;
     impl_->goal_alignment.reset();
+    impl_->failure_watch.reset();
+    impl_->yaw_watch.reset();
+    impl_->best_yaw_error = std::numeric_limits<double>::infinity();
 
     RCLCPP_DEBUG(logger_, "reset(): episode state cleared.");
 }
@@ -478,18 +486,27 @@ void NeuPanPlanner::reset() {
 //  Core
 // ==============================================================================
 NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& world) {
+    const auto fail = [&](const char* reason) -> Result {
+        if (impl_->failure_watch.expired(std::chrono::steady_clock::now(), failure_timeout_)) {
+            RCLCPP_ERROR(logger_, "Persistent planner failure (%s); faulting control layer.", reason);
+            return std::nullopt;
+        }
+        RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 2000, "%s; commanding zero velocity.", reason);
+        return zeroTrajectory();
+    };
+    if (!world.observationValid()) return fail("Obstacle observation unavailable");
     // ── 0. Not ready ───────────────────────────────────────────────────────
     if (!impl_->ready || !impl_->planner) {
         RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 2000,
             "NeuPAN is not ready (no usable DUNE checkpoint); commanding zero velocity.");
-        return zeroTrajectory();
+        return fail("NeuPAN model/configuration unavailable");
     }
 
     const auto& poses = ctx.ref_traj.poses;
     if (poses.empty()) {
         RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 2000,
             "Empty reference trajectory; commanding zero velocity.");
-        return zeroTrajectory();
+        return fail("Empty reference trajectory");
     }
 
     // Both the state and the obstacle points are world-fixed, which is exactly
@@ -505,6 +522,9 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             impl_->planner->setInitialPath(path);
             impl_->planner->reset();
             impl_->goal_alignment.reset();
+            impl_->failure_watch.reset();
+            impl_->yaw_watch.reset();
+            impl_->best_yaw_error = std::numeric_limits<double>::infinity();
             impl_->last_path = std::move(path);
             impl_->have_path = true;
             impl_->have_goal = false;
@@ -520,6 +540,9 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             // it.  setInitialPath + reset() would discard the warm start.
             impl_->planner->replaceInitialPath(path, state);
             impl_->goal_alignment.reset();
+            impl_->failure_watch.reset();
+            impl_->yaw_watch.reset();
+            impl_->best_yaw_error = std::numeric_limits<double>::infinity();
             impl_->last_path = std::move(path);
             impl_->have_goal = false;
             impl_->consecutive_unsolved = 0;
@@ -547,6 +570,9 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
 
         if (goal_changed) {
             impl_->goal_alignment.reset();
+            impl_->failure_watch.reset();
+            impl_->yaw_watch.reset();
+            impl_->best_yaw_error = std::numeric_limits<double>::infinity();
             impl_->planner->updateInitialPathFromGoal(state, ::neupan::Vec3(gx, gy, gyaw));
             impl_->planner->reset();
             impl_->have_goal = true;
@@ -572,11 +598,12 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
     if (!impl_->planner->ipath().hasPath()) {
         RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 2000,
             "No usable initial path yet; commanding zero velocity.");
-        return zeroTrajectory();
+        return fail("No usable initial path");
     }
 
     // ── 2. Obstacle points, (2, N) world-fixed ─────────────────────────────
     const auto& obstacles = world.obstaclePoints();
+    const auto& collision_points = world.collisionPoints();
     impl_->points_buf.resize(2, static_cast<Eigen::Index>(obstacles.size()));
     for (std::size_t i = 0; i < obstacles.size(); ++i) {
         const auto col = static_cast<Eigen::Index>(i);
@@ -592,8 +619,8 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
                                            state.y() - terminal_goal.position.y);
     if (impl_->recovery_exhausted) {
         RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 5000,
-            "Local recovery exhausted; holding zero velocity until a new goal or path is supplied.");
-        return zeroTrajectory();
+            "Local recovery exhausted; reporting fault to the control layer.");
+        return std::nullopt;
     }
     const bool was_aligning = impl_->goal_alignment.active;
     if (impl_->goal_alignment.update(goal_distance)) {
@@ -607,7 +634,7 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             impl_->key.max_speed_angular, impl_->key.max_acce_angular,
             impl_->key.step_time);
         const auto clearance_at = [&](double rate) {
-            return GoalAlignment::rotationClearance(obstacles, state.x(), state.y(),
+            return GoalAlignment::rotationClearance(collision_points, state.x(), state.y(),
                 state.z(), rate, impl_->key.robot_length, impl_->key.robot_width,
                 impl_->key.robot_wheelbase, impl_->key.max_acce_angular,
                 impl_->key.step_time);
@@ -616,15 +643,33 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
         const double clearance = std::isfinite(measured_w)
             ? std::min(clearance_at(w), clearance_at(measured_w)) : 0.0;
         if (clearance < impl_->key.collision_threshold) {
-            w = 0.0;
-            RCLCPP_WARN_THROTTLE(logger_, impl_->clock, 2000,
-                "Goal rotation paused: swept clearance %.3f m is below %.3f m.",
-                clearance, impl_->key.collision_threshold);
+            return fail("Goal rotation swept footprint blocked");
         } else {
             RCLCPP_INFO_THROTTLE(logger_, impl_->clock, 1000,
                 "Goal alignment: distance %.3f m, yaw error %.3f rad, command %.3f rad/s.",
                 goal_distance, error, w);
         }
+        const auto& measured=ctx.robot_state.twist;
+        if (sweptClearance(collision_points,state.x(),state.y(),state.z(),
+                measured.linear.x,measured.angular.z,impl_->key.robot_length,
+                impl_->key.robot_width,impl_->key.robot_wheelbase,
+                impl_->key.max_acce_linear,impl_->key.max_acce_angular,
+                impl_->key.step_time)<impl_->key.collision_threshold)
+            return fail("Goal alignment braking footprint blocked");
+        if (std::abs(error)<impl_->goal_alignment.options.yaw_tolerance) {
+            impl_->yaw_watch.reset();
+        } else {
+            if (impl_->best_yaw_error-std::abs(error)>0.05) {
+                impl_->best_yaw_error=std::abs(error);
+                impl_->yaw_watch.reset();
+            }
+            if (impl_->yaw_watch.expired(std::chrono::steady_clock::now(),failure_timeout_)) {
+                RCLCPP_ERROR(logger_,"No terminal yaw progress; stopping then reporting fault.");
+                impl_->recovery_exhausted = true;
+                return zeroTrajectory();
+            }
+        }
+        impl_->failure_watch.reset();
         using Trajectory = finenav::core::Trajectory<OutputProfile>;
         Trajectory result;
         geometry_msgs::msg::Twist rotation;
@@ -653,7 +698,13 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
                                  approach_speed_gain_, approach_min_speed_)
         : ref_speed_);
     CorePlanner::Info info;
-    const ::neupan::Vec2 action = impl_->planner->forward(state, impl_->points_buf, info);
+    ::neupan::Vec2 action;
+    try {
+        action = impl_->planner->forward(state, impl_->points_buf, info);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR_THROTTLE(logger_,impl_->clock,2000,"NeuPAN solve failed: %s",e.what());
+        return fail("NeuPAN runtime exception");
+    }
 
     // ── 4. Safety gate (mirrors the upstream node's run()) ─────────────────
     if (info.solved) {
@@ -687,7 +738,21 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             impl_->consecutive_unsolved, info.solver_status);
     }
 
-    const bool hold = info.arrive || info.stop || !finite || solver_gave_up;
+    // Every failed solve stops immediately. Grace is only the number of failed
+    // cycles before dropping the warm start, never permission to execute a nominal.
+    if (solver_gave_up) impl_->planner->reset();
+    const auto clearance_at = [&](double linear, double angular) {
+        return sweptClearance(collision_points,state.x(),state.y(),state.z(),linear,angular,
+            impl_->key.robot_length,impl_->key.robot_width,impl_->key.robot_wheelbase,
+            impl_->key.max_acce_linear,impl_->key.max_acce_angular,impl_->key.step_time);
+    };
+    const bool unsafe = !finite || clearance_at(v,w)<impl_->key.collision_threshold ||
+        clearance_at(ctx.robot_state.twist.linear.x,ctx.robot_state.twist.angular.z)
+            <impl_->key.collision_threshold;
+    const bool hold = info.arrive || info.stop || unsafe || !info.solved;
+    // Keep the first stop visible to the chassis before propagating a fault.
+    if (!info.arrive && hold) return fail("No safe feasible motion");
+    impl_->failure_watch.reset();
 
     geometry_msgs::msg::Twist cmd;   // zero-initialised, so hold == all zeros
     if (!hold) {
@@ -832,6 +897,14 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
         std::chrono::duration<double>(now - impl_->last_recovery).count();
     const double without_goal_progress_s =
         std::chrono::duration<double>(now - impl_->last_goal_progress).count();
+
+    // Respect an upstream multi-pose route instead of inventing a detour, but
+    // still report stationary failure so the upstream planner can replan.
+    if (!info.arrive && impl_->have_path && still_s > failure_timeout_) {
+        RCLCPP_ERROR(logger_, "No motion progress on upstream path; stopping then reporting fault.");
+        impl_->recovery_exhausted = true;
+        cmd = geometry_msgs::msg::Twist{};
+    }
 
     if (!info.arrive && !hold && impl_->have_goal && impl_->planner &&
         (still_s > stall_timeout_ || without_goal_progress_s > 2.0 * stall_timeout_) &&

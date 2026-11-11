@@ -37,7 +37,8 @@ namespace finenav::example {
  * it".  The framework's naming (DummyWorldView in create_custom_planner) is not
  * followed here precisely because this plugin ships both halves in one folder.
  *
- * Deliberately one method.  NeuPAN consumes a point set and nothing else: it
+ * Observation validity and full-resolution collision data are explicit.
+ *  NeuPAN consumes a point set and nothing else: it
  * has no walkability query, no inflation query and no cost query.  Declaring
  * methods the planner never calls would be the mistake DummyPlanner makes with
  * its pure-virtual `isWalkable`, so this interface states only what plan()
@@ -51,6 +52,13 @@ namespace finenav::example {
 class NeuPanObstacleView {
 public:
     virtual ~NeuPanObstacleView() = default;
+
+    // A valid empty observation is different from missing/stale/invalid data.
+    virtual bool observationValid() const = 0;
+    // Full filtered cloud, before any optimizer-only point budget.
+    virtual const std::vector<finenav::common::Position3D>& collisionPoints() const {
+        return obstaclePoints();
+    }
 
     /// Obstacle points, world-fixed frame.  May be empty (NeuPAN then tracks
     /// the reference path with no avoidance).  Must be cheap to call: the
@@ -103,12 +111,10 @@ public:
  * the optimizer has time to turn before passing a nearby target.
  *
  * === Failure policy ===
- * plan() returns a ZERO-VELOCITY trajectory, never std::nullopt, for every
- * recoverable condition (model not loaded, empty reference, core reported stop
- * or arrival, solver failing, non-finite output).  This is deliberate:
- * ControlLayer's periodic body treats a nullopt result as terminal — it
- * publishes FAULTED and the worker thread returns for good — so a transient
- * problem would kill the layer instead of just pausing the robot.
+ * Transient sensor/model/solver/collision failures return a zero command.
+ * Persistent failures return nullopt after failure_timeout, allowing FineNav's
+ * existing FAULTED handling and behavior-tree recovery to run. No unsolved
+ * nominal is executed. Full-resolution footprint checks guard optimizer output.
  *
  * === Stuck recovery ===
  * NeuPAN follows the reference it is given and never routes around anything, so
@@ -127,8 +133,8 @@ public:
  *
  * That is a local repair of a local failure mode: it un-sticks the optimizer, it
  * does not plan a route. Only a new best goal distance refills the budget of 5
- * recoveries. Once exhausted, the plugin holds zero velocity until a new goal
- * or path is supplied. The real remedy for a blocked reference is a
+ * recoveries. Once exhausted, the plugin sends a zero command then reports
+ * a fault on the next cycle. The real remedy for a blocked reference is a
  * global planner, and this plugin already accepts one — a reference of >= 2
  * poses is taken as a PATH (setInitialPath / replaceInitialPath) — which is why
  * path references are deliberately NOT recovered: re-projecting onto the
@@ -224,6 +230,7 @@ private:
     int    solver_fail_grace_{5};
     double stall_speed_{0.02};
     double stall_timeout_{3.0};
+    double failure_timeout_{10.0};
 
     // Fallback used only until setLogger() injects the layer's child logger.
     rclcpp::Logger logger_{rclcpp::get_logger("NeuPanPlanner")};

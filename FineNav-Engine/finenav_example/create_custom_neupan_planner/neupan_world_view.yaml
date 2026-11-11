@@ -71,7 +71,7 @@ neupan_world_view:
   scan_range_min:
     type: double
     default_value: 0.0
-    description: "Ranges closer than this are dropped [m]. LaserScan only."
+    description: "Optimizer-only minimum range around the robot [m]. Near points are retained for collision checks; remove robot self-returns upstream."
     validation:
       bounds<>: [0.0, 1000.0]
 
@@ -132,13 +132,13 @@ neupan_world_view:
   points_timeout:
     type: double
     default_value: 0.5
-    description: "Seconds after which a silent sensor is treated as 'no obstacles known' [s], so a frozen scan cannot be mistaken for a clear path (upstream node: scan_timeout)."
+    description: "Maximum receipt age and message timestamp age [s]. Missing, stale or untransformable data stops motion; a sustained outage faults the planner."
     validation:
       bounds<>: [0.0, 1000.0]
 
   max_points:
     type: int
     default_value: 0
-    description: "Cap on the points handed to NeuPAN per cycle; the nearest ones are kept. 0 = unlimited. Purely a performance guard — keep it at or above the planner's dune_max_num so it never changes what the algorithm sees."
+    description: "Optimizer-only point budget; nearest points are kept, 0 = unlimited. Full filtered points are always retained for independent collision checking."
     validation:
       bounds<>: [0, 1000000]

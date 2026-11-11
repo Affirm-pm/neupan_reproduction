@@ -40,22 +40,8 @@ target_link_libraries(neupan_planner
     neupan::neupan)
 ament_target_dependencies(neupan_planner finenav_core finenav_visualizer)
 
-# The DUNE checkpoint used when neupan_planner.dune_checkpoint is left empty.
-#
-# diff_0p7x0p6.bin is a DUNE trained for THIS example's robot: the simulator's
-# 0.7 x 0.6 m XY bounds including its wheels
-# (finenav_simulator/resource/robot/model.sdf.xmacro).
-# libneupan compares the weights' recorded footprint against robot_length /
-# robot_width at load time and throws on a mismatch, so the default model and
-# the default footprint in neupan_planner.yaml describe the same robot.  (The
-# stock diff_default.bin is trained for 1.6 x 2.0 m; using it here forced an
-# oversized, far too conservative footprint.)
-#
-# Chain: empty parameter -> this build-time default -> existence check in
-# configure().  An explicit parameter always wins, so relocating the models does
-# not require a rebuild.
-target_compile_definitions(neupan_planner PRIVATE
-    NEUPAN_DEFAULT_CHECKPOINT="${libneupan_MODELS_DIR}/diff_0p7x0p6.bin")
+# Default model is resolved relative to the installed plugin at runtime.
+target_link_libraries(neupan_planner ${CMAKE_DL_LIBS})
 
 if(BUILD_TESTING)
     # Optional development tests; keep this example's package manifest untouched.
@@ -98,7 +84,7 @@ install(DIRECTORY include/ DESTINATION include)
 
 # Vendor the DUNE weights into this package's share so a deployed workspace does
 # not depend on libneupan's install layout.  The ROS parameter still wins.
-install(DIRECTORY ${libneupan_MODELS_DIR}/
+install(FILES ${libneupan_MODELS_DIR}/diff_0p7x0p6.bin
         DESTINATION share/${PROJECT_NAME}/models)
 
 # Simulation parameter overlay for this plugin (loaded alongside
@@ -107,3 +93,20 @@ install(DIRECTORY ${libneupan_MODELS_DIR}/
 # publishes on /goal_pose — the topic hello_finenav consumes for a goal.
 install(FILES neupan_sim.yaml neupan_sim.rviz
         DESTINATION share/${PROJECT_NAME})
+
+if(BUILD_TESTING AND ament_cmake_gtest_FOUND)
+    ament_add_gtest(test_planner_safety test/test_planner_safety.cpp)
+    target_include_directories(test_planner_safety PRIVATE include)
+    ament_add_gtest(test_neupan_plugin test/test_neupan_plugin.cpp
+        ENV "LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}:$ENV{LD_LIBRARY_PATH}")
+    target_link_libraries(test_neupan_plugin neupan_planner neupan::neupan)
+    target_compile_definitions(test_neupan_plugin PRIVATE
+        TEST_MODEL="${libneupan_MODELS_DIR}/diff_0p7x0p6.bin")
+    ament_add_gtest(test_neupan_world_view test/test_neupan_world_view.cpp
+        ENV "LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_BINARY_DIR}/create_custom_map:$ENV{LD_LIBRARY_PATH}")
+    target_link_libraries(test_neupan_world_view neupan_world_view)
+    # Mirror the installed layout for the runtime default-model test.
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/share/${PROJECT_NAME}/models")
+    configure_file("${libneupan_MODELS_DIR}/diff_0p7x0p6.bin"
+        "${CMAKE_BINARY_DIR}/share/${PROJECT_NAME}/models/diff_0p7x0p6.bin" COPYONLY)
+endif()

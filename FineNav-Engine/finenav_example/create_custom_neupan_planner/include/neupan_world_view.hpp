@@ -47,8 +47,7 @@ namespace finenav::example {
  * framework's TaskChannel (command + feedback) traffic.  A slow subscription
  * callback here would therefore stall the layer's inputs.  So the split is:
  *
- *   - the subscription callback only filters (angle/range/downsample) and copies
- *     the beams into a raw buffer under a mutex — no TF, no allocation-heavy work;
+ *   - the subscription callback caches an immutable message under a mutex;
  *   - prepare() — called once per plan(), on the layer's own worker thread,
  *     inside the map read lock and before plan() — does the TF transform into
  *     the world-fixed frame and the optional nearest-N truncation.
@@ -56,9 +55,8 @@ namespace finenav::example {
  * === Staleness ===
  *
  * A frozen sensor must not read as "the path is clear".  If no message arrived
- * within points_timeout, prepare() publishes an empty point set and NeuPAN falls
- * back to pure path tracking, which is the same safe degradation the upstream
- * node implements with `scan_timeout`.
+ * within points_timeout, prepare() marks the observation invalid. The planner
+ * stops immediately and reports a persistent outage to FineNav.
  */
 class NeuPanWorldView : public NeuPanPlanner::IWorldView {
 public:
@@ -100,88 +98,34 @@ public:
         return points_;
     }
 
+    bool observationValid() const override { return valid_; }
+    const std::vector<finenav::common::Position3D>& collisionPoints() const override {
+        return collision_points_;
+    }
+
     // ── OPTIONAL injection ────────────────────────────────────────────────
     void setLogger(const rclcpp::Logger& logger) { logger_ = logger; }
 
 private:
-    /// One snapshot of raw sensor-frame points, as handed over by the callback.
-    struct RawSnapshot {
-        std::string                            frame_id;
-        std::vector<finenav::common::Position3D> points;
-        /// False for a planar source (LaserScan, or a cloud with no z field):
-        /// the world-frame height band is then meaningless and is skipped.
-        bool                                   has_z{true};
-        std::chrono::steady_clock::time_point  received{};
-        bool                                   valid{false};
-    };
-
+    friend struct NeuPanWorldViewTestAccess;
+    // Callbacks only publish immutable messages under this lock. All decoding,
+    // configuration reads and TF work belong to the planning worker thread.
     void installSubscription(const std::string& topic, const std::string& type);
-    void eraseSubscription();
-
-    void onLaserScan(const sensor_msgs::msg::LaserScan& msg);
-    void onPointCloud2(const sensor_msgs::msg::PointCloud2& msg);
-
-    /// Copy a filtered point list into the shared raw buffer.
-    void storeRaw(std::string frame_id, std::vector<finenav::common::Position3D> pts,
-                  bool has_z);
-
-    /// Take the latest snapshot out of the shared buffer.
-    RawSnapshot takeSnapshot();
-
-    /// Drop points outside [min_height_, max_height_] (world-frame z, inclusive).
-    void applyHeightBand();
-
     rclcpp::Node::SharedPtr node_;
-
-    /// Exactly one of these is non-null, decided by points_type.
-    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr  scan_sub_;
+    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
-
-    std::unique_ptr<tf2_ros::Buffer>            tf_buffer_;
+    std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
     std::unique_ptr<tf2_ros::TransformListener> tf_listener_;
-
-    /// Guards raw_points_ / raw_frame_ / raw_received_ / have_raw_, which are
-    /// written by the node thread and consumed by the layer's worker thread.
     std::mutex mutex_;
-    std::vector<finenav::common::Position3D> raw_points_;
-    std::string                              raw_frame_;
-    bool                                     raw_has_z_{true};
-    std::chrono::steady_clock::time_point    raw_received_{};
-    bool                                     have_raw_{false};
-
-    /// Written by prepare() and read by plan(), both on the worker thread.
-    std::vector<finenav::common::Position3D> points_;
-
-    // Cached parameters.  Only the fields actually used are kept: the generated
-    // Params struct carries an rclcpp::Time stamp, so keeping the whole thing
-    // would be misleading.
-    std::string points_frame_;
-    double scan_angle_min_{-3.14159265358979};
-    double scan_angle_max_{3.14159265358979};
-    double scan_range_min_{0.0};
-    double scan_range_max_{5.0};
-    int    scan_downsample_{1};
-    bool   flip_angle_{false};
-    double points_timeout_{0.5};
-    int    max_points_{0};
-
-    /// World-frame height band, applied after the TF transform.  This is what
-    /// removes the floor returns a 3D lidar produces everywhere beyond a few
-    /// metres — without it NeuPAN sees a ring of phantom obstacles.  See
-    /// neupan_world_view.yaml for the full explanation.
-    double min_height_{0.15};
-    double max_height_{2.0};
-
-    /// What the live subscription was installed for, so configure() can tell
-    /// whether it needs re-creating.
-    std::string installed_topic_;
-    std::string installed_type_;
-
+    sensor_msgs::msg::LaserScan::ConstSharedPtr scan_;
+    sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_;
+    std::chrono::steady_clock::time_point received_{};
+    std::uint64_t generation_{0};
+    ConfigType cfg_;
+    bool valid_{false};
+    std::vector<finenav::common::Position3D> points_, collision_points_;
     rclcpp::Logger logger_{rclcpp::get_logger("NeuPanWorldView")};
-
-    /// System time, not ROS time: a warning must still be rate-limited before
-    /// /clock exists.
     rclcpp::Clock clock_{RCL_SYSTEM_TIME};
 };
 
-}  // namespace finenav::example
+} // namespace finenav::example

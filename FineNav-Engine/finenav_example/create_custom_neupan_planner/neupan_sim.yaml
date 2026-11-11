@@ -14,9 +14,9 @@
       # equal the footprint the loaded DUNE model was trained with: libneupan
       # compares them at load time and throws on a mismatch.
       #
-      # The plugin's build-time default is diff_0p7x0p6.bin — a DUNE
-      # trained for exactly this footprint (see the NEUPAN_DEFAULT_CHECKPOINT
-      # comment in CMakeLists.txt) — so model and values agree.  If you swap in
+      # The plugin's packaged default is diff_0p7x0p6.bin — a DUNE
+      # trained for exactly this footprint and resolved beside the installed
+      # plugin at runtime — so model and values agree.  If you swap in
       # another model, export it with upstream's tools/export_dune_weights.py,
       # passing the same <length> <width>, and update these two to match.
       robot_length: 0.7

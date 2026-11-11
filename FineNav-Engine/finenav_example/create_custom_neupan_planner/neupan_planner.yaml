@@ -49,9 +49,16 @@ neupan_planner:
   solver_fail_grace:
     type: int
     default_value: 5
-    description: "Consecutive unsolved cycles tolerated before the plugin commands zero velocity (upstream node: solver_fail_grace). Plugin-side safety, not part of Config."
+    description: "Consecutive failed solves before clearing the warm start. Every failed solve commands zero immediately; failure_timeout controls fault escalation."
     validation:
       bounds<>: [0, 1000]
+
+  failure_timeout:
+    type: double
+    default_value: 10.0
+    description: "Continuous sensor/model/solver/collision failure timeout [s] before reporting FAULTED to FineNav. The first failed cycle always commands zero. Also bounds terminal yaw progress stalls."
+    validation:
+      gt<>: [0.0]
 
   approach_speed_gain:
     type: double
@@ -77,7 +84,7 @@ neupan_planner:
   stall_timeout:
     type: double
     default_value: 3.0
-    description: "Idle-warning and stationary-recovery timeout [s]. Also recovers after twice this duration without improving the best goal distance by 0.10 m. Only that goal progress refills the 5-attempt recovery budget; exhaustion holds zero until a new goal/path. Terminal yaw alignment is excluded."
+    description: "Idle-warning and stationary-recovery timeout [s]. Also recovers after twice this duration without improving the best goal distance by 0.10 m. Only that goal progress refills the 5-attempt recovery budget; exhaustion sends zero then faults the layer. Terminal yaw alignment is excluded."
     validation:
       bounds<>: [0.0, 1000.0]
 
@@ -207,7 +214,7 @@ neupan_planner:
   dune_checkpoint:
     type: string
     default_value: ""
-    description: "Path to the exported NPTF DUNE model (.bin). Empty falls back to the build-time default resolved from libneupan's models directory. Rebuild."
+    description: "Path to the exported NPTF DUNE model (.bin). Empty resolves the model beside the installed finenav_example shared library at runtime. Rebuild."
     # No validation: an empty string is meaningful (means "use the default"),
     # and the file's existence is checked in configure() where a clear
     # actionable error can be logged instead of a parameter rejection.
