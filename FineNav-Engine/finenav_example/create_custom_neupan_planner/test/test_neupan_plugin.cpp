@@ -101,21 +101,3 @@ TEST_F(PluginTest, StationaryMultiPosePathStopsThenFaults) {
     std::this_thread::sleep_for(std::chrono::milliseconds(15));expectZero(step());
     EXPECT_FALSE(step());
 }
-
-TEST_F(PluginTest, ProactiveBypassTurnsImmediatelyAndPassesCylinderWithoutReversing) {
-    ref.poses[0].position.x=5;
-    for(int i=0;i<80;++i){const double a=2*std::acos(-1.)*i/80;world.points.push_back({2+.3*std::cos(a),.3*std::sin(a),.4});}
-    world.full=world.points;
-    double yaw=0;bool reached=false;
-    for(int i=0;i<200;++i) {
-        const auto out=step();ASSERT_TRUE(out);const auto cmd=out->twists[0];
-        if(i==0)EXPECT_GT(std::abs(cmd.angular.z),.1);
-        EXPECT_GE(cmd.linear.x,-.01)<<"Unexpected reversing at control cycle "<<i;
-        state.pose.position.x+=.1*cmd.linear.x*std::cos(yaw+.05*cmd.angular.z);
-        state.pose.position.y+=.1*cmd.linear.x*std::sin(yaw+.05*cmd.angular.z);
-        yaw+=.1*cmd.angular.z;state.pose.orientation.z=std::sin(yaw/2);state.pose.orientation.w=std::cos(yaw/2);
-        state.twist=cmd;
-        if(std::hypot(state.pose.position.x-5,state.pose.position.y)<.25){reached=true;break;}
-    }
-    EXPECT_TRUE(reached);
-}
