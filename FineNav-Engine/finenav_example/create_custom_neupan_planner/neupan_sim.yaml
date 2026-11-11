@@ -27,6 +27,11 @@
       approach_speed_gain: 0.4
       approach_min_speed: 0.05
 
+      # Select and retain a safe bypass reference before waiting for stuck recovery.
+      proactive_bypass: true
+      bypass_lookahead: 2.5
+      bypass_margin: 0.10
+
       # Finish yaw after reaching the terminal position. These tolerances
       # stay below the navigator's 0.25 m / 0.1 rad success tolerances.
       goal_xy_tolerance: 0.15

@@ -110,3 +110,8 @@ if(BUILD_TESTING AND ament_cmake_gtest_FOUND)
     configure_file("${libneupan_MODELS_DIR}/diff_0p7x0p6.bin"
         "${CMAKE_BINARY_DIR}/share/${PROJECT_NAME}/models/diff_0p7x0p6.bin" COPYONLY)
 endif()
+
+if(BUILD_TESTING AND ament_cmake_gtest_FOUND)
+    ament_add_gtest(test_obstacle_bypass test/test_obstacle_bypass.cpp)
+    target_include_directories(test_obstacle_bypass PRIVATE include)
+endif()

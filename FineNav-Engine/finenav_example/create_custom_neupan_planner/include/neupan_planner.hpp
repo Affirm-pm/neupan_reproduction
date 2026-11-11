@@ -116,7 +116,13 @@ public:
  * existing FAULTED handling and behavior-tree recovery to run. No unsolved
  * nominal is executed. Full-resolution footprint checks guard optimizer output.
  *
- * === Stuck recovery ===
+ * === Early bypass and stuck recovery ===
+ * Single-goal mode first checks for a blocked forward corridor. A validated
+ * local bypass reference is selected before solving and its side is retained
+ * until the obstacle is passed. This avoids waiting for the stuck timer when
+ * a small static obstacle has an immediately available route around it.
+ * Multi-pose upstream paths are not overridden.
+ *
  * NeuPAN follows the reference it is given and never routes around anything, so
  * a single-pose (goal) reference blocked by a concave obstacle leaves the robot
  * leaning at the clearance — neither stopped nor arrived — for as long as the

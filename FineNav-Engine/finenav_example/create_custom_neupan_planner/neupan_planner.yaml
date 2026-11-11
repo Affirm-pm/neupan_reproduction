@@ -53,6 +53,28 @@ neupan_planner:
     validation:
       bounds<>: [0, 1000]
 
+  proactive_bypass:
+    type: bool
+    default_value: true
+    read_only: true
+    description: "Choose a collision-free local reference around a blocking obstacle before waiting for stuck recovery. Single-goal mode only; keeps the chosen side until past the obstacle."
+
+  bypass_lookahead:
+    type: double
+    default_value: 2.5
+    read_only: true
+    description: "Distance ahead [m] for detecting a blocked goal corridor and choosing an early bypass."
+    validation:
+      bounds<>: [0.5, 6.0]
+
+  bypass_margin:
+    type: double
+    default_value: 0.10
+    read_only: true
+    description: "Additional clearance [m] outside the robot circumradius when validating bypass reference segments. Does not change collision_threshold."
+    validation:
+      bounds<>: [0.02, 0.5]
+
   failure_timeout:
     type: double
     default_value: 10.0

@@ -47,3 +47,25 @@ ctest --test-dir /tmp/neupan-build/create_custom_neupan_planner --output-on-fail
 
 Run these commands from FineNav-Engine. Tests set their library search paths to the
 new build so an existing workspace installation cannot load an older plugin ABI.
+
+## Early obstacle bypass
+
+Single-goal mode now checks the forward goal corridor before solving. When it is
+blocked within bypass_lookahead (default 2.5 m), the plugin evaluates left/right
+references with two offset waypoints. Every segment is checked against the full
+collision cloud using the robot circumradius plus bypass_margin (default 0.10 m).
+It commits to the shortest feasible route, with a small initial-heading cost,
+and keeps that route until it has passed the obstacle and can safely rejoin.
+Path replacement preserves the optimizer warm start. Multi-pose upstream paths
+are never overridden; the existing footprint gate and failure handling still apply.
+
+This removes the need to wait for a 3–6 second stuck timeout before choosing a
+side around a small static obstacle. If no safe candidate fits, it leaves the
+reference unchanged and relies on the existing safe stop/recovery path. It does
+not infer a global route through unobserved space or force the robot forward.
+
+The startup parameters proactive_bypass, bypass_lookahead and bypass_margin are
+read-only during an episode. The existing speed and collision thresholds are
+unchanged. test_obstacle_bypass checks geometry, side commitment, safe rejoin and
+rejection of blocked candidates; the plugin regression simulates passing a
+cylinder with immediate steering and no reversing commands.

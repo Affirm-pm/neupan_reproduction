@@ -6,6 +6,7 @@
 #include "goal_alignment.hpp"
 #include "goal_progress.hpp"
 #include "planner_safety.hpp"
+#include "obstacle_bypass.hpp"
 #include <dlfcn.h>
 
 #include <algorithm>
@@ -278,6 +279,7 @@ struct NeuPanPlanner::Impl {
     std::chrono::steady_clock::time_point last_goal_progress{};
     std::chrono::steady_clock::time_point last_recovery{};
     GoalAlignment goal_alignment;
+    ObstacleBypass bypass;
     FailureWatch failure_watch;
     FailureWatch yaw_watch;
     double best_yaw_error{std::numeric_limits<double>::infinity()};
@@ -317,6 +319,9 @@ void NeuPanPlanner::configure(const ConfigType& cfg) {
     stall_speed_       = cfg.stall_speed;
     stall_timeout_     = cfg.stall_timeout;
     failure_timeout_   = cfg.failure_timeout;
+    impl_->bypass.options.enabled = cfg.proactive_bypass;
+    impl_->bypass.options.lookahead = cfg.bypass_lookahead;
+    impl_->bypass.options.margin = cfg.bypass_margin;
     impl_->goal_alignment.options = {cfg.goal_xy_tolerance, cfg.goal_yaw_tolerance,
         cfg.goal_yaw_gain, cfg.goal_yaw_max_speed, cfg.goal_yaw_min_speed};
 
@@ -371,6 +376,7 @@ void NeuPanPlanner::configure(const ConfigType& cfg) {
     impl_->stuck_anchor_valid = false;
     impl_->recoveries = 0;
     impl_->goal_alignment.reset();
+    impl_->bypass.reset();
     impl_->failure_watch.reset();
     impl_->yaw_watch.reset();
     impl_->best_yaw_error = std::numeric_limits<double>::infinity();
@@ -475,6 +481,7 @@ void NeuPanPlanner::reset() {
     impl_->goal_progress.reset();
     impl_->recovery_exhausted = false;
     impl_->goal_alignment.reset();
+    impl_->bypass.reset();
     impl_->failure_watch.reset();
     impl_->yaw_watch.reset();
     impl_->best_yaw_error = std::numeric_limits<double>::infinity();
@@ -522,6 +529,7 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             impl_->planner->setInitialPath(path);
             impl_->planner->reset();
             impl_->goal_alignment.reset();
+            impl_->bypass.reset();
             impl_->failure_watch.reset();
             impl_->yaw_watch.reset();
             impl_->best_yaw_error = std::numeric_limits<double>::infinity();
@@ -540,6 +548,7 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             // it.  setInitialPath + reset() would discard the warm start.
             impl_->planner->replaceInitialPath(path, state);
             impl_->goal_alignment.reset();
+            impl_->bypass.reset();
             impl_->failure_watch.reset();
             impl_->yaw_watch.reset();
             impl_->best_yaw_error = std::numeric_limits<double>::infinity();
@@ -570,6 +579,7 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
 
         if (goal_changed) {
             impl_->goal_alignment.reset();
+            impl_->bypass.reset();
             impl_->failure_watch.reset();
             impl_->yaw_watch.reset();
             impl_->best_yaw_error = std::numeric_limits<double>::infinity();
@@ -688,6 +698,36 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
                               yawFromQuat(terminal_goal.orientation)));
         impl_->planner->reset();
         impl_->stuck_anchor_valid = false;
+    }
+
+    // Repair a blocked single-goal reference before the optimizer starts
+    // oscillating against it. Multi-pose upstream paths remain authoritative.
+    if (impl_->have_goal) {
+        const auto change=impl_->bypass.update({state.x(),state.y()},
+            {terminal_goal.position.x,terminal_goal.position.y},state.z(),collision_points,
+            impl_->key.robot_length,impl_->key.robot_width,impl_->key.robot_wheelbase);
+        if (change!=ObstacleBypass::Change::None) {
+            std::vector<::neupan::InitialPath::PathPoint> route;
+            if (change==ObstacleBypass::Change::Installed) {
+                for(std::size_t i=0;i<impl_->bypass.route.size();++i) {
+                    const auto& p=impl_->bypass.route[i];
+                    const auto& q=impl_->bypass.route[std::min(i+1,impl_->bypass.route.size()-1)];
+                    route.emplace_back(p.x,p.y,i+1<impl_->bypass.route.size()
+                        ? std::atan2(q.y-p.y,q.x-p.x) : yawFromQuat(terminal_goal.orientation),1.0);
+                }
+                RCLCPP_INFO(logger_,"Proactive bypass selected %s; retaining this route until past the obstacle.",
+                    impl_->bypass.side>0 ? "left" : "right");
+            } else {
+                route.emplace_back(state.x(),state.y(),state.z(),1.0);
+                route.emplace_back(terminal_goal.position.x,terminal_goal.position.y,
+                    yawFromQuat(terminal_goal.orientation),1.0);
+            }
+            // Keep the warm start; never rebuild this reference every frame.
+            impl_->planner->replaceInitialPath(std::move(route),state);
+            impl_->published_path_revision=-1;
+            impl_->stuck_anchor_valid=false;
+            impl_->last_goal_progress=std::chrono::steady_clock::now();
+        }
     }
 
     // ── 3. Solve ───────────────────────────────────────────────────────────
@@ -918,6 +958,7 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             cmd = geometry_msgs::msg::Twist{};
         } else {
             ++impl_->recoveries;
+            impl_->bypass.reset();
             impl_->last_recovery = now;
             // Give this attempt time to turn or follow a detour, without
             // forgetting the best distance reached before the recovery.
