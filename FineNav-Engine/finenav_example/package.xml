@@ -13,6 +13,9 @@
   <depend>finenav_core</depend>
   <depend>finenav_visualizer</depend>
   <depend>libneupan</depend>
+  <depend>finenav_route_planner</depend>
+  <depend>nav_msgs</depend>
+  <depend>opencv</depend>
   <depend>eigen</depend>
   <depend>generate_parameter_library</depend>
   <depend>sensor_msgs</depend>
@@ -27,8 +30,11 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>finenav_simulator</exec_depend>
   <exec_depend>rviz2</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>sensor_msgs_py</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

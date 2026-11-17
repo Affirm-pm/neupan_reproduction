@@ -518,39 +518,42 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
     // ── 1. Reference -> initial path ───────────────────────────────────────
     if (poses.size() >= 2) {
         auto path = toPathPoints(poses);
+        const double gx = poses.back().position.x;
+        const double gy = poses.back().position.y;
+        const double gyaw = yawFromQuat(poses.back().orientation);
+        const double yaw_delta = gyaw - impl_->last_goal_yaw;
+        const bool new_goal = !impl_->have_path ||
+            std::hypot(gx - impl_->last_goal_x, gy - impl_->last_goal_y) > 1e-6 ||
+            std::abs(std::atan2(std::sin(yaw_delta), std::cos(yaw_delta))) > 1e-6;
+
         if (!impl_->have_path) {
             impl_->planner->setInitialPath(path);
             impl_->planner->reset();
-            impl_->goal_alignment.reset();
-            impl_->failure_watch.reset();
-            impl_->yaw_watch.reset();
-            impl_->best_yaw_error = std::numeric_limits<double>::infinity();
             impl_->last_path = std::move(path);
             impl_->have_path = true;
             impl_->have_goal = false;
-            impl_->consecutive_unsolved = 0;
-            impl_->goal_progress.reset();
-            impl_->recovery_exhausted = false;
-            impl_->stuck_anchor_valid = false;
-            impl_->recoveries = 0;
             RCLCPP_INFO(logger_, "NeuPAN initial path installed (%zu poses).", poses.size());
         } else if (!samePath(path, impl_->last_path)) {
-            // replaceInitialPath re-projects the robot onto the new path, so a
-            // replanned reference continues the episode instead of cold-starting
-            // it.  setInitialPath + reset() would discard the warm start.
+            // Project onto the replanned route without discarding the warm start.
             impl_->planner->replaceInitialPath(path, state);
+            impl_->last_path = std::move(path);
+            RCLCPP_DEBUG(logger_, "NeuPAN initial path replaced (%zu poses).", poses.size());
+        }
+        // Path geometry may change every second, or the requested final yaw
+        // alone may change while the path is identical.
+        if (new_goal) {
+            impl_->last_goal_x = gx;
+            impl_->last_goal_y = gy;
+            impl_->last_goal_yaw = gyaw;
             impl_->goal_alignment.reset();
             impl_->failure_watch.reset();
             impl_->yaw_watch.reset();
             impl_->best_yaw_error = std::numeric_limits<double>::infinity();
-            impl_->last_path = std::move(path);
-            impl_->have_goal = false;
             impl_->consecutive_unsolved = 0;
             impl_->goal_progress.reset();
             impl_->recovery_exhausted = false;
             impl_->stuck_anchor_valid = false;
             impl_->recoveries = 0;
-            RCLCPP_INFO(logger_, "NeuPAN initial path replaced (%zu poses).", poses.size());
         }
     } else {
         // A single pose is a GOAL, which is what the framework normally sends
@@ -691,12 +694,10 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
     }
 
     // ── 3. Solve ───────────────────────────────────────────────────────────
-    // Single-goal references have no upstream speed profile. Taper their speed
-    // near the goal to avoid repeatedly driving past it while still turning.
-    impl_->planner->setReferenceSpeed(impl_->have_goal
-        ? approachReferenceSpeed(ref_speed_, goal_distance,
-                                 approach_speed_gain_, approach_min_speed_)
-        : ref_speed_);
+    // Pose-only global paths also have no speed profile. Taper both input modes
+    // at the exact terminal goal so the differential drive can finish its turn.
+    impl_->planner->setReferenceSpeed(approachReferenceSpeed(
+        ref_speed_, goal_distance, approach_speed_gain_, approach_min_speed_));
     CorePlanner::Info info;
     ::neupan::Vec2 action;
     try {

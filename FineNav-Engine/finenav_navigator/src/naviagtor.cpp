@@ -140,8 +140,9 @@ void BtNavigator::execute()
 
         auto status = tree_.tickExactlyOnce();
 
-        // Forward fresh leaf trajectory to chassis command
-        if (chassis_cmd_) {
+        // A terminal tick may already have issued StopChassisMotion. A final
+        // in-flight planner update must not overwrite that stop command.
+        if (status == BT::NodeStatus::RUNNING && chassis_cmd_) {
             std::vector<std::pair<std::string, std::shared_ptr<const FeedbackMsg>>> fresh;
             for (auto& leaf : pipe_.leaves()) {
                 auto fb = master_->feedback(leaf);

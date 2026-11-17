@@ -101,3 +101,39 @@ TEST_F(PluginTest, StationaryMultiPosePathStopsThenFaults) {
     std::this_thread::sleep_for(std::chrono::milliseconds(15));expectZero(step());
     EXPECT_FALSE(step());
 }
+TEST_F(PluginTest, ReplansForSameGoalDoNotResetStationaryWatchdog) {
+    geometry_msgs::msg::Pose start;start.orientation.w=1;
+    ref.poses.insert(ref.poses.begin(),start);
+    ASSERT_TRUE(step());
+    std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    ref.poses.front().position.y=.001; // Typical upstream path jitter.
+    expectZero(step());
+    EXPECT_FALSE(step());
+    ref.poses.back().position.x=4; // A genuinely new target starts a new attempt.
+    const auto resumed=step();ASSERT_TRUE(resumed);EXPECT_GT(resumed->twists[0].linear.x,.1);
+}
+TEST_F(PluginTest, MultiPoseReferenceSlowsAtNearbyTerminalGoal) {
+    geometry_msgs::msg::Pose start;start.orientation.w=1;
+    ref.poses[0].position.x=.4;
+    ref.poses.insert(ref.poses.begin(),start);
+    const auto out=step();ASSERT_TRUE(out);
+    EXPECT_GT(out->twists[0].linear.x,0.0);
+    // A 0.4 m terminal distance requests 0.16 m/s, rather than the 0.6 m/s cruise.
+    EXPECT_LT(out->twists[0].linear.x,.25);
+}
+
+TEST_F(PluginTest, NewTerminalYawRestartsAnExhaustedMultiPoseGoal) {
+    ref.poses.insert(ref.poses.begin(), state.pose);
+    state.pose.position.x = ref.poses.back().position.x;
+    ref.poses.back().orientation.w = std::cos(.5);
+    ref.poses.back().orientation.z = std::sin(.5);
+    ASSERT_TRUE(step());
+    std::this_thread::sleep_for(std::chrono::milliseconds(15));
+    expectZero(step());
+    EXPECT_FALSE(step());
+
+    ref.poses.back().orientation.z = -std::sin(.5);
+    const auto resumed = step();
+    ASSERT_TRUE(resumed);
+    EXPECT_LT(resumed->twists[0].angular.z, 0.);
+}

@@ -66,7 +66,7 @@ class SimpleActionServer
         {
             std::lock_guard<std::recursive_mutex> lock(update_mutex_);
             stop_execution_ = true;
-            if (current_handle_) {
+            if (current_handle_ && current_handle_->is_active()) {
                 current_handle_->abort(std::make_shared<typename ActionT::Result>());
             }
         }

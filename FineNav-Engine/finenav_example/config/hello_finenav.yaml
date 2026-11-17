@@ -43,3 +43,13 @@
       linear_speed: 0.5  # Nominal forward speed (m/s); reduced as the heading error grows.
       angular_speed: 1.0  # Gain that converts heading error into angular velocity.
       lookahead_distance: 1.0  # Distance along the path used to select the tracking target (m).
+
+/hello_finenav/global_layer:
+  ros__parameters:
+    finenav_global_planner:
+      max_planning_time: 0.8
+      max_iterations: 200000
+    global_grid_world_view:
+      inflation_radius: 0.51  # Circumscribed radius of the 0.7 x 0.6 m robot plus clearance.
+      clearance_cost_distance: 0.7
+      occupied_threshold: 50

@@ -14,7 +14,14 @@ namespace finenav::example {
 NeuPanWorldView::NeuPanWorldView(rclcpp::Node::SharedPtr node, const DummyMap&)
     : node_(std::move(node)) {
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(node_->get_clock());
-    tf_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf_buffer_);
+    // The layer node already has an executor. Use it for TF as well, avoiding
+    // the listener's private spin-thread startup/cancel race on rapid teardown.
+    // Humble's intra-process delivery cannot handle the latched /tf_static QoS.
+    rclcpp::SubscriptionOptions options;
+    options.use_intra_process_comm = rclcpp::IntraProcessSetting::Disable;
+    tf_listener_ = std::make_unique<tf2_ros::TransformListener>(
+        *tf_buffer_, node_, false, tf2_ros::DynamicListenerQoS(),
+        tf2_ros::StaticListenerQoS(), options, options);
 }
 
 void NeuPanWorldView::configure(const ConfigType& cfg) {
@@ -123,7 +130,10 @@ void NeuPanWorldView::prepare(const finenav::core::PlanningContext<NeuPanPlanner
         }
         const auto& world = finenav::common::frames().world_fixed;
         if (source != world) {
-            const auto tf = tf_buffer_->lookupTransform(world, source, stamp);
+            // Query the timestamped cache without the ROS timeout wrapper. The
+            // planner must never wait for TF; missing data invalidates this cycle.
+            const auto tf = tf_buffer_->tf2::BufferCore::lookupTransform(
+                world, source, tf2_ros::fromRclcpp(stamp));
             const auto& t=tf.transform;
             const tf2::Matrix3x3 rotation(tf2::Quaternion(t.rotation.x,t.rotation.y,t.rotation.z,t.rotation.w));
             const tf2::Vector3 translation(t.translation.x,t.translation.y,t.translation.z);

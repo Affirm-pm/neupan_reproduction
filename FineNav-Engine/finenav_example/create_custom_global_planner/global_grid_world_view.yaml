@@ -1,0 +1,22 @@
+global_grid_world_view:
+  map_topic:
+    type: string
+    default_value: "/global_map"
+    read_only: true
+  inflation_radius:
+    type: double
+    default_value: 0.51
+    description: "Circumscribed robot radius plus clearance; 0.7 x 0.6 m robot needs at least 0.461 m."
+    validation:
+      gt_eq<>: [0.0]
+  occupied_threshold:
+    type: int
+    default_value: 50
+    validation:
+      bounds<>: [1, 100]
+  clearance_cost_distance:
+    type: double
+    default_value: 0.7
+    description: "Width outside inflation over which A* traversal cost tapers to zero (m)."
+    validation:
+      gt<>: [0.0]

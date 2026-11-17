@@ -1,0 +1,11 @@
+finenav_global_planner:
+  max_iterations:
+    type: int
+    default_value: 200000
+    validation:
+      gt<>: [0]
+  max_planning_time:
+    type: double
+    default_value: 0.8
+    validation:
+      gt<>: [0.0]

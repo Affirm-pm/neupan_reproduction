@@ -34,6 +34,27 @@ Panels:
 Visualization Manager:
   Class: ""
   Displays:
+    - Class: rviz_default_plugins/Map
+      Name: Global occupancy map
+      Enabled: true
+      Alpha: 0.6
+      Topic:
+        Value: /global_map
+        Depth: 1
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        History Policy: Keep Last
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: FineNav global path
+      Enabled: true
+      Topic:
+        Value: /finenav_global_path
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        History Policy: Keep Last
+      Value: true
     - Alpha: 0.5
       Cell Size: 1
       Class: rviz_default_plugins/Grid
