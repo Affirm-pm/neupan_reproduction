@@ -20,6 +20,11 @@ colcon build --packages-up-to finenav_example
 
 ```bash
 cd ~/neupan_reproduction_ws
-source /home/affirm/finenav_ws/install/setup.bash
+source /opt/ros/humble/setup.bash
+source install/setup.bash
 ros2 launch finenav_example hello_finenav.launch.py
 ```
+
+默认使用 FineNav 官方 A* 全局规划器与 NeuPAN 局部规划器。
+接入结构、外部地图配置及局部模式切换见
+[全局规划器说明](FineNav-Engine/finenav_example/create_custom_global_planner/README.md)。

@@ -8,7 +8,7 @@ from launch.actions import (
     IncludeLaunchDescription,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, TextSubstitution
+from launch.substitutions import LaunchConfiguration, TextSubstitution, PythonExpression
 from launch_ros.actions import Node
 
 
@@ -55,6 +55,10 @@ def generate_launch_description():
                 world_sdf_path,
                 TextSubstitution(text=" --gui-config "),
                 ign_config_path,
+                PythonExpression(["'' if '", LaunchConfiguration("gazebo_gui"),
+                                  "'.lower() == 'true' else ' -s --headless-rendering'"]),
+                PythonExpression(["'' if '", LaunchConfiguration("start_paused"),
+                                  "'.lower() == 'true' else ' -r'"]),
             ],
         }.items(),
     )
@@ -68,6 +72,10 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
+    ld.add_action(DeclareLaunchArgument("gazebo_gui", default_value="true",
+                                       description="Start Gazebo GUI; false uses headless rendering"))
+    ld.add_action(DeclareLaunchArgument("start_paused", default_value="true",
+                                       description="Start the simulator paused"))
     ld.add_action(declare_world_sdf_path)
     ld.add_action(declare_ign_config_path)
     ld.add_action(append_enviroment_worlds)

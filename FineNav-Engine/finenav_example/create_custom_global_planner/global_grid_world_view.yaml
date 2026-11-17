@@ -1,0 +1,32 @@
+global_grid_world_view:
+  use_live_obstacles:
+    type: bool
+    default_value: false
+    description: "Overlay fresh lidar obstacles before A* inflation. Configure the source under global_grid_world_view.obstacles (same parameters as neupan_world_view)."
+  obstacle_persistence:
+    type: double
+    default_value: 3.0
+    description: "Seconds to retain a live occupied cell through brief lidar occlusion or dropped returns. Zero uses only the current cloud."
+    validation:
+      gt_eq<>: [0.0]
+  map_topic:
+    type: string
+    default_value: "/global_map"
+    read_only: true
+  inflation_radius:
+    type: double
+    default_value: 0.51
+    description: "Circumscribed robot radius plus clearance; 0.7 x 0.6 m robot needs at least 0.461 m."
+    validation:
+      gt_eq<>: [0.0]
+  occupied_threshold:
+    type: int
+    default_value: 50
+    validation:
+      bounds<>: [1, 100]
+  clearance_cost_distance:
+    type: double
+    default_value: 0.7
+    description: "Width outside inflation over which A* traversal cost tapers to zero (m)."
+    validation:
+      gt<>: [0.0]

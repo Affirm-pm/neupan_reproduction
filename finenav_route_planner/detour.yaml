@@ -1,0 +1,22 @@
+# detour.yaml - DetourPlanner parameter definitions
+detour_planner:
+  scan_distance_m:
+    type: double
+    default_value: 5.0
+    description: "Maximum forward scan distance (metres) along the reference path for blockage detection"
+  blockage_threshold:
+    type: double
+    default_value: 0.8
+    description: "Soft blockage: a reference-path waypoint with normalised cost (0.0-1.0) at or above this value triggers a detour. Waypoints that fail isWalkable() always trigger, regardless of this threshold."
+  reconnect_offset_m:
+    type: double
+    default_value: 1.0
+    description: "Rejoin distance (metres): the detour reconnects to the reference path at least this far past the blocked waypoint. Candidates that are still unreachable (inside the obstacle) are skipped automatically by the search."
+  obstacle_cost_weight:
+    type: double
+    default_value: 1.0
+    description: "Coefficient applied to map cost in the detour search edge weight (0 = ignore cost, larger = more obstacle-avoidant). Calibrated for normalised (0-1) costs."
+  max_planning_time:
+    type: double
+    default_value: 0.1
+    description: "Maximum wall-clock time (seconds) allowed for a single detour search"

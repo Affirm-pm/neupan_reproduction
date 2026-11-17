@@ -1,0 +1,46 @@
+# dstarlite.yaml - DStarLitePathSearch 参数定义
+#
+# 栅格步长（step size）不在这里定义。
+# 它是地图的属性，由 IWorldView::getStepSize() 在规划时提供。
+# 网格维度同样由 DStarLitePathSearch::IWorldView 的 rows()/cols()/layers() 提供。
+dstarlite_planner:
+  connectivity:
+    type: string
+    default_value: "8"
+    description: "Grid connectivity: 4/8 for 2-D, 6/18/26 for 3-D"
+    validation:
+      one_of<>: [[ "4", "8", "6", "18", "26" ]]
+  heuristic:
+    type: string
+    default_value: "Diagonal"
+    description: "Heuristic function: Euclidean | Manhattan | Chebyshev | Diagonal"
+    validation:
+      one_of<>: [[ "Euclidean", "Manhattan", "Chebyshev", "Diagonal" ]]
+  goal_tolerance:
+    type: double
+    default_value: 0.5
+    description: "Replacement-goal radius when the target cell is blocked, in metres; ceil(radius / step) is used as the Manhattan cell radius."
+  max_expansions:
+    type: int
+    default_value: 1000000
+    description: "Maximum number of nodes expanded before giving up (-1 = unlimited)"
+  max_path_steps:
+    type: int
+    default_value: 10000
+    description: "Maximum number of steps in the extracted path (-1 = unlimited)"
+  max_planning_time:
+    type: double
+    default_value: 5.0
+    description: "Maximum planning wall-clock time in seconds (0.0 = unlimited)"
+  movement_weight:
+    type: double
+    default_value: 1.0
+    description: "Coefficient of the movement-distance term. Higher values favor shorter paths relative to terrain cost."
+  greedy_weight:
+    type: double
+    default_value: 1.0
+    description: "Heuristic coefficient in the D* Lite priority key. Values above 1.0 place more emphasis on heuristic guidance."
+  terrain_weight:
+    type: double
+    default_value: 1.0
+    description: "Map-cost coefficient in edge = step * (movement_weight + terrain_weight * cost). Block lethal cells through IWorldView::isWalkable()."

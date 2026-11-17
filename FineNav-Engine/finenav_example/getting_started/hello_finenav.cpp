@@ -3,6 +3,8 @@
 // All rights reserved.
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include <rclcpp/rclcpp.hpp>
 
@@ -18,10 +20,15 @@ int main(int argc, char** argv) {
 
     engine->setDefaultBehaviorTree("GettingStartedNavigate");
 
+    const bool use_global_planner = node->declare_parameter("use_global_planner", true);
     if (!engine->loadAlgoPlugins({"finenav_example"}) ||
+        (use_global_planner && !engine->createControlLayer(
+            "global_grid_world_view", "global_layer", core::PeriodicPolicy{1.0})) ||
         !engine->createControlLayer(
             "neupan_world_view", "my_layer", core::PeriodicPolicy{10.0}) ||
-        !engine->registerControlBranch("navigate", {"my_layer"})) {
+        !engine->registerControlBranch("navigate", use_global_planner
+            ? std::vector<std::string>{"global_layer", "my_layer"}
+            : std::vector<std::string>{"my_layer"})) {
         RCLCPP_ERROR(node->get_logger(), "Failed to assemble the NEUPAN control branch.");
         rclcpp::shutdown();
         return 1;

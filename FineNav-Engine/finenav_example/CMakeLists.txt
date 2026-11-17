@@ -18,6 +18,7 @@ add_subdirectory(create_custom_map)
 add_subdirectory(create_custom_planner)
 add_subdirectory(create_custom_world_view)
 add_subdirectory(create_custom_neupan_planner)
+add_subdirectory(create_custom_global_planner)
 add_subdirectory(getting_started)
 
 install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})

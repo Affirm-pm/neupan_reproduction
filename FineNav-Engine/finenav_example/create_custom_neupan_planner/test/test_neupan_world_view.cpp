@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <cstring>
 #include <thread>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include "neupan_world_view.hpp"
 namespace finenav::example {
 struct NeuPanWorldViewTestAccess {
@@ -84,5 +85,36 @@ TEST_F(ViewTest, ConcurrentReceiptsAndParameterUpdatesUseImmutableSnapshots) {
     std::thread producer([&]{for(int i=0;i<500;++i)NeuPanWorldViewTestAccess::feed(*view,c);});
     for(int i=0;i<100;++i){cfg.max_points=i%2;view->configure(cfg);prepare();}
     producer.join();prepare();EXPECT_TRUE(view->observationValid());EXPECT_EQ(view->collisionPoints().size(),1u);
+}
+TEST_F(ViewTest, ReceivesStaticTransformOnLayerExecutorWithIntraProcessEnabled) {
+    auto layer = rclcpp::Node::make_shared("tf_layer_test",
+        rclcpp::NodeOptions().use_intra_process_comms(true));
+    NeuPanWorldView tf_view(layer, map);
+    tf_view.configure(cfg);
+    rclcpp::executors::SingleThreadedExecutor executor;
+    executor.add_node(layer);
+    tf2_ros::StaticTransformBroadcaster broadcaster(node);
+    geometry_msgs::msg::TransformStamped tf;
+    tf.header.frame_id = finenav::common::frames().world_fixed;
+    tf.header.stamp = node->now();
+    tf.child_frame_id = "layer_executor_sensor";
+    tf.transform.rotation.w = 1;
+    tf.transform.translation.x = 10;
+    broadcaster.sendTransform(tf);
+    state.pose.position.x = 10;
+    auto c = cloud(.5);
+    c->header.frame_id = tf.child_frame_id;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    do {
+        executor.spin_some();
+        c->header.stamp = node->now();
+        NeuPanWorldViewTestAccess::feed(tf_view, c);
+        tf_view.prepare({state, ref});
+        if (tf_view.observationValid()) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    } while (std::chrono::steady_clock::now() < deadline);
+    ASSERT_TRUE(tf_view.observationValid());
+    ASSERT_EQ(tf_view.collisionPoints().size(), 1u);
+    EXPECT_NEAR(tf_view.collisionPoints()[0].x, 10.5, 1e-5);
 }
 } // namespace finenav::example

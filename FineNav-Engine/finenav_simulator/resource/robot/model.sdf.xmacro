@@ -564,6 +564,11 @@
             <odom_topic>/ground_truth_odometry</odom_topic>
             <odom_frame>odom</odom_frame>
             <robot_base_frame>base_link</robot_base_frame>
+            <!-- OdometryPublisher reports the MODEL pose; robot_base_frame
+                 only labels it. The model origin is 0.75 m above base_link.
+                 Apply the same offset as base_origin_to_base_link so TF and
+                 the lidar extrinsics do not lift floor returns by 0.75 m. -->
+            <xyz_offset>0 0 -0.75</xyz_offset>
         </plugin>
     </model>
 </sdf>

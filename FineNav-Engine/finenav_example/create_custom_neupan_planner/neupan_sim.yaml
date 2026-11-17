@@ -4,6 +4,20 @@
 #   ros2 launch finenav_example hello_finenav.launch.py
 # The node name must match createControlLayer(..., "my_layer", ...).
 
+/hello_finenav/global_layer:
+  ros__parameters:
+    global_grid_world_view:
+      # Replan around objects inserted after the static maze map was created.
+      use_live_obstacles: true
+      obstacles:
+        points_topic: "/cloud_for_lio"
+        points_type: "point_cloud2"
+        points_frame: ""
+        scan_range_max: 6.0
+        min_height: 0.15
+        max_height: 2.0
+        points_timeout: 0.5
+
 /hello_finenav/my_layer:
   ros__parameters:
 
