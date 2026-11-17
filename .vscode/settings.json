@@ -35,6 +35,5 @@
         "/home/affirm/gyj_ros_ws/install/learning_cv/lib/python3.10/site-packages",
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
-    ],
-    "cmake.sourceDirectory": "/home/affirm/neupan_reproduction_ws/src/finenav_route_planner"
+    ]
 }
