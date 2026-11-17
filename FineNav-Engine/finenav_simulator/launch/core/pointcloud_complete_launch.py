@@ -83,6 +83,14 @@ def generate_launch_description():
             {'horizontal_max_angle': sdf_config['lidar_horizontal_max_angle']},
             {'scan_period': sdf_config['lidar_scan_period']},
             {'synthesize_time': True},
+            # Small robot body and wheels expressed in the tilted lidar frame,
+            # with 2 cm padding around their bounding box.
+            {'self_filter_box.min_x': -0.11},
+            {'self_filter_box.max_x': 0.43},
+            {'self_filter_box.min_y': -0.17},
+            {'self_filter_box.max_y': 0.17},
+            {'self_filter_box.min_z': -0.47},
+            {'self_filter_box.max_z': 0.07},
         ]
     )
 

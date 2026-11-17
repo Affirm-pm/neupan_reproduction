@@ -85,6 +85,7 @@ install(DIRECTORY include/ DESTINATION include)
 # Vendor the DUNE weights into this package's share so a deployed workspace does
 # not depend on libneupan's install layout.  The ROS parameter still wins.
 install(FILES ${libneupan_MODELS_DIR}/diff_0p7x0p6.bin
+              ${libneupan_MODELS_DIR}/diff_0p3x0p3.bin
         DESTINATION share/${PROJECT_NAME}/models)
 
 # Simulation parameter overlay for this plugin (loaded alongside

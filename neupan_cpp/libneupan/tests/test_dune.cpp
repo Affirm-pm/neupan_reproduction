@@ -80,6 +80,17 @@ TEST(Dune, WheelInclusiveModelMatchesConfiguredFootprint) {
   EXPECT_THROW(DUNE(body_only, model), std::runtime_error);
 }
 
+TEST(Dune, SmallRobotModelMatchesConfiguredFootprint) {
+  const std::string model = std::string(NEUPAN_MODEL_DIR) + "/diff_0p3x0p3.bin";
+  const auto small_robot = std::make_shared<const Robot>(
+      Robot::diffRectangle(10, 0.1, Vec2(0.6, 1.0), Vec2(1.0, 1.0), 0.3, 0.3));
+  EXPECT_NO_THROW(DUNE(small_robot, model));
+
+  const auto old_robot = std::make_shared<const Robot>(
+      Robot::diffRectangle(10, 0.1, Vec2(0.6, 1.0), Vec2(1.0, 1.0), 0.7, 0.6));
+  EXPECT_THROW(DUNE(old_robot, model), std::runtime_error);
+}
+
 TEST(Dune, ForwardMatchesPython) {
   const TensorFile tf = TensorFile::load(kData + "/frames.nptf");
   const DUNE dune(lonRobot(), kModel);

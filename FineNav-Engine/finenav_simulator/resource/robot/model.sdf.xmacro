@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <sdf version="1.9">
-    <xmacro_define_value name="base_length" value="0.6"/>
-    <xmacro_define_value name="base_width" value="0.4"/>
+    <!-- Wheel-inclusive XY bounds are +/-0.15 m, centered on base_link. -->
+    <xmacro_define_value name="base_length" value="0.28"/>
+    <xmacro_define_value name="base_width" value="0.24"/>
     <xmacro_define_value name="base_height" value="0.3"/>
     <xmacro_define_value name="base_mass" value="6.0"/>
-    <xmacro_define_value name="lidar_mount_x" value="0.16"/>
+    <xmacro_define_value name="lidar_mount_x" value="0.0"/>
     <xmacro_define_value name="lidar_mount_y" value="0.0"/>
     <xmacro_define_value name="lidar_mount_z" value="-0.27"/>
     <xmacro_define_value name="lidar_mount_pitch" value="0.78539816339"/>
@@ -31,12 +32,12 @@
     <xmacro_define_value name="lidar_vertical_max_angle" value="1.57"/>
     <xmacro_define_value name="lidar_min_range" value="0.08"/>
     <xmacro_define_value name="lidar_max_range" value="7.0"/>
-    <xmacro_define_value name="wheel_radius" value="0.15"/>
-    <xmacro_define_value name="wheel_width" value="0.1"/>
-    <xmacro_define_value name="wheel_front_x" value="0.2"/>
-    <xmacro_define_value name="wheel_rear_x" value="-0.2"/>
-    <xmacro_define_value name="wheel_left_y" value="0.25"/>
-    <xmacro_define_value name="wheel_right_y" value="-0.25"/>
+    <xmacro_define_value name="wheel_radius" value="0.05"/>
+    <xmacro_define_value name="wheel_width" value="0.03"/>
+    <xmacro_define_value name="wheel_front_x" value="0.10"/>
+    <xmacro_define_value name="wheel_rear_x" value="-0.10"/>
+    <xmacro_define_value name="wheel_left_y" value="0.135"/>
+    <xmacro_define_value name="wheel_right_y" value="-0.135"/>
     <xmacro_define_value name="body_ambient" value="0.78 0.18 0.16 1"/>
     <xmacro_define_value name="body_diffuse" value="0.88 0.24 0.20 1"/>
     <xmacro_define_value name="body_specular" value="0.10 0.10 0.10 1"/>
@@ -49,15 +50,15 @@
     <model name="robot">
         <link name="base_origin">
             <inertial>
-                <pose>0 0 -0.56 0 0 0</pose>
+                <pose>0 0 -0.5 0 0 0</pose>
                 <mass>${base_mass}</mass>
                 <inertia>
-                    <ixx>0.125</ixx>
+                    <ixx>${base_mass * (base_width**2 + base_height**2) / 12.0}</ixx>
                     <ixy>0</ixy>
                     <ixz>0</ixz>
-                    <iyy>0.225</iyy>
+                    <iyy>${base_mass * (base_length**2 + base_height**2) / 12.0}</iyy>
                     <iyz>0</iyz>
-                    <izz>0.26</izz>
+                    <izz>${base_mass * (base_length**2 + base_width**2) / 12.0}</izz>
                 </inertia>
             </inertial>
             <collision name="base_collision">
@@ -197,19 +198,19 @@
             <pose>0 0 -0.75 0 0 0</pose>
         </joint>
         <frame name="left_front_frame" attached_to="base_link">
-            <pose>${wheel_front_x} ${wheel_left_y} ${wheel_radius} 1.57 -0 0</pose>
+            <pose>${wheel_front_x} ${wheel_left_y} ${wheel_radius} 1.57079632679 -0 0</pose>
         </frame>
         <frame name="left_front_wheel" attached_to="left_front_frame"/>
         <frame name="left_rear_frame" attached_to="base_link">
-            <pose>${wheel_rear_x} ${wheel_left_y} ${wheel_radius} 1.57 -0 0</pose>
+            <pose>${wheel_rear_x} ${wheel_left_y} ${wheel_radius} 1.57079632679 -0 0</pose>
         </frame>
         <frame name="left_rear_wheel" attached_to="left_rear_frame"/>
         <frame name="right_front_frame" attached_to="base_link">
-            <pose>${wheel_front_x} ${wheel_right_y} ${wheel_radius} -1.57 0 0</pose>
+            <pose>${wheel_front_x} ${wheel_right_y} ${wheel_radius} -1.57079632679 0 0</pose>
         </frame>
         <frame name="right_front_wheel" attached_to="right_front_frame"/>
         <frame name="right_rear_frame" attached_to="base_link">
-            <pose>${wheel_rear_x} ${wheel_right_y} ${wheel_radius} -1.57 0 0</pose>
+            <pose>${wheel_rear_x} ${wheel_right_y} ${wheel_radius} -1.57079632679 0 0</pose>
         </frame>
         <frame name="right_rear_wheel" attached_to="right_rear_frame"/>
         <link name="imu">
@@ -256,13 +257,13 @@
             <pose>0 0 0 0 0 0</pose>
         </joint>
         <link name="left_front_link">
-            <pose relative_to="base_origin">${wheel_front_x} ${wheel_left_y} -0.6 1.57 0 0</pose>
+            <pose relative_to="base_origin">${wheel_front_x} ${wheel_left_y} ${wheel_radius - 0.75} 1.57079632679 0 0</pose>
             <inertial>
                 <mass>0.75</mass>
                 <inertia>
-                    <ixx>0.00484375</ixx>
-                    <iyy>0.00484375</iyy>
-                    <izz>0.0084375</izz>
+                    <ixx>${0.75 * (3 * wheel_radius**2 + wheel_width**2) / 12.0}</ixx>
+                    <iyy>${0.75 * (3 * wheel_radius**2 + wheel_width**2) / 12.0}</iyy>
+                    <izz>${0.75 * wheel_radius**2 / 2.0}</izz>
                     <ixy>0</ixy>
                     <ixz>0</ixz>
                     <iyz>0</iyz>
@@ -311,13 +312,13 @@
             </collision>
         </link>
         <link name="left_rear_link">
-            <pose relative_to="base_origin">${wheel_rear_x} ${wheel_left_y} -0.6 1.57 0 0</pose>
+            <pose relative_to="base_origin">${wheel_rear_x} ${wheel_left_y} ${wheel_radius - 0.75} 1.57079632679 0 0</pose>
             <inertial>
                 <mass>0.75</mass>
                 <inertia>
-                    <ixx>0.00484375</ixx>
-                    <iyy>0.00484375</iyy>
-                    <izz>0.0084375</izz>
+                    <ixx>${0.75 * (3 * wheel_radius**2 + wheel_width**2) / 12.0}</ixx>
+                    <iyy>${0.75 * (3 * wheel_radius**2 + wheel_width**2) / 12.0}</iyy>
+                    <izz>${0.75 * wheel_radius**2 / 2.0}</izz>
                     <ixy>0</ixy>
                     <ixz>0</ixz>
                     <iyz>0</iyz>
@@ -366,13 +367,13 @@
             </collision>
         </link>
         <link name="right_front_link">
-            <pose relative_to="base_origin">${wheel_front_x} ${wheel_right_y} -0.6 -1.57 0 0</pose>
+            <pose relative_to="base_origin">${wheel_front_x} ${wheel_right_y} ${wheel_radius - 0.75} -1.57079632679 0 0</pose>
             <inertial>
                 <mass>0.75</mass>
                 <inertia>
-                    <ixx>0.00484375</ixx>
-                    <iyy>0.00484375</iyy>
-                    <izz>0.0084375</izz>
+                    <ixx>${0.75 * (3 * wheel_radius**2 + wheel_width**2) / 12.0}</ixx>
+                    <iyy>${0.75 * (3 * wheel_radius**2 + wheel_width**2) / 12.0}</iyy>
+                    <izz>${0.75 * wheel_radius**2 / 2.0}</izz>
                     <ixy>0</ixy>
                     <ixz>0</ixz>
                     <iyz>0</iyz>
@@ -421,13 +422,13 @@
             </collision>
         </link>
         <link name="right_rear_link">
-            <pose relative_to="base_origin">${wheel_rear_x} ${wheel_right_y} -0.6 -1.57 0 0</pose>
+            <pose relative_to="base_origin">${wheel_rear_x} ${wheel_right_y} ${wheel_radius - 0.75} -1.57079632679 0 0</pose>
             <inertial>
                 <mass>0.75</mass>
                 <inertia>
-                    <ixx>0.00484375</ixx>
-                    <iyy>0.00484375</iyy>
-                    <izz>0.0084375</izz>
+                    <ixx>${0.75 * (3 * wheel_radius**2 + wheel_width**2) / 12.0}</ixx>
+                    <iyy>${0.75 * (3 * wheel_radius**2 + wheel_width**2) / 12.0}</iyy>
+                    <izz>${0.75 * wheel_radius**2 / 2.0}</izz>
                     <ixy>0</ixy>
                     <ixz>0</ixz>
                     <iyz>0</iyz>

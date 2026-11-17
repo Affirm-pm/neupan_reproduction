@@ -50,6 +50,6 @@
       max_planning_time: 0.8
       max_iterations: 200000
     global_grid_world_view:
-      inflation_radius: 0.51  # Circumscribed radius of the 0.7 x 0.6 m robot plus clearance.
+      inflation_radius: 0.26  # 0.3 x 0.3 m half-diagonal (0.212 m) plus about 0.05 m clearance.
       clearance_cost_distance: 0.7
       occupied_threshold: 50
