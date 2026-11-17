@@ -6,6 +6,7 @@
 
 namespace finenav::example {
 void GlobalPlanner::configure(const ConfigType& c) {
+    observation_failure_timeout_ = c.observation_failure_timeout;
     astar_planner::Params params;
     // Four-connected search avoids the upstream algorithm's diagonal corner cutting.
     params.connectivity = "4";
@@ -32,6 +33,18 @@ GlobalPlanner::Result GlobalPlanner::plan(const Context& ctx, const IWorldView& 
     const double step = world.getStepSize();
     if (!finite(start) || !finite(goal) || !std::isfinite(step) || step <= 0.0)
         return std::nullopt;
+    if (world.awaitingObservation()) {
+        if (observation_watch_.expired(FailureWatch::Clock::now(), observation_failure_timeout_)) {
+            RCLCPP_ERROR(logger_, "Obstacle observations remained unavailable; faulting global planning.");
+            return std::nullopt;
+        }
+        // A one-pose reference asks the local controller to hold its current
+        // position. Never forward the previous route through an observation gap.
+        core::OutputTrajectoryT<GlobalPlanner> hold;
+        hold.poses.push_back(start);
+        return hold;
+    }
+    observation_watch_.reset();
     if (!world.isWalkable({start.position.x, start.position.y, 0.0}) ||
         !world.isWalkable({goal.position.x, goal.position.y, 0.0})) {
         RCLCPP_WARN(logger_, "Global route blocked: start (%.2f, %.2f) walkable=%d, goal (%.2f, %.2f) walkable=%d.",

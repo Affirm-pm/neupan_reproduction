@@ -44,6 +44,7 @@ void GlobalGridWorldView::prepare(const GlobalPlanner::Context& ctx) {
          incoming->header.frame_id != grid_->header.frame_id)) live_cells_.clear();
     grid_ = incoming;
     valid_ = false;
+    awaiting_observation_ = false;
     costs_.clear();
     if (!grid_) return;
     const auto& m = grid_->info;
@@ -79,8 +80,9 @@ void GlobalGridWorldView::prepare(const GlobalPlanner::Context& ctx) {
         const core::InputTrajectoryT<NeuPanPlanner> unused_reference;
         observations_.prepare({ctx.robot_state, unused_reference});
         if (!observations_.observationValid()) {
-            RCLCPP_WARN(node_->get_logger(),
-                "Global replan requires a fresh, transformable obstacle observation.");
+            awaiting_observation_ = true;
+            RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+                "Global replan is waiting for a fresh, transformable obstacle observation.");
             return;
         }
         // Briefly retain occupied cells through occlusion or missing returns:

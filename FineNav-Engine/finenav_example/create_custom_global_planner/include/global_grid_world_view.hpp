@@ -15,6 +15,7 @@ public:
         : node_(node), observations_(node, map) {}
     void configure(const ConfigType& cfg);
     void prepare(const GlobalPlanner::Context&);
+    bool awaitingObservation() const override { return awaiting_observation_; }
     bool isWalkable(const common::Position3D& p) const override;
     double getCost(const common::Position3D& p) const override;
     double getStepSize() const override { return valid_ ? grid_->info.resolution : 0.1; }
@@ -34,6 +35,7 @@ private:
     };
     std::unordered_map<size_t, LiveCell> live_cells_;
     bool dirty_{true}, valid_{false};
+    bool awaiting_observation_{false};
     double start_x_{0}, start_y_{0};
     int cellIndex(const common::Position3D& p) const;
     std::vector<float> costs_;

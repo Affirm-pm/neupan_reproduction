@@ -1,4 +1,10 @@
 finenav_global_planner:
+  observation_failure_timeout:
+    type: double
+    default_value: 10.0
+    description: "Continuous live-observation outage [s] before faulting. Output a current-position hold while waiting for fresh observations."
+    validation:
+      gt<>: [0.0]
   max_iterations:
     type: int
     default_value: 200000

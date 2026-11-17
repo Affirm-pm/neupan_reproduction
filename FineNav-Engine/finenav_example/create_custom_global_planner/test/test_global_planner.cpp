@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include <limits>
+#include <thread>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
 #include "global_grid_world_view.hpp"
 
@@ -211,21 +212,50 @@ TEST_F(GlobalPlannerTest, LiveObstacleReplansUnchangedMapAndClearsWhenRemoved) {
     ASSERT_TRUE(cleared);
     for (const auto& p : cleared->poses) EXPECT_NEAR(p.position.y, 4, .11);
 }
-TEST_F(GlobalPlannerTest, LiveObstacleRejectsMissingStaleAndUntransformableClouds) {
+TEST_F(GlobalPlannerTest, LiveObservationGapsHoldPositionAndFreshDataRestoresRoute) {
     enableLiveObstacles();
+    const auto expect_hold = [&] {
+        EXPECT_TRUE(view.awaitingObservation());
+        const auto result = planner.plan({state, reference}, view);
+        ASSERT_TRUE(result);
+        ASSERT_EQ(result->poses.size(), 1u);
+        EXPECT_EQ(result->poses.front(), state.pose);
+    };
     prepare();
-    EXPECT_FALSE(planner.plan({state, reference}, view));
+    expect_hold();
     auto msg = cloud(true);
     msg->header.stamp = node->now() - rclcpp::Duration::from_seconds(2);
     GlobalGridWorldViewTestAccess::cloud(view, msg);
     prepare();
-    EXPECT_FALSE(planner.plan({state, reference}, view));
+    expect_hold();
     msg = cloud(true);
     msg->header.frame_id = "missing_sensor_tf";
     GlobalGridWorldViewTestAccess::cloud(view, msg);
     prepare();
-    EXPECT_FALSE(planner.plan({state, reference}, view));
+    expect_hold();
     GlobalGridWorldViewTestAccess::cloud(view, cloud(false));
+    prepare();
+    EXPECT_FALSE(view.awaitingObservation());
+    const auto route = planner.plan({state, reference}, view);
+    ASSERT_TRUE(route);
+    EXPECT_EQ(route->poses.back(), reference.poses.back());
+    EXPECT_GT(route->poses.size(), 1u);
+}
+TEST_F(GlobalPlannerTest, ContinuousObservationFailureFaultsAndResetRestartsWait) {
+    finenav_global_planner::Params cfg;
+    cfg.observation_failure_timeout = .001;
+    planner.configure(cfg);
+    enableLiveObstacles();
+    prepare();
+    ASSERT_TRUE(planner.plan({state, reference}, view));
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+    EXPECT_FALSE(planner.plan({state, reference}, view));
+    planner.reset();
+    EXPECT_TRUE(planner.plan({state, reference}, view));
+    GlobalGridWorldViewTestAccess::cloud(view, cloud(false));
+    prepare();
+    ASSERT_TRUE(planner.plan({state, reference}, view));
+    GlobalGridWorldViewTestAccess::cloud(view, nullptr);
     prepare();
     EXPECT_TRUE(planner.plan({state, reference}, view));
 }

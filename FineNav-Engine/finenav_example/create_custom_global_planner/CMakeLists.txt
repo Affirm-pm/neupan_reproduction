@@ -5,7 +5,8 @@ generate_parameter_library(finenav_global_planner_params finenav_global_planner.
 generate_parameter_library(global_grid_world_view_params global_grid_world_view.yaml)
 
 add_library(finenav_global_planner SHARED src/global_planner.cpp)
-target_include_directories(finenav_global_planner PUBLIC include ${finenav_route_planner_INCLUDE_DIRS})
+target_include_directories(finenav_global_planner PUBLIC include
+    ../create_custom_neupan_planner/include ${finenav_route_planner_INCLUDE_DIRS})
 # Upstream exports parameter targets and its algorithm library through different
 # ament mechanisms. Name both: ament_target_dependencies alone selects only targets.
 target_link_libraries(finenav_global_planner finenav_global_planner_params ${finenav_route_planner_LIBRARIES})

@@ -59,13 +59,15 @@ def main():
     odom.pose.pose.position.x, odom.pose.pose.position.y = 2., 4.
     odom.pose.pose.orientation.w = 1.
     obstacles = [(4.8, y*0.1, 0.4) for y in range(65)]
+    publish_cloud = True
 
     def publish_inputs():
         stamp = node.get_clock().now().to_msg()
         odom.header.stamp = grid.header.stamp = stamp
         op.publish(odom)
         mp.publish(grid)
-        cp.publish(create_cloud_xyz32(Header(stamp=stamp, frame_id='map'), obstacles))
+        if publish_cloud:
+            cp.publish(create_cloud_xyz32(Header(stamp=stamp, frame_id='map'), obstacles))
 
     node.create_timer(0.05, publish_inputs)
     share = Path(get_package_share_directory('finenav_example'))
@@ -100,6 +102,20 @@ def main():
             assert any(abs(m.linear.x) + abs(m.angular.z) > .01 for _, m in commands), \
                 f'NeuPAN did not produce a command; see {log_path}'
             print(f'PASS: official A* detour published ({len(paths)} updates), NeuPAN generated motion')
+            publish_cloud = False
+            outage = time.monotonic()
+            spin_for(2)
+            stopped = [m for t, m in commands if t > outage + 1.2]
+            assert stopped and all(abs(m.linear.x) + abs(m.angular.z) < 1e-6 for m in stopped), \
+                f'Observation outage did not stop motion; {log_path}'
+            assert 'Navigation failed' not in log_path.read_text(), \
+                f'Brief observation outage aborted navigation; {log_path}'
+            publish_cloud = True
+            restored = time.monotonic()
+            spin_for(2)
+            assert any(t > restored and abs(m.linear.x) + abs(m.angular.z) > .01
+                       for t, m in commands), f'Fresh observations did not resume motion; {log_path}'
+            print('PASS: observation outage stopped motion and fresh data resumed the same goal')
             route = [p for marker in paths[-1].markers for p in marker.points]
             obstacle = next(p for p in route if math.hypot(p.x - 2., p.y - 4.) > 1.8)
             original_obstacles = list(obstacles)
