@@ -72,4 +72,11 @@ install(DIRECTORY scripts
 ament_export_include_directories(include/${PROJECT_NAME})
 ament_export_dependencies(ros_gz_sim ros_gz_bridge pcl_conversions tf2_geometry_msgs nav_msgs geometry_msgs tf2_ros)
 
+if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME test_robot_mesh_conversion
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/test_robot_mesh_conversion.py")
+    set_tests_properties(test_robot_mesh_conversion PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1")
+endif()
+
 ament_package()

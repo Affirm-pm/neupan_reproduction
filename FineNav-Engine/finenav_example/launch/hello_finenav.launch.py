@@ -19,13 +19,18 @@ def generate_launch_description():
             DeclareLaunchArgument("use_global_planner", default_value="true",
                                   description="Prepend the official FineNav A* planner to NeuPAN"),
             DeclareLaunchArgument("publish_global_map", default_value="true",
-                                  description="Publish the built-in flat maze ground-truth map"),
+                                  description="Publish the selected prior world as the static navigation map"),
             DeclareLaunchArgument("global_map_topic", default_value="/global_map",
                                   description="World-frame OccupancyGrid (reliable, transient local)"),
             DeclareLaunchArgument(
                 "world_name",
                 default_value="flat_small_scale_maze.world",
                 description="World file under finenav_simulator/resource/worlds",
+            ),
+            DeclareLaunchArgument(
+                "global_map_world_name",
+                default_value=LaunchConfiguration("world_name"),
+                description="Prior world used for the static map, independently of the Gazebo scene",
             ),
             DeclareLaunchArgument(
                 "params_file",
@@ -63,7 +68,7 @@ def generate_launch_description():
                 executable="maze_global_map.py",
                 output="screen",
                 parameters=[{"use_sim_time": True,
-                             "world_name": LaunchConfiguration("world_name"),
+                             "world_name": LaunchConfiguration("global_map_world_name"),
                              "map_topic": LaunchConfiguration("global_map_topic")}],
                 condition=IfCondition(PythonExpression([
                     "'", LaunchConfiguration("use_global_planner"), "'.lower() == 'true' and '",

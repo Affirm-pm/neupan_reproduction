@@ -22,3 +22,9 @@ world_spawn_poses:
     y: -1.1723533868789673
     z: 3.053374767303467
     yaw: 0.0
+
+  maze_with_obstacles.sdf:
+    x: 2.0
+    y: 2.0
+    z: 0.8
+    yaw: 0.0

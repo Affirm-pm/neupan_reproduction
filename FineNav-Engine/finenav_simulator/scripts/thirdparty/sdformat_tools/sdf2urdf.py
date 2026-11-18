@@ -31,9 +31,24 @@ def convert_geometry(in_node, out_doc, out_parent_node):
         if child.nodeType == xml.dom.Node.ELEMENT_NODE:
             if child.tagName == 'mesh':
                 uri_node = get_child_node_by_tag(child, 'uri')
-                uri = 'file://'+parse_model_uri(uri_node.firstChild.data)
+                uri = uri_node.firstChild.data.strip()
+                if uri.startswith('model://'):
+                    model_path = parse_model_uri(uri)
+                    if not model_path:
+                        raise ValueError(f'Could not resolve mesh resource {uri!r}')
+                    uri = 'file://' + model_path
+                elif uri.startswith(('file://', 'package://')):
+                    if not uri.split('://', 1)[1]:
+                        raise ValueError('Mesh resource URI has no path')
+                elif os.path.isabs(uri):
+                    uri = 'file://' + uri
+                else:
+                    raise ValueError(f'Unsupported mesh resource URI {uri!r}')
                 new_mesh_node = create_child_node(out_doc, new_node, 'mesh')
                 new_mesh_node.setAttribute('filename', uri)
+                scale_node = get_child_node_by_tag(child, 'scale')
+                if scale_node is not None:
+                    new_mesh_node.setAttribute('scale', scale_node.firstChild.data.strip())
                 return True
             elif child.tagName == 'box':
                 size_node = get_child_node_by_tag(child, 'size')

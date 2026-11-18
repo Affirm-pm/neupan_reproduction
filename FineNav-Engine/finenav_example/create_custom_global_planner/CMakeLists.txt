@@ -24,6 +24,9 @@ install(TARGETS finenav_global_planner global_grid_world_view
 install(PROGRAMS scripts/maze_global_map.py DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME test_maze_global_map
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/test_maze_global_map.py")
     ament_add_gtest(test_global_planner test/test_global_planner.cpp
         ENV "LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}:${CMAKE_BINARY_DIR}/create_custom_map:$ENV{LD_LIBRARY_PATH}")
     target_link_libraries(test_global_planner global_grid_world_view)
