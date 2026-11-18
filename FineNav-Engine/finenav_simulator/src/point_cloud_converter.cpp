@@ -18,6 +18,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <stdexcept>
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "sensor_msgs/point_cloud2_iterator.hpp"
@@ -137,6 +138,7 @@ PointCloudConverter::PointCloudConverter(const rclcpp::NodeOptions & options)
 : rclcpp::Node("point_cloud_converter", options)
 {
   this->declare_parameter<std::string>("pcd_topic", "livox/lidar");
+  this->declare_parameter<std::string>("input_reliability", "best_effort");
   this->declare_parameter<int>("vertical_samples", 0);
   this->declare_parameter<int>("horizontal_samples", 0);
   this->declare_parameter<float>("vertical_min_angle", -0.26F);
@@ -189,11 +191,17 @@ PointCloudConverter::PointCloudConverter(const rclcpp::NodeOptions & options)
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
+  const auto reliability = this->get_parameter("input_reliability").as_string();
+  if (reliability != "best_effort" && reliability != "reliable") {
+    throw std::invalid_argument("input_reliability must be best_effort or reliable");
+  }
+  rclcpp::QoS input_qos = rclcpp::SensorDataQoS();
+  if (reliability == "reliable") input_qos.reliable().keep_last(1);
   pcd_sub_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-    pcd_topic_, rclcpp::SensorDataQoS(),
+    pcd_topic_, input_qos,
     std::bind(&PointCloudConverter::lidarHandle, this, std::placeholders::_1));
 
-  auto qos = rclcpp::QoS(rclcpp::KeepLast(10));
+  auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable();
   pcd_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, qos);
 
   RCLCPP_INFO(

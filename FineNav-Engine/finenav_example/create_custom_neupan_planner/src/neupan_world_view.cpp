@@ -26,7 +26,8 @@ NeuPanWorldView::NeuPanWorldView(rclcpp::Node::SharedPtr node, const DummyMap&)
 
 void NeuPanWorldView::configure(const ConfigType& cfg) {
     const bool source_changed = (!scan_sub_ && !cloud_sub_) ||
-        cfg.points_topic != cfg_.points_topic || cfg.points_type != cfg_.points_type;
+        cfg.points_topic != cfg_.points_topic || cfg.points_type != cfg_.points_type ||
+        cfg.points_reliability != cfg_.points_reliability;
     cfg_ = cfg; // Worker-only: callbacks never access cfg_.
     valid_ = false;
     if (source_changed) installSubscription(cfg.points_topic, cfg.points_type);
@@ -41,9 +42,11 @@ void NeuPanWorldView::installSubscription(const std::string& topic, const std::s
     }
     scan_sub_.reset(); cloud_sub_.reset();
     if (topic.empty()) return;
+    rclcpp::QoS qos = rclcpp::SensorDataQoS();
+    if (cfg_.points_reliability == "reliable") qos.reliable().keep_last(1);
     if (type == "laser_scan") {
         scan_sub_ = node_->create_subscription<sensor_msgs::msg::LaserScan>(
-            topic, rclcpp::SensorDataQoS(),
+            topic, qos,
             [this, generation](sensor_msgs::msg::LaserScan::ConstSharedPtr msg) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 if (generation != generation_) return;
@@ -52,7 +55,7 @@ void NeuPanWorldView::installSubscription(const std::string& topic, const std::s
             });
     } else if (type == "point_cloud2") {
         cloud_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
-            topic, rclcpp::SensorDataQoS(),
+            topic, qos,
             [this, generation](sensor_msgs::msg::PointCloud2::ConstSharedPtr msg) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 if (generation != generation_) return;

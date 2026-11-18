@@ -5,6 +5,7 @@
 #include "neupan_world_view.hpp"
 namespace finenav::example {
 struct NeuPanWorldViewTestAccess {
+    static auto cloudSubscription(NeuPanWorldView& v) { return v.cloud_sub_; }
     static void feed(NeuPanWorldView& v,sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud) {
         std::lock_guard<std::mutex> lock(v.mutex_);v.cloud_=cloud;v.scan_.reset();
         v.received_=std::chrono::steady_clock::now();
@@ -43,6 +44,30 @@ TEST_F(ViewTest, MissingStaleZeroTimestampAndEmptyFrameAreInvalid) {
     c=cloud();c->header.stamp=builtin_interfaces::msg::Time{};
     NeuPanWorldViewTestAccess::feed(*view,c);prepare();EXPECT_FALSE(view->observationValid());
     c=cloud();c->header.frame_id="";NeuPanWorldViewTestAccess::feed(*view,c);prepare();EXPECT_FALSE(view->observationValid());
+}
+TEST_F(ViewTest, ReliabilityChangesRecreateSubscriptionAndClearCachedObservation) {
+    auto subscription = NeuPanWorldViewTestAccess::cloudSubscription(*view);
+    EXPECT_EQ(subscription->get_actual_qos().reliability(), rclcpp::ReliabilityPolicy::BestEffort);
+    NeuPanWorldViewTestAccess::feed(*view, cloud());
+    prepare(); ASSERT_TRUE(view->observationValid());
+
+    cfg.points_reliability = "reliable";
+    view->configure(cfg);
+    const auto reliable = NeuPanWorldViewTestAccess::cloudSubscription(*view);
+    EXPECT_NE(subscription, reliable);
+    EXPECT_EQ(reliable->get_actual_qos().reliability(), rclcpp::ReliabilityPolicy::Reliable);
+    EXPECT_EQ(reliable->get_actual_qos().depth(), 1u);
+    prepare(); EXPECT_FALSE(view->observationValid());
+
+    NeuPanWorldViewTestAccess::feed(*view, cloud());
+    view->configure(cfg);
+    EXPECT_EQ(NeuPanWorldViewTestAccess::cloudSubscription(*view), reliable);
+    prepare(); EXPECT_TRUE(view->observationValid());
+    cfg.points_reliability = "best_effort";
+    view->configure(cfg);
+    EXPECT_EQ(NeuPanWorldViewTestAccess::cloudSubscription(*view)->get_actual_qos().reliability(),
+              rclcpp::ReliabilityPolicy::BestEffort);
+    prepare(); EXPECT_FALSE(view->observationValid());
 }
 TEST_F(ViewTest, ValidEmptyCloudIsDifferentFromMissingTransform) {
     auto c=cloud();c->width=0;c->row_step=0;c->data.clear();

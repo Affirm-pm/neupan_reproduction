@@ -62,6 +62,7 @@ def generate_launch_description():
         parameters=[
             {'use_sim_time': LaunchConfiguration('use_sim_time')},
             {'pcd_topic': '/livox/lidar'},
+            {'input_reliability': 'reliable'},
             {'output_topic': '/cloud_for_lio'},
             {
                 'output_frame_id': PythonExpression([

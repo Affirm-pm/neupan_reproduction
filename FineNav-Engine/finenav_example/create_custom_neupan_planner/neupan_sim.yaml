@@ -12,6 +12,7 @@
       obstacles:
         points_topic: "/cloud_for_lio"
         points_type: "point_cloud2"
+        points_reliability: "reliable"
         points_frame: ""
         scan_range_max: 6.0
         min_height: 0.15
@@ -79,6 +80,7 @@
       # sensor frame, before self-filtering.
       points_topic: "/cloud_for_lio"
       points_type: "point_cloud2"
+      points_reliability: "reliable"
       points_frame: ""
 
       # Self-returns are removed by point_cloud_converter. Keep nearby

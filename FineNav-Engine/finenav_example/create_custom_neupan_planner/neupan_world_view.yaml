@@ -44,6 +44,13 @@ neupan_world_view:
     default_value: "laser_scan"
     description: "Message kind on points_topic: 'laser_scan' (sensor_msgs/LaserScan) or 'point_cloud2' (sensor_msgs/PointCloud2). Changing it re-creates the subscription."
 
+  points_reliability:
+    type: string
+    default_value: "best_effort"
+    description: "Subscription reliability. Use reliable with a reliable publisher to recover dropped large messages. Changing it re-creates the subscription."
+    validation:
+      one_of<>: [["best_effort", "reliable"]]
+
   points_frame:
     type: string
     default_value: ""
