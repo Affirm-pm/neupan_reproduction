@@ -1,0 +1,32 @@
+/hello_finenav:
+  ros__parameters:
+    use_sim_time: false
+    use_global_planner: true
+
+/hello_finenav/finenav_localizer:
+  ros__parameters:
+    pose_topic: "/localization_pose"
+    initial_pose_topic: ""
+    twist_topic: ""
+    odom_topic: "/Odometry"
+    odom_use_twist: true
+    pose_smoothing_time: 0.0
+    force_2d_mode: true
+    publish_tf: false
+    publish_odom: true
+
+/hello_finenav/global_layer:
+  ros__parameters:
+    global_grid_world_view:
+      map_topic: "/map"
+      obstacles:
+        points_topic: "/cloud_registered"
+        points_reliability: "reliable"
+
+/hello_finenav/my_layer:
+  ros__parameters:
+    neupan_planner:
+      dune_checkpoint: "$PWD/src/neupan_cpp/libneupan/models/diff_0p3x0p3.bin"
+    neupan_world_view:
+      points_topic: "/cloud_registered"
+      points_reliability: "reliable"
