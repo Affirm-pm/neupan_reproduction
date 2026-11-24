@@ -818,7 +818,7 @@ NeuPanPlanner::Result NeuPanPlanner::plan(const Context& ctx, const IWorldView& 
             if (line.size() >= 2) {
                 auto& channel = viz_.markers("/neupan_initial_path");
                 channel.addLineStrip(
-                    line, 0.03, ::finenav::viz::Color{0.15f, 0.45f, 1.0f});
+                    line, 0.03, ::finenav::viz::Color{1.0f, 0.0f, 0.0f});
                 viz_.publish(channel);   // world-fixed data: default Frame
                 impl_->published_path_revision = ipath.revision();
                 impl_->last_path_publish = viz_now;
