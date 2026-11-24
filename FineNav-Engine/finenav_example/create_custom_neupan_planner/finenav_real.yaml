@@ -26,7 +26,7 @@
 /hello_finenav/my_layer:
   ros__parameters:
     neupan_planner:
-      dune_checkpoint: "$PWD/src/neupan_cpp/libneupan/models/diff_0p3x0p3.bin"
+      dune_checkpoint: "/home/fins/Desktop/neupan_production_ws/src/neupan_cpp/libneupan/models/diff_0p3x0p3.bin"
     neupan_world_view:
       points_topic: "/cloud_registered"
       points_reliability: "reliable"
